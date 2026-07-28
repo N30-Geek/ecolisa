@@ -1,0 +1,207 @@
+# 🏫 SPECIFICATION ARCHITECTURALE & STRUCTURELLE : SYSTEME DE GESTION SCOLAIRE (EDUSMART RDC)
+
+## 📌 1. STRUCTURE ET NIVEAUX D'ENSEIGNEMENT (RDC & INTERNATIONAL)
+
+Le système modélise l'arbre d'apprentissage selon la classification officielle CITE/EPST de la RDC tout en intégrant un mode **Hors RDC (Custom)** :
+
+```text
+[ENSEIGNEMENT / CYCLES]
+ ├── 1. PRESCOLAIRE (CITE 010 & 020)
+ │    ├── École Maternelle : 1ère, 2ème, 3ème
+ │    ├── Espace Communautaire d'Éveil (ECE) : 1ère, 2ème, 3ème
+ │    └── Classe Pré-Primaire (CPP)
+ ├── 2. ÉDUCATION DE BASE / PRIMAIRE (CITE 100) [6 à 11-12 ans]
+ │    └── 1ère, 2ème, 3ème, 4ème, 5ème, 6ème Année Primaire
+ └── 3. CYCLE SECONDAIRE
+      ├── CTEB (CITE 244) [12 à 13 ans] : 7ème et 8ème Année (Terminal de Base)
+      └── HUMANITÉS (CITE 344 & 354) [14 à 17+ ans]
+           └── 1ère, 2ème, 3ème, 4ème Année des Humanités
+               (Options : Général, Technique, Professionnel, Art et Métiers)
+
+```
+
+---
+
+## 👥 2. RÔLES ET MATRICE DES DROITS D'ACCÈS (RBAC)
+
+Basé sur l'organisation légale du ministère (EPST) :
+
+| Rôle dans le Système | Portée & Permissions Principales |
+| --- | --- |
+| **Promoteur / Admin Système** | Accès global : Configuration, audit financier, gestion des clés d'accès. |
+| **Chef d'Établissement (Préfet/Directeur)** | Supervision globale : Clôture d'années, signature/export de rapports officiels (Palmarès, Rentrée/Fin d'année), conseil de discipline. |
+| **Directeur des Études (D.E.)** | Pédagogie : Gestion des horaires, validation des devoirs/examens, affectation des cours, encadrement des profs. |
+| **Directeur de Discipline (D.D.) & Surveillants** | Discipline & Assiduité : Registre d'absences, retards, fiches de retenues, exclusions temporaires. |
+| **Comptable / Intendant** | Finances : Encaissement des frais, facturation en masse, tenue des caisses, dépenses, paie RH. |
+| **Titulaire de Classe** | Centralisation de la classe : Rédaction des bulletins, suivi du comportement, pont parents-école. |
+| **Enseignant / Professeur** | Pédagogie restreinte : Enregistrement des cotes (Interros, Examens, Pratiques), cahier de prépa, présences de son cours. |
+| **Parent / Élève (Portal)** | Consultation : Consultations des notes, bulletins, factures/reçus, emploi du temps, absences. |
+
+---
+
+## 📊 3. SCHÉMA DE BASE DE DONNÉES COMPLET (RELATIONNEL)
+
+Voici les tables maîtresses prêtes pour votre base de données locale (SQLite) ou distante (Supabase/PostgreSQL) :
+
+```sql
+-- 1. ANNEES SCOLAIRES & CONFIGURATION
+CREATE TABLE academic_years (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    label VARCHAR(20) NOT NULL, -- ex: "2025-2026"
+    is_active BOOLEAN DEFAULT false,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL
+);
+
+CREATE TABLE cycles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code VARCHAR(20) NOT NULL, -- PRESCHOOL, PRIMAIRE, CTEB, HUMANITES, CUSTOM
+    name VARCHAR(100) NOT NULL,
+    cite_code VARCHAR(10) -- ex: "CITE 100", "CITE 244"[cite: 1]
+);
+
+CREATE TABLE classes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cycle_id UUID REFERENCES cycles(id),
+    name VARCHAR(50) NOT NULL, -- ex: "7ème CTEB", "3ème Math-Physique"
+    room_number VARCHAR(20),
+    is_custom BOOLEAN DEFAULT false -- Pour personnalisation hors RDC
+);
+
+-- 2. ÉLÈVES & DOSSIERS PSYCHOPÉDAGOGIQUES
+CREATE TABLE students (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    registration_number VARCHAR(50) UNIQUE NOT NULL, -- Matricule
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    gender CHAR(1) CHECK (gender IN ('M', 'F')),
+    birth_date DATE,
+    birth_place VARCHAR(100),
+    status VARCHAR(20) DEFAULT 'ACTIVE', -- ACTIVE, TRANSFERED, FINALIST, EXCLUDED
+    psychopedagogical_notes TEXT
+);
+
+CREATE TABLE enrollments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID REFERENCES students(id),
+    class_id UUID REFERENCES classes(id),
+    academic_year_id UUID REFERENCES academic_years(id),
+    enrolled_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. EVALUATIONS, COTES & ABSENCES
+CREATE TABLE subjects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) NOT NULL, -- ex: "Mathématiques", "Culture Générale"
+    coefficient INT DEFAULT 1
+);
+
+CREATE TABLE grades (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID REFERENCES students(id),
+    subject_id UUID REFERENCES subjects(id),
+    class_id UUID REFERENCES classes(id),
+    term VARCHAR(20) NOT NULL, -- 1er Trimestre, 2e Semestre, etc.
+    type VARCHAR(20) CHECK (type IN ('INTERROGATION', 'EXAMEN', 'PRATIQUE')),
+    score NUMERIC(5,2) NOT NULL,
+    max_score NUMERIC(5,2) NOT NULL DEFAULT 20.00,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE attendances (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID REFERENCES students(id),
+    class_id UUID REFERENCES classes(id),
+    date DATE NOT NULL,
+    status VARCHAR(20) CHECK (status IN ('PRESENT', 'ABSENT_JUSTIFIED', 'ABSENT_UNJUSTIFIED', 'LATE')),
+    reason TEXT
+);
+
+-- 4. FINANCES, FACTURATION & CAISSE
+CREATE TABLE fee_types (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(100) NOT NULL, -- ex: Minerval, Frais d'examen, Bus
+    amount NUMERIC(10,2) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'USD'
+);
+
+CREATE TABLE student_invoices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID REFERENCES students(id),
+    academic_year_id UUID REFERENCES academic_years(id),
+    total_amount NUMERIC(10,2) NOT NULL,
+    paid_amount NUMERIC(10,2) DEFAULT 0.00,
+    status VARCHAR(20) DEFAULT 'UNPAID' -- UNPAID, PARTIAL, PAID
+);
+
+CREATE TABLE payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    invoice_id UUID REFERENCES student_invoices(id),
+    amount_paid NUMERIC(10,2) NOT NULL,
+    payment_method VARCHAR(30), -- CASH, FLEXPAY_MPESA, FLUTTERWAVE, BANK
+    reference VARCHAR(100) UNIQUE,
+    receipt_number VARCHAR(50) UNIQUE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. RH & PAIE DU PERSONNEL
+CREATE TABLE staff (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    role VARCHAR(50) NOT NULL, -- TEACHER, ACCOUNTANT, PREFECT, SURVEILLANT
+    phone VARCHAR(30),
+    base_salary NUMERIC(10,2)
+);
+
+CREATE TABLE payslips (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    staff_id UUID REFERENCES staff(id),
+    month_year VARCHAR(7) NOT NULL, -- ex: "07-2026"
+    amount_paid NUMERIC(10,2) NOT NULL,
+    paid_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+```
+
+---
+
+## 📄 4. MOTEUR DE GÉNÉRATION DE DOCUMENTS ET RAPPORTS
+
+Le système intégrera un moteur de templating HTML/PDF pour exporter automatiquement tous les documents officiels requis par le calendrier scolaire RDC :
+
+### 1. Scolarité & Pédagogie
+
+* **Bulletins scolaires officiels** (avec pondération par trimestre/semestre et totaux automatiques).
+* **Certificats de scolarité & Relevés de notes**.
+* **PV de Conseils de classe** & Procès-verbaux d'examens.
+* **Palmarès annuel** (Export consolidé des réussites/échecs).
+* **Grilles horaires & Emplois du temps** par classe/professeur.
+* **Registre des matricules d'inscription** et Cahier des visites de classes.
+
+### 2. Documents d'Administration & Direction
+
+* **Rapport de rentrée & Rapport de fin d'année** (Format officiel EPST).
+* **Mouvements et transferts d'élèves** entre établissements.
+* **Dossiers psychopédagogiques** et Bilan d'assiduité / retards.
+* **PV du conseil de discipline** & Registre de retenues / exclusions.
+* **Mise en place des enseignants** & Registre d'absences du personnel.
+
+### 3. Documents Financiers & RH
+
+* **Reçus de paiement sécurisés** avec QR Code de vérification.
+* **Factures de scolarité** (individuelles ou par classe) & Avis de relance des impayés.
+* **Tableau de bord de Caisse** (Encaissements vs Dépenses).
+* **Fiches de paie personnel & États de paie mensuels**.
+* **Contrats de travail & Attestations de service**.
+
+---
+
+## ⚡ 5. WORKFLOWS INTERACTIFS D'APPLICATION
+
+1. **Cycle de Vie d'une Année Scolaire :**
+`Création de l'année` ➔ `Définition des frais` ➔ `Inscription / Re-inscription des élèves` ➔ `Injections des cotes Périodiques` ➔ `Génération automatique des Bulletins` ➔ `Décision du Conseil des Profs` ➔ `Passage de classe / Export Palmarès`.
+2. **Flux d'Encaissement des Frais (Mobile Money / Caisse) :**
+`Sélection Éleve / Classe` ➔ `Choix de la tranche` ➔ `Paiement Cash ou Prompt Mobile Money (M-Pesa/Orange/Airtel)` ➔ `Webhook de confirmation` ➔ `Impression immédiate du Reçu PDF` + `Mise à jour automatique de la Caisse`.
+
+---
