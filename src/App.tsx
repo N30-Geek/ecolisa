@@ -6,6 +6,7 @@ import { AcademicManager } from './components/academic/AcademicManager';
 import { FinanceManager } from './components/finance/FinanceManager';
 import { DocumentEngine } from './components/documents/DocumentEngine';
 import { LicenseSyncManager } from './components/system/LicenseSyncManager';
+import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { SystemRole } from './types';
 import { OfflineStorageService } from './services/offlineStorage';
 
@@ -13,13 +14,28 @@ export function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [userRole, setUserRole] = useState<SystemRole>('PROMOTEUR_ADMIN');
   const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
+
   const [pendingQueueCount, setPendingQueueCount] = useState<number>(
     OfflineStorageService.getPendingQueue().length
   );
 
+  const handleCompleteOnboarding = (config: any) => {
+    setShowOnboarding(false);
+    console.log('Ecolisa Pre-Configuration Saved:', config);
+  };
+
   return (
     <div className="min-h-screen flex bg-[#f4f6fb] font-sans antialiased text-[#1c1d22]">
       
+      {/* Onboarding Setup Wizard Modal */}
+      {showOnboarding && (
+        <OnboardingWizard 
+          onComplete={handleCompleteOnboarding}
+          onSkip={() => setShowOnboarding(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <Sidebar 
         activeTab={activeTab} 
@@ -37,6 +53,7 @@ export function App() {
           isOnline={isOnline}
           setIsOnline={setIsOnline}
           pendingQueueCount={pendingQueueCount}
+          onOpenOnboarding={() => setShowOnboarding(true)}
         />
 
         {/* Content View Area */}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Bell, Wifi, WifiOff, Shield, ChevronDown } from 'lucide-react';
+import { Search, Bell, Wifi, WifiOff, Shield, ChevronDown, Sparkles } from 'lucide-react';
 import { SystemRole } from '../../types';
 
 interface NavbarProps {
@@ -8,6 +8,7 @@ interface NavbarProps {
   isOnline: boolean;
   setIsOnline: (online: boolean) => void;
   pendingQueueCount: number;
+  onOpenOnboarding: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -15,7 +16,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   setUserRole,
   isOnline,
   setIsOnline,
-  pendingQueueCount
+  pendingQueueCount,
+  onOpenOnboarding
 }) => {
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
@@ -34,7 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20">
       {/* Search Input matching screenshot */}
-      <div className="relative w-96">
+      <div className="relative w-80">
         <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
         <input
           type="text"
@@ -44,7 +46,16 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Right Controls */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-4">
+        {/* Onboarding Wizard Launcher */}
+        <button
+          onClick={onOpenOnboarding}
+          className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-full text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>Config Wizard</span>
+        </button>
+
         {/* Offline / Online Sync Indicator */}
         <button
           onClick={() => setIsOnline(!isOnline)}
