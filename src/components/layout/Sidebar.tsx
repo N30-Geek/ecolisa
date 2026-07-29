@@ -23,49 +23,49 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
-  const academicGroup = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, isPrimary: true },
-    { id: 'students', label: 'Students', icon: GraduationCap },
-    { id: 'teachers', label: 'Teachers', icon: Users },
-    { id: 'classes', label: 'Classes', icon: BookOpen },
-    { id: 'schedule', label: 'Schedule', icon: Calendar },
+  const groupeAcademique = [
+    { id: 'dashboard', label: 'Tableau de Bord', icon: LayoutDashboard, estPrincipal: true },
+    { id: 'students', label: 'Élèves & Inscriptions', icon: GraduationCap },
+    { id: 'teachers', label: 'Corps Enseignant', icon: Users },
+    { id: 'classes', label: 'Classes & Salles', icon: BookOpen },
+    { id: 'schedule', label: 'Emploi du Temps', icon: Calendar },
   ];
 
-  const financeGroup = [
-    { id: 'invoices', label: 'Invoices & Mobile', icon: Receipt },
-    { id: 'payroll', label: 'Payroll', icon: Wallet },
-    { id: 'expenses', label: 'Expenses', icon: PieChart },
+  const groupeFinance = [
+    { id: 'invoices', label: 'Factures & Mobile Money', icon: Receipt },
+    { id: 'payroll', label: 'Paie du Personnel', icon: Wallet },
+    { id: 'expenses', label: 'Caisse & Dépenses', icon: PieChart },
   ];
 
-  const corporateGroup = [
-    { id: 'documents', label: 'RDC Documents', icon: FileCheck },
-    { id: 'messages', label: 'Messages', icon: MessageSquare },
-    { id: 'announcements', label: 'Announcements', icon: Megaphone },
-    { id: 'hr', label: 'HR Management', icon: Briefcase },
-    { id: 'license', label: 'Offline Sync & HWID', icon: ShieldCheck },
+  const groupeCorporatif = [
+    { id: 'documents', label: 'Documents EPST RDC', icon: FileCheck },
+    { id: 'messages', label: 'Messagerie', icon: MessageSquare },
+    { id: 'announcements', label: 'Communiqués', icon: Megaphone },
+    { id: 'hr', label: 'Ressources Humaines', icon: Briefcase },
+    { id: 'license', label: 'Licence & Synchro Offline', icon: ShieldCheck },
   ];
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 min-h-screen flex flex-col justify-between select-none">
       <div>
-        {/* Brand Header */}
+        {/* En-tête Marque */}
         <div className="h-16 flex items-center px-6 gap-3 border-b border-slate-100">
           <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center text-white font-bold shadow-md">
             <GraduationCap className="w-5 h-5 text-indigo-400" />
           </div>
           <div>
             <h1 className="font-extrabold text-base tracking-tight text-slate-900 leading-none">
-              ACADEMIA
+              ECOLISA
             </h1>
             <span className="text-[10px] font-semibold tracking-wider text-indigo-600 uppercase">
-              ECOLISA RDC SaaS
+              Desktop RDC SaaS
             </span>
           </div>
         </div>
 
-        {/* Navigation Sections */}
+        {/* Navigation */}
         <div className="p-4 space-y-6">
-          {/* Main Dashboard Button */}
+          {/* Bouton Dashboard */}
           <div>
             <button
               onClick={() => setActiveTab('dashboard')}
@@ -76,30 +76,30 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
               }`}
             >
               <LayoutDashboard className={`w-4 h-4 ${activeTab === 'dashboard' ? 'text-indigo-600' : 'text-slate-400'}`} />
-              DASHBOARD
+              TABLEAU DE BORD
             </button>
           </div>
 
-          {/* ACADEMIC */}
+          {/* ACADÉMIQUE */}
           <div>
             <div className="px-4 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Academic
+              Académique
             </div>
             <div className="space-y-1">
-              {academicGroup.slice(1).map((item) => {
+              {groupeAcademique.slice(1).map((item) => {
                 const Icon = item.icon;
-                const isActive = activeTab === item.id;
+                const estActif = activeTab === item.id;
                 return (
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
                     className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isActive 
+                      estActif 
                         ? 'bg-slate-100 text-slate-900 font-semibold' 
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                    <Icon className={`w-4 h-4 ${estActif ? 'text-indigo-600' : 'text-slate-400'}`} />
                     {item.label}
                   </button>
                 );
@@ -107,26 +107,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
             </div>
           </div>
 
-          {/* FINANCE */}
+          {/* FINANCES */}
           <div>
             <div className="px-4 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Finance
+              Finances & Caisse
             </div>
             <div className="space-y-1">
-              {financeGroup.map((item) => {
+              {groupeFinance.map((item) => {
                 const Icon = item.icon;
-                const isActive = activeTab === item.id;
+                const estActif = activeTab === item.id;
                 return (
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
                     className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isActive 
+                      estActif 
                         ? 'bg-slate-100 text-slate-900 font-semibold' 
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                    <Icon className={`w-4 h-4 ${estActif ? 'text-indigo-600' : 'text-slate-400'}`} />
                     {item.label}
                   </button>
                 );
@@ -134,26 +134,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
             </div>
           </div>
 
-          {/* CORPORATE */}
+          {/* DOCUMENTS & APPLICATION */}
           <div>
             <div className="px-4 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Corporate & Docs
+              Documents & Système
             </div>
             <div className="space-y-1">
-              {corporateGroup.map((item) => {
+              {groupeCorporatif.map((item) => {
                 const Icon = item.icon;
-                const isActive = activeTab === item.id;
+                const estActif = activeTab === item.id;
                 return (
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
                     className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isActive 
+                      estActif 
                         ? 'bg-slate-100 text-slate-900 font-semibold' 
                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                    <Icon className={`w-4 h-4 ${estActif ? 'text-indigo-600' : 'text-slate-400'}`} />
                     {item.label}
                   </button>
                 );
@@ -163,7 +163,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
         </div>
       </div>
 
-      {/* Footer Settings */}
+      {/* Paramètres */}
       <div className="p-4 border-t border-slate-100">
         <button
           onClick={() => setActiveTab('settings')}
@@ -174,7 +174,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
           }`}
         >
           <Settings className="w-4 h-4 text-slate-400" />
-          Settings
+          Paramètres Général
         </button>
       </div>
     </aside>

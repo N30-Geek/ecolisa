@@ -7,12 +7,12 @@ import { FinanceManager } from './components/finance/FinanceManager';
 import { DocumentEngine } from './components/documents/DocumentEngine';
 import { LicenseSyncManager } from './components/system/LicenseSyncManager';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
-import { SystemRole } from './types';
+import { RôleSystème } from './types';
 import { OfflineStorageService } from './services/offlineStorage';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [userRole, setUserRole] = useState<SystemRole>('PROMOTEUR_ADMIN');
+  const [userRole, setUserRole] = useState<RôleSystème>('PROMOTEUR_ADMIN');
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
 
@@ -22,13 +22,13 @@ export function App() {
 
   const handleCompleteOnboarding = (config: any) => {
     setShowOnboarding(false);
-    console.log('Ecolisa Pre-Configuration Saved:', config);
+    console.log('Préconfiguration Ecolisa Enregistrée :', config);
   };
 
   return (
     <div className="min-h-screen flex bg-[#f4f6fb] font-sans antialiased text-[#1c1d22]">
       
-      {/* Onboarding Setup Wizard Modal */}
+      {/* Modal d'Assistant de Préconfiguration */}
       {showOnboarding && (
         <OnboardingWizard 
           onComplete={handleCompleteOnboarding}
@@ -36,17 +36,17 @@ export function App() {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Barre Latérale (Sidebar) */}
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         userRole={userRole} 
       />
 
-      {/* Main Container */}
+      {/* Conteneur Principal */}
       <div className="flex-1 flex flex-col min-w-0">
         
-        {/* Navbar */}
+        {/* Barre Supérieure (Navbar) */}
         <Navbar 
           userRole={userRole}
           setUserRole={setUserRole}
@@ -56,7 +56,7 @@ export function App() {
           onOpenOnboarding={() => setShowOnboarding(true)}
         />
 
-        {/* Content View Area */}
+        {/* Zone d'Affichage du Contenu */}
         <main className="flex-1 overflow-y-auto pb-12">
           {activeTab === 'dashboard' && <ExecutiveDashboard />}
           
@@ -77,15 +77,15 @@ export function App() {
               <div className="w-16 h-16 rounded-3xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto text-2xl font-bold">
                 ⚙️
               </div>
-              <h2 className="text-xl font-bold text-slate-900 capitalize">{activeTab} Module</h2>
+              <h2 className="text-xl font-bold text-slate-900 capitalize">Module {activeTab}</h2>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Ce module est configuré et prêt pour l'intégration des webhooks Supabase Edge Functions.
+                Ce module est pré-configuré et prêt pour les fonctions métier d'arrière-plan.
               </p>
               <button
                 onClick={() => setActiveTab('dashboard')}
                 className="mt-4 px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold"
               >
-                Retour au Dashboard ACADEMIA
+                Retour au Tableau de Bord
               </button>
             </div>
           )}

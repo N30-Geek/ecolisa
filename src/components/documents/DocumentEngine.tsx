@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { mockStudents, mockSubjects } from '../../data/mockData';
-import { FileCheck, Printer, Download, Award, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { FileCheck, Printer } from 'lucide-react';
 
 export const DocumentEngine: React.FC = () => {
   const [docType, setDocType] = useState<'BULLETIN' | 'CERTIFICAT' | 'PALMARES'>('BULLETIN');
   const [selectedStudentId, setSelectedStudentId] = useState<string>('std-1'); // Gloire Kambale
 
-  const student = mockStudents.find(s => s.id === selectedStudentId) || mockStudents[0];
+  const eleve = mockStudents.find(s => s.id === selectedStudentId) || mockStudents[0];
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in duration-300">
       
-      {/* Header */}
+      {/* En-tête */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
@@ -27,12 +27,12 @@ export const DocumentEngine: React.FC = () => {
             onClick={() => window.print()}
             className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-md text-xs transition-all flex items-center gap-2"
           >
-            <Printer className="w-4 h-4" /> Imprimer Document PDF
+            <Printer className="w-4 h-4" /> Imprimer le Document PDF
           </button>
         </div>
       </div>
 
-      {/* Selectors Bar */}
+      {/* Barre de sélection */}
       <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
         <div className="flex items-center gap-3">
           <FileCheck className="w-5 h-5 text-indigo-600" />
@@ -65,7 +65,7 @@ export const DocumentEngine: React.FC = () => {
           </div>
         </div>
 
-        {/* Student Selector */}
+        {/* Sélecteur d'Élève */}
         {docType !== 'PALMARES' && (
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-500 uppercase">Élève :</span>
@@ -76,7 +76,7 @@ export const DocumentEngine: React.FC = () => {
             >
               {mockStudents.map(s => (
                 <option key={s.id} value={s.id}>
-                  {s.firstName} {s.lastName} ({s.className})
+                  {s.prenom} {s.nom} ({s.nomClasse})
                 </option>
               ))}
             </select>
@@ -84,7 +84,7 @@ export const DocumentEngine: React.FC = () => {
         )}
       </div>
 
-      {/* DOCUMENT PREVIEW CONTAINER */}
+      {/* CONTENEUR DE PRÉVISUALISATION DU DOCUMENT */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-xl p-8 max-w-4xl mx-auto font-sans leading-relaxed">
         
         {/* DOCUMENT TYPE 1: BULLETIN SCOLAIRE RDC */}
@@ -107,21 +107,21 @@ export const DocumentEngine: React.FC = () => {
               </div>
             </div>
 
-            {/* Student Info Box */}
+            {/* Fiche Élève */}
             <div className="grid grid-cols-2 gap-4 text-xs font-bold bg-slate-50 p-4 rounded-xl border border-slate-200">
               <div>
-                <div>Nom & Prénom : <span className="text-slate-900 font-extrabold">{student.firstName} {student.lastName}</span></div>
-                <div>Matricule EPST : <span className="font-mono text-indigo-700">{student.registrationNumber}</span></div>
-                <div>Lieu & Date Naiss. : <span className="text-slate-700">{student.birthPlace}, {student.birthDate}</span></div>
+                <div>Nom & Prénom : <span className="text-slate-900 font-extrabold">{eleve.prenom} {eleve.nom} {eleve.postnom || ''}</span></div>
+                <div>Matricule EPST : <span className="font-mono text-indigo-700">{eleve.registrationNumber}</span></div>
+                <div>Lieu & Date Naiss. : <span className="text-slate-700">{eleve.lieuNaissance}, {eleve.dateNaissance}</span></div>
               </div>
               <div>
-                <div>Classe & Option : <span className="text-slate-900 font-extrabold">{student.className}</span></div>
+                <div>Classe & Option : <span className="text-slate-900 font-extrabold">{eleve.nomClasse}</span></div>
                 <div>Niveau CITE : <span className="text-slate-700">CITE 344 (Humanités Scientifiques)</span></div>
-                <div>Titulaire : <span className="text-slate-700">Prof. Alan Turing</span></div>
+                <div>Professeur Titulaire : <span className="text-slate-700">Prof. Alan Turing</span></div>
               </div>
             </div>
 
-            {/* Grades Table */}
+            {/* Tableau des Cotes */}
             <table className="w-full text-left border-collapse border border-slate-300 text-xs">
               <thead>
                 <tr className="bg-slate-100 text-[10px] font-extrabold text-slate-900 uppercase border-b border-slate-300">
@@ -136,7 +136,7 @@ export const DocumentEngine: React.FC = () => {
               <tbody className="divide-y divide-slate-200">
                 {mockSubjects.map((sub, idx) => (
                   <tr key={sub.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                    <td className="p-2 border-r border-slate-300 font-bold text-slate-900">{sub.name}</td>
+                    <td className="p-2 border-r border-slate-300 font-bold text-slate-900">{sub.nom}</td>
                     <td className="p-2 border-r border-slate-300 text-center font-mono">{sub.maxScore * sub.coefficient}</td>
                     <td className="p-2 border-r border-slate-300 text-center font-mono font-bold text-slate-800">{(16.5 * sub.coefficient).toFixed(1)}</td>
                     <td className="p-2 border-r border-slate-300 text-center font-mono font-bold text-slate-800">{(17.0 * sub.coefficient).toFixed(1)}</td>
@@ -157,7 +157,7 @@ export const DocumentEngine: React.FC = () => {
               </tfoot>
             </table>
 
-            {/* Conduct & Appreciations Box */}
+            {/* Appréciations & Sceau */}
             <div className="grid grid-cols-2 gap-4 text-xs">
               <div className="p-4 border border-slate-200 rounded-xl space-y-2">
                 <div className="font-extrabold text-slate-900 uppercase">Appréciation du Titulaire :</div>
@@ -212,15 +212,15 @@ export const DocumentEngine: React.FC = () => {
               </p>
               
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center font-sans font-bold text-slate-900 text-base">
-                {student.firstName.toUpperCase()} {student.lastName.toUpperCase()}
+                {eleve.prenom.toUpperCase()} {eleve.nom.toUpperCase()} {eleve.postnom ? eleve.postnom.toUpperCase() : ''}
               </div>
 
               <p>
-                Né(e) à <strong>{student.birthPlace}</strong>, le <strong>{student.birthDate}</strong>, sous le matricule national <strong>{student.registrationNumber}</strong>, est régulièrement inscrit(e) dans notre établissement pour l'année scolaire <strong>2025 - 2026</strong> en classe de :
+                Né(e) à <strong>{eleve.lieuNaissance}</strong>, le <strong>{eleve.dateNaissance}</strong>, sous le matricule national <strong>{eleve.registrationNumber}</strong>, est régulièrement inscrit(e) dans notre établissement pour l'année scolaire <strong>2025 - 2026</strong> en classe de :
               </p>
 
               <div className="p-3 bg-indigo-50 text-indigo-900 border border-indigo-200 rounded-xl text-center font-sans font-extrabold text-sm">
-                {student.className.toUpperCase()} (Cycle Humanités - CITE 344)
+                {eleve.nomClasse.toUpperCase()} (Cycle Humanités - CITE 344)
               </div>
 
               <p>
@@ -240,7 +240,7 @@ export const DocumentEngine: React.FC = () => {
           <div className="space-y-6">
             <div className="text-center border-b border-slate-200 pb-4">
               <h2 className="font-extrabold text-base uppercase tracking-tight text-slate-900">
-                PALMARÈS GENERAL DES RÉSULTATS ANNUELS (EPST RDC)
+                PALMARÈS GÉNÉRAL DES RÉSULTATS ANNUELS (EPST RDC)
               </h2>
               <p className="text-xs text-slate-500 font-bold mt-1">
                 Année Scolaire 2025-2026 • Promotion: 3ème Math-Physique
@@ -251,7 +251,7 @@ export const DocumentEngine: React.FC = () => {
               <thead>
                 <tr className="bg-slate-100 border-b border-slate-300 text-[10px] font-extrabold text-slate-900 uppercase">
                   <th className="p-3">Rang</th>
-                  <th className="p-3">Matricule</th>
+                  <th className="p-3">Matricule EPST</th>
                   <th className="p-3">Nom & Prénom</th>
                   <th className="p-3 text-center">Total Points</th>
                   <th className="p-3 text-center">Pourcentage %</th>
@@ -263,12 +263,12 @@ export const DocumentEngine: React.FC = () => {
                   <tr key={std.id} className="hover:bg-slate-50">
                     <td className="p-3 font-bold text-slate-900">{idx + 1}er</td>
                     <td className="p-3 font-mono text-indigo-700">{std.registrationNumber}</td>
-                    <td className="p-3 font-bold text-slate-800">{std.firstName} {std.lastName}</td>
+                    <td className="p-3 font-bold text-slate-800">{std.prenom} {std.nom}</td>
                     <td className="p-3 font-mono text-center font-bold">290 / 340</td>
                     <td className="p-3 font-mono text-center font-extrabold text-emerald-700">85.3%</td>
                     <td className="p-3 text-right">
                       <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">
-                        PROMU EN CLASS SUPÉRIEURE
+                        PROMU EN CLASSE SUPÉRIEURE
                       </span>
                     </td>
                   </tr>

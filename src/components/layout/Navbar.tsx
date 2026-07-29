@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Search, Bell, Wifi, WifiOff, Shield, ChevronDown, Sparkles } from 'lucide-react';
-import { SystemRole } from '../../types';
+import { RôleSystème } from '../../types';
 
 interface NavbarProps {
-  userRole: SystemRole;
-  setUserRole: (role: SystemRole) => void;
+  userRole: RôleSystème;
+  setUserRole: (role: RôleSystème) => void;
   isOnline: boolean;
   setIsOnline: (online: boolean) => void;
   pendingQueueCount: number;
@@ -22,11 +22,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
 
-  const roleLabels: Record<SystemRole, string> = {
-    PROMOTEUR_ADMIN: 'Dr. Admin (Super Admin)',
-    PREFET_DIRECTEUR: 'Préfet / Directeur',
+  const roleLabels: Record<RôleSystème, string> = {
+    PROMOTEUR_ADMIN: 'Dr. Admin (Promoteur Général)',
+    PREFET_DIRECTEUR: 'Préfet des Études / Directeur',
     DIRECTEUR_ETUDES: 'Directeur des Études (D.E.)',
-    DIRECTEUR_DISCIPLINE: 'Directeur Discipline (D.D.)',
+    DIRECTEUR_DISCIPLINE: 'Directeur de Discipline (D.D.)',
     COMPTABLE: 'Comptable / Intendant',
     TITULAIRE: 'Titulaire de Classe',
     ENSEIGNANT: 'Professeur / Enseignant',
@@ -35,31 +35,31 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20">
-      {/* Search Input matching screenshot */}
+      {/* Barre de recherche */}
       <div className="relative w-80">
         <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
         <input
           type="text"
-          placeholder="Search records..."
+          placeholder="Rechercher un élève, matricule, classe..."
           className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
         />
       </div>
 
-      {/* Right Controls */}
+      {/* Contrôles droite */}
       <div className="flex items-center gap-4">
-        {/* Onboarding Wizard Launcher */}
+        {/* Assistant Préconfiguration */}
         <button
           onClick={onOpenOnboarding}
-          className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-full text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
+          className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-full text-xs font-bold shadow-sm transition-all flex items-center gap-1.5"
         >
           <Sparkles className="w-3.5 h-3.5" />
-          <span>Config Wizard</span>
+          <span>Assistant Initialisation</span>
         </button>
 
-        {/* Offline / Online Sync Indicator */}
+        {/* Indicateur Synchro Hors-Ligne */}
         <button
           onClick={() => setIsOnline(!isOnline)}
-          title="Toggle Network / Offline Mode Simulation"
+          title="Basculer la simulation de mode réseau/hors-ligne"
           className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
             isOnline
               ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
@@ -70,17 +70,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             <>
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <Wifi className="w-3.5 h-3.5 text-emerald-600" />
-              <span>ONLINE (Synced)</span>
+              <span>EN LIGNE (Synchronisé)</span>
             </>
           ) : (
             <>
               <WifiOff className="w-3.5 h-3.5 text-amber-600" />
-              <span>OFFLINE ({pendingQueueCount} queued)</span>
+              <span>HORS LIGNE ({pendingQueueCount} en attente)</span>
             </>
           )}
         </button>
 
-        {/* Notifications Bell */}
+        {/* Notifications */}
         <div className="relative">
           <button 
             onClick={() => setShowNotifs(!showNotifs)}
@@ -93,24 +93,24 @@ export const Navbar: React.FC<NavbarProps> = ({
           {showNotifs && (
             <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-2xl shadow-xl p-4 z-50 animate-in fade-in slide-in-from-top-2">
               <div className="flex justify-between items-center mb-3">
-                <h4 className="font-bold text-sm text-slate-900">Notifications (Live)</h4>
-                <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">3 New</span>
+                <h4 className="font-bold text-sm text-slate-900">Notifications Directives</h4>
+                <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">3 Nouvelles</span>
               </div>
               <div className="space-y-2 text-xs">
                 <div className="p-2 bg-slate-50 rounded-lg">
-                  <p className="font-semibold text-slate-800">FlexPay Mobile Payment Validated</p>
-                  <p className="text-slate-500">M-Pesa payment received for Gloire Kambale ($280.00)</p>
+                  <p className="font-semibold text-slate-800">Paiement FlexPay Validé</p>
+                  <p className="text-slate-500">M-Pesa reçu pour Gloire Kambale ($280.00)</p>
                 </div>
                 <div className="p-2 bg-slate-50 rounded-lg">
-                  <p className="font-semibold text-slate-800">Cotes de 3ème Math Submitted</p>
-                  <p className="text-slate-500">Prof. Alan Turing uploaded 2nd Term exam grades.</p>
+                  <p className="font-semibold text-slate-800">Cotes de 3ème Math Validées</p>
+                  <p className="text-slate-500">Prof. Alan Turing a encodé l'examen du 1er Trimestre.</p>
                 </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* User Profile & Role Selector Dropdown */}
+        {/* Profil Administrateur & Sélecteur RBAC */}
         <div className="relative">
           <button
             onClick={() => setShowRoleMenu(!showRoleMenu)}
@@ -118,11 +118,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <div className="text-right hidden sm:block">
               <div className="font-bold text-sm text-slate-900 leading-tight">Dr. Admin</div>
-              <div className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase">SUPER ADMIN</div>
+              <div className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase">PROMOTEUR ADMIN</div>
             </div>
             <img
               src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"
-              alt="Dr Admin Avatar"
+              alt="Avatar Dr Admin"
               className="w-10 h-10 rounded-full object-cover ring-2 ring-slate-100 shadow-sm"
             />
             <ChevronDown className="w-4 h-4 text-slate-400" />
@@ -131,10 +131,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           {showRoleMenu && (
             <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 z-50">
               <div className="px-3 py-2 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase">
-                Changer de Rôle (RBAC Test)
+                Changer le Rôle Actif (Test RBAC)
               </div>
               <div className="py-1 space-y-0.5">
-                {(Object.keys(roleLabels) as SystemRole[]).map((r) => (
+                {(Object.keys(roleLabels) as RôleSystème[]).map((r) => (
                   <button
                     key={r}
                     onClick={() => {

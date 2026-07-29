@@ -1,6 +1,6 @@
-// Ecolisa Core Types Definition
+// Définition des Types ECOLISA - 100% Français
 
-export type SystemRole = 
+export type RôleSystème = 
   | 'PROMOTEUR_ADMIN'
   | 'PREFET_DIRECTEUR'
   | 'DIRECTEUR_ETUDES'
@@ -10,197 +10,173 @@ export type SystemRole =
   | 'ENSEIGNANT'
   | 'PARENT_ELEVE';
 
-export type CycleCode = 'PRESCHOOL' | 'PRIMAIRE' | 'CTEB' | 'HUMANITES' | 'CUSTOM';
+export type CodeCycle = 'PRESCHOOL' | 'PRIMAIRE' | 'CTEB' | 'HUMANITES' | 'CUSTOM';
 
-export interface Cycle {
+export interface CycleScolaire {
   id: string;
-  code: CycleCode;
-  name: string;
-  citeCode: string; // e.g. "CITE 100", "CITE 244", "CITE 344"
+  code: CodeCycle;
+  nom: string;
+  codeCite: string; // ex: "CITE 100", "CITE 244", "CITE 344"
 }
 
-export interface AcademicClass {
+export interface ClasseScolaire {
   id: string;
   cycleId: string;
-  name: string; // e.g. "7ème CTEB", "3ème Math-Physique", "6ème Primaire"
-  roomNumber: string;
-  isCustom?: boolean;
-  studentCount: number;
-  mainTeacher: string;
+  nom: string; // ex: "7ème CTEB", "3ème Math-Physique", "6ème Primaire"
+  salle: string;
+  estPersonnalise?: boolean;
+  nombreEleves: number;
+  professeurTitulaire: string;
 }
 
-export interface Student {
+export interface Eleve {
   id: string;
   registrationNumber: string; // Matricule ex: "2026-ED-094"
-  firstName: string;
-  lastName: string;
-  gender: 'M' | 'F';
-  birthDate: string;
-  birthPlace: string;
-  status: 'ACTIVE' | 'TRANSFERED' | 'FINALIST' | 'EXCLUDED';
+  prenom: string;
+  nom: string;
+  postnom?: string;
+  sexe: 'M' | 'F';
+  dateNaissance: string;
+  lieuNaissance: string;
+  statut: 'ACTIF' | 'TRANSFERE' | 'FINALISTE' | 'EXCLU';
   classId: string;
-  className: string;
-  parentName: string;
-  parentPhone: string;
-  parentEmail?: string;
-  psychopedagogicalNotes?: string;
+  nomClasse: string;
+  nomParent: string;
+  telephoneParent: string;
+  emailParent?: string;
+  notesPsychopedagogiques?: string;
   photoUrl?: string;
 }
 
-export interface Subject {
+export interface Discipline {
   id: string;
-  name: string;
+  nom: string;
   code: string;
   coefficient: number;
   maxScore: number;
-  category: 'SCIENCES' | 'LANGUES' | 'CULTURE_GENERALE' | 'PRATIQUE' | 'OPTION';
+  categorie: 'SCIENCES' | 'LANGUES' | 'CULTURE_GENERALE' | 'PRATIQUE' | 'OPTION';
 }
 
-export interface Grade {
+export interface Cote {
   id: string;
   studentId: string;
   subjectId: string;
   classId: string;
-  term: '1ER_TRIMESTRE' | '2EME_TRIMESTRE' | '3EME_TRIMESTRE' | 'EXAMEN_D_ETAT';
+  periode: '1ER_TRIMESTRE' | '2EME_TRIMESTRE' | '3EME_TRIMESTRE' | 'EXAMEN_D_ETAT';
   type: 'INTERROGATION' | 'EXAMEN' | 'PRATIQUE';
   score: number;
   maxScore: number;
-  createdAt: string;
+  dateCreation: string;
 }
 
-export interface StudentBulletin {
-  student: Student;
-  term: string;
-  academicYear: string;
-  subjectGrades: {
-    subjectName: string;
+export interface BulletinEleve {
+  eleve: Eleve;
+  periode: string;
+  anneeScolaire: string;
+  cotesDisciplines: {
+    nomDiscipline: string;
     coefficient: number;
     scoreInterro: number;
-    scoreExam: number;
+    scoreExamen: number;
     total: number;
     maxTotal: number;
     appreciation: string;
   }[];
-  totalPoints: number;
-  maxPointsTotal: number;
-  percentage: number;
-  rank: number;
-  totalStudents: number;
-  conductScore: 'TB' | 'B' | 'M' | 'MAV';
-  deOpinion: string;
-  prefetSignature: boolean;
+  pointsTotaux: number;
+  pointsMaxTotaux: number;
+  pourcentage: number;
+  rang: number;
+  effectifClasse: number;
+  scoreConduite: 'TB' | 'B' | 'M' | 'MAV';
+  avisDirecteurEtudes: string;
+  signaturePrefet: boolean;
 }
 
-export interface AttendanceRecord {
+export interface TypeFrais {
   id: string;
-  studentId: string;
-  studentName: string;
-  className: string;
-  date: string;
-  status: 'PRESENT' | 'ABSENT_JUSTIFIED' | 'ABSENT_UNJUSTIFIED' | 'LATE';
-  reason?: string;
-}
-
-export interface FeeType {
-  id: string;
-  title: string; // Minerval, Frais d'Examen, Bus, Uniforme
-  amount: number;
-  currency: 'USD' | 'CDF';
+  titre: string; // Minerval, Frais d'Examen, Bus, Uniforme
+  montant: number;
+  devise: 'USD' | 'CDF';
   tranche: 'MENSUEL' | 'TRIMESTRIEL' | 'ANNUEL';
 }
 
-export interface StudentInvoice {
+export interface FactureEleve {
   id: string;
-  invoiceNumber: string;
+  numeroFacture: string;
   studentId: string;
-  studentName: string;
-  className: string;
-  academicYear: string;
-  totalAmount: number;
-  paidAmount: number;
-  currency: 'USD' | 'CDF';
-  status: 'UNPAID' | 'PARTIAL' | 'PAID';
-  dueDate: string;
+  nomEleve: string;
+  nomClasse: string;
+  anneeScolaire: string;
+  montantTotal: number;
+  montantPaye: number;
+  devise: 'USD' | 'CDF';
+  statut: 'NON_PAYE' | 'PARTIEL' | 'PAYE';
+  dateEcheance: string;
 }
 
-export interface PaymentTransaction {
+export interface TransactionPaiement {
   id: string;
   invoiceId: string;
-  studentName: string;
+  nomEleve: string;
   registrationNumber: string;
-  amountPaid: number;
-  currency: 'USD' | 'CDF';
-  paymentMethod: 'CASH' | 'FLEXPAY_MPESA' | 'FLEXPAY_ORANGE' | 'FLEXPAY_AIRTEL' | 'FLUTTERWAVE_CARD';
+  montantPaye: number;
+  devise: 'USD' | 'CDF';
+  moyenPaiement: 'CASH' | 'FLEXPAY_MPESA' | 'FLEXPAY_ORANGE' | 'FLEXPAY_AIRTEL' | 'FLUTTERWAVE_CARTE';
   reference: string;
-  receiptNumber: string;
-  createdAt: string;
-  cashierName: string;
-  qrCodeToken: string;
+  numeroRecu: string;
+  dateCreation: string;
+  nomCaissier: string;
+  jetonQrCode: string;
 }
 
-export interface StaffMember {
+export interface MembrePersonnel {
   id: string;
-  firstName: string;
-  lastName: string;
-  role: 'TEACHER' | 'ACCOUNTANT' | 'PREFECT' | 'SURVEILLANT' | 'DE' | 'ADMIN';
-  phone: string;
+  prenom: string;
+  nom: string;
+  role: 'ENSEIGNANT' | 'COMPTABLE' | 'PREFET' | 'SURVEILLANT' | 'DE' | 'ADMIN';
+  telephone: string;
   email: string;
-  baseSalary: number;
-  currency: 'USD';
-  status: 'ACTIVE' | 'ON_LEAVE' | 'SUSPENDED';
-  assignedClasses?: string[];
+  salaireBase: number;
+  devise: 'USD' | 'CDF';
+  statut: 'ACTIF' | 'EN_CONGE' | 'SUSPENDU';
+  classesAssignees?: string[];
   avatarUrl?: string;
 }
 
-export interface Payslip {
-  id: string;
-  staffId: string;
-  staffName: string;
-  role: string;
-  monthYear: string;
-  baseSalary: number;
-  bonus: number;
-  deductions: number;
-  netPaid: number;
-  paidAt: string;
-  paymentMethod: string;
-}
-
-// License & Offline Sync Types
-export interface OfflineLicense {
+export interface LicenceOffline {
   hwid: string;
-  planType: 'MONTHLY' | 'QUARTERLY' | 'ANNUAL' | 'TRIAL_30';
-  startsAt: string;
-  expiresAt: string;
-  gracePeriodUntil: string;
+  typePlan: 'MENSUEL' | 'TRIMESTRIEL' | 'ANNUEL' | 'ESSAI_30';
+  debutLe: string;
+  expireLe: string;
+  graceJusquAu: string;
   signatureEd25519: string;
-  isValid: boolean;
-  isGracePeriod: boolean;
-  daysRemaining: number;
+  estValide: boolean;
+  estEnPeriodeDeGrace: boolean;
+  joursRestants: number;
 }
 
-export interface SyncStatus {
-  isOnline: boolean;
-  lastSyncedAt: string;
-  pendingQueueCount: number;
-  localDbSizeMb: number;
-  cloudSyncState: 'IDLE' | 'SYNCING' | 'ERROR' | 'OFFLINE';
+export interface StatutSynchro {
+  estEnLigne: boolean;
+  derniereSynchroA: string;
+  nombreEnAttente: number;
+  tailleDbLocaleMo: number;
+  etatSynchroCloud: 'INACTIF' | 'SYNCHRO_EN_COURS' | 'ERREUR' | 'HORS_LIGNE';
 }
 
-export interface FacultyUpdate {
+export interface ActualiteEnseignant {
   id: string;
-  authorName: string;
-  authorRole: string;
+  nomAuteur: string;
+  roleAuteur: string;
   avatarUrl: string;
-  title: string;
-  timeAgo: string;
-  type: 'SYLLABUS' | 'GRADES_SUBMITTED' | 'LEAVE_REQUEST';
-  needsApproval?: boolean;
+  titre: string;
+  ilYA: string;
+  type: 'SYLLABUS' | 'COTES_SOUMISES' | 'DEMANDE_CONGE';
+  necessiteApprobation?: boolean;
 }
 
-export interface EventItem {
+export interface EvenementScolaire {
   id: string;
-  dateDay: string; // e.g. "OCT 12"
-  title: string;
-  timeLocation: string;
+  dateJour: string; // ex: "12 OCT"
+  titre: string;
+  heureLieu: string;
 }

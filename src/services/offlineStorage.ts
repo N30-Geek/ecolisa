@@ -1,43 +1,43 @@
-import { OfflineLicense, SyncStatus } from '../types';
+import { LicenceOffline, StatutSynchro } from '../types';
 import { initialOfflineLicense, initialSyncStatus } from '../data/mockData';
 
-const LICENSE_KEY = 'ecolisa_offline_license';
-const SYNC_KEY = 'ecolisa_sync_status';
-const PENDING_QUEUE_KEY = 'ecolisa_offline_queue';
+const CLÉ_LICENCE = 'ecolisa_licence_offline';
+const CLÉ_SYNCHRO = 'ecolisa_statut_synchro';
+const CLÉ_FILE_ATTENTE = 'ecolisa_file_attente';
 
 export class OfflineStorageService {
-  public static getLicense(): OfflineLicense {
-    const stored = localStorage.getItem(LICENSE_KEY);
-    if (!stored) {
+  public static getLicense(): LicenceOffline {
+    const stocke = localStorage.getItem(CLÉ_LICENCE);
+    if (!stocke) {
       this.saveLicense(initialOfflineLicense);
       return initialOfflineLicense;
     }
     try {
-      return JSON.parse(stored);
+      return JSON.parse(stocke);
     } catch {
       return initialOfflineLicense;
     }
   }
 
-  public static saveLicense(license: OfflineLicense): void {
-    localStorage.setItem(LICENSE_KEY, JSON.stringify(license));
+  public static saveLicense(license: LicenceOffline): void {
+    localStorage.setItem(CLÉ_LICENCE, JSON.stringify(license));
   }
 
-  public static getSyncStatus(): SyncStatus {
-    const stored = localStorage.getItem(SYNC_KEY);
-    if (!stored) {
+  public static getSyncStatus(): StatutSynchro {
+    const stocke = localStorage.getItem(CLÉ_SYNCHRO);
+    if (!stocke) {
       this.saveSyncStatus(initialSyncStatus);
       return initialSyncStatus;
     }
     try {
-      return JSON.parse(stored);
+      return JSON.parse(stocke);
     } catch {
       return initialSyncStatus;
     }
   }
 
-  public static saveSyncStatus(status: SyncStatus): void {
-    localStorage.setItem(SYNC_KEY, JSON.stringify(status));
+  public static saveSyncStatus(status: StatutSynchro): void {
+    localStorage.setItem(CLÉ_SYNCHRO, JSON.stringify(status));
   }
 
   public static enqueueOfflineChange(table: string, action: 'INSERT' | 'UPDATE' | 'DELETE', payload: any): void {
@@ -49,29 +49,29 @@ export class OfflineStorageService {
       payload,
       timestamp: new Date().toISOString()
     });
-    localStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(queue));
+    localStorage.setItem(CLÉ_FILE_ATTENTE, JSON.stringify(queue));
 
     const status = this.getSyncStatus();
-    status.pendingQueueCount = queue.length;
+    status.nombreEnAttente = queue.length;
     this.saveSyncStatus(status);
   }
 
   public static getPendingQueue(): any[] {
-    const stored = localStorage.getItem(PENDING_QUEUE_KEY);
-    if (!stored) return [];
+    const stocke = localStorage.getItem(CLÉ_FILE_ATTENTE);
+    if (!stocke) return [];
     try {
-      return JSON.parse(stored);
+      return JSON.parse(stocke);
     } catch {
       return [];
     }
   }
 
   public static clearQueue(): void {
-    localStorage.removeItem(PENDING_QUEUE_KEY);
+    localStorage.removeItem(CLÉ_FILE_ATTENTE);
     const status = this.getSyncStatus();
-    status.pendingQueueCount = 0;
-    status.lastSyncedAt = new Date().toLocaleString();
-    status.cloudSyncState = 'IDLE';
+    status.nombreEnAttente = 0;
+    status.derniereSynchroA = new Date().toLocaleString();
+    status.etatSynchroCloud = 'INACTIF';
     this.saveSyncStatus(status);
   }
 }

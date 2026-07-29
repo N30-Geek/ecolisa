@@ -1,55 +1,53 @@
 import React, { useState, useEffect } from 'react';
 import { OfflineStorageService } from '../../services/offlineStorage';
-import { OfflineLicense, SyncStatus } from '../../types';
+import { LicenceOffline, StatutSynchro } from '../../types';
 import { 
   ShieldCheck, 
   Cpu, 
   Key, 
   RefreshCw, 
   Database, 
-  CloudOff, 
   CheckCircle2, 
-  AlertOctagon,
   Clock
 } from 'lucide-react';
 
 export const LicenseSyncManager: React.FC = () => {
-  const [license, setLicense] = useState<OfflineLicense>(OfflineStorageService.getLicense());
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>(OfflineStorageService.getSyncStatus());
-  const [queue, setQueue] = useState<any[]>(OfflineStorageService.getPendingQueue());
-  const [isSyncingNow, setIsSyncingNow] = useState(false);
+  const [licence, setLicence] = useState<LicenceOffline>(OfflineStorageService.getLicense());
+  const [statutSynchro, setStatutSynchro] = useState<StatutSynchro>(OfflineStorageService.getSyncStatus());
+  const [fileAttente, setFileAttente] = useState<any[]>(OfflineStorageService.getPendingQueue());
+  const [estEnSynchro, setEstEnSynchro] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setSyncStatus(OfflineStorageService.getSyncStatus());
-      setQueue(OfflineStorageService.getPendingQueue());
+      setStatutSynchro(OfflineStorageService.getSyncStatus());
+      setFileAttente(OfflineStorageService.getPendingQueue());
     }, 1500);
     return () => clearInterval(interval);
   }, []);
 
   const handleSimulateAddQueueItem = () => {
     OfflineStorageService.enqueueOfflineChange('students', 'INSERT', {
-      firstName: 'Alain',
-      lastName: 'Muka',
+      prenom: 'Alain',
+      nom: 'Muka',
       registrationNumber: `2026-ED-${Math.floor(1000 + Math.random() * 9000)}`
     });
-    setQueue(OfflineStorageService.getPendingQueue());
+    setFileAttente(OfflineStorageService.getPendingQueue());
   };
 
   const handleForceSync = () => {
-    setIsSyncingNow(true);
+    setEstEnSynchro(true);
     setTimeout(() => {
       OfflineStorageService.clearQueue();
-      setQueue([]);
-      setSyncStatus(OfflineStorageService.getSyncStatus());
-      setIsSyncingNow(false);
+      setFileAttente([]);
+      setStatutSynchro(OfflineStorageService.getSyncStatus());
+      setEstEnSynchro(false);
     }, 1200);
   };
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in duration-300">
       
-      {/* Header */}
+      {/* En-tête */}
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
           Moteur Offline-First & Module de Licence Cryptographique
@@ -59,10 +57,10 @@ export const LicenseSyncManager: React.FC = () => {
         </p>
       </div>
 
-      {/* Grid Status Cards */}
+      {/* Cartes d'État */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
-        {/* Card 1: License Status */}
+        {/* Carte 1: Statut Licence */}
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Statut Licence Offline</span>
@@ -71,10 +69,10 @@ export const LicenseSyncManager: React.FC = () => {
           <div>
             <div className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
-              {license.planType} PLAN (ACTIVE)
+              {licence.typePlan} PLAN (ACTIF)
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Valide jusqu'au <strong>{license.expiresAt}</strong> ({license.daysRemaining} jours restants)
+              Valide jusqu'au <strong>{licence.expireLe}</strong> ({licence.joursRestants} jours restants)
             </p>
           </div>
           <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-[11px] text-emerald-900 font-medium">
@@ -82,7 +80,7 @@ export const LicenseSyncManager: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2: HWID Hardware ID */}
+        {/* Carte 2: Empreinte HWID */}
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Empreinte Matérielle (HWID)</span>
@@ -90,7 +88,7 @@ export const LicenseSyncManager: React.FC = () => {
           </div>
           <div>
             <div className="text-sm font-mono font-bold text-slate-900 truncate">
-              {license.hwid}
+              {licence.hwid}
             </div>
             <p className="text-xs text-slate-500 mt-1">
               Calculé via <code>node-machine-id</code> (Combinaison CPU ID + Serial Disque).
@@ -102,7 +100,7 @@ export const LicenseSyncManager: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 3: Grace Period Engine */}
+        {/* Carte 3: Période de Grâce */}
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Période de Grâce (Grace Period)</span>
@@ -113,7 +111,7 @@ export const LicenseSyncManager: React.FC = () => {
               14 Jours Accordés
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Prolongation automatique si expiration hors-ligne jusqu'au {license.gracePeriodUntil}.
+              Prolongation automatique si expiration hors-ligne jusqu'au {licence.graceJusquAu}.
             </p>
           </div>
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[11px] text-amber-900 font-medium">
@@ -123,7 +121,7 @@ export const LicenseSyncManager: React.FC = () => {
 
       </div>
 
-      {/* SYNC QUEUE & LOCAL SQLITE SIMULATION */}
+      {/* FILE D'ATTENTE SYNCHRO SQLITE */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -145,19 +143,19 @@ export const LicenseSyncManager: React.FC = () => {
             </button>
             
             <button
-              disabled={isSyncingNow || queue.length === 0}
+              disabled={estEnSynchro || fileAttente.length === 0}
               onClick={handleForceSync}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-2"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingNow ? 'animate-spin' : ''}`} />
-              {isSyncingNow ? 'Synchronisation Supabase...' : 'Forcer la Sync Cloud'}
+              <RefreshCw className={`w-3.5 h-3.5 ${estEnSynchro ? 'animate-spin' : ''}`} />
+              {estEnSynchro ? 'Synchronisation Supabase...' : 'Forcer la Sync Cloud'}
             </button>
           </div>
         </div>
 
-        {/* Sync Queue Table */}
+        {/* Tableau de la file d'attente */}
         <div className="overflow-x-auto">
-          {queue.length === 0 ? (
+          {fileAttente.length === 0 ? (
             <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
               <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
               <h4 className="font-bold text-sm text-slate-800">Toutes les données sont synchronisées</h4>
@@ -171,11 +169,11 @@ export const LicenseSyncManager: React.FC = () => {
                   <th className="py-3 px-4">Table SQLite</th>
                   <th className="py-3 px-4">Action</th>
                   <th className="py-3 px-4">Horodatage</th>
-                  <th className="py-3 px-4">Payload Data</th>
+                  <th className="py-3 px-4">Payload Données</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono">
-                {queue.map((item) => (
+                {fileAttente.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50">
                     <td className="py-3 px-4 text-indigo-600 font-bold">{item.id}</td>
                     <td className="py-3 px-4 font-bold text-slate-800">{item.table}</td>
