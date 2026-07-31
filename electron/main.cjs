@@ -5,27 +5,36 @@ let mainWindow;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1380,
+    width: 1440,
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    title: "ECOLISA - Système de Gestion Scolaire Offline-First (RDC & Intl)",
+    show: false,
+    frame: false, // Frameless custom window title bar
+    titleBarStyle: 'hidden',
+    title: "ECOLISA - ERP Scolaire Enterprise (Offline-First)",
     icon: path.join(__dirname, '../public/favicon.svg'),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false
     },
-    autoHideMenuBar: true,
-    backgroundColor: '#f4f6fb'
+    backgroundColor: '#0b0f19'
+  });
+
+  // Launch in maximized / fullscreen state
+  mainWindow.maximize();
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    mainWindow.focus();
   });
 
   const isDev = process.env.NODE_ENV !== 'production';
 
   if (isDev || process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL || 'http://localhost:3000');
-    // mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
@@ -45,6 +54,29 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+// IPC Handlers for Window Controls
+ipcMain.on('window-minimize', () => {
+  if (mainWindow) mainWindow.minimize();
+});
+
+ipcMain.on('window-maximize', () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  }
+});
+
+ipcMain.on('window-close', () => {
+  if (mainWindow) mainWindow.close();
+});
+
+ipcMain.handle('window-is-maximized', () => {
+  return mainWindow ? mainWindow.isMaximized() : false;
 });
 
 // IPC Handler for HWID Hardware Footprint Simulation

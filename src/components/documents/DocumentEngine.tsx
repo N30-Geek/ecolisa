@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { mockStudents, mockSubjects } from '../../data/mockData';
 import { FileCheck, Printer } from 'lucide-react';
+import { CustomSelect } from '../common/CustomSelect';
 
 export const DocumentEngine: React.FC = () => {
   const [docType, setDocType] = useState<'BULLETIN' | 'CERTIFICAT' | 'PALMARES'>('BULLETIN');
@@ -69,17 +70,16 @@ export const DocumentEngine: React.FC = () => {
         {docType !== 'PALMARES' && (
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-500 uppercase">Élève :</span>
-            <select
+            <CustomSelect
+              options={mockStudents.map(s => ({
+                value: s.id,
+                label: `${s.prenom} ${s.nom}`,
+                description: s.nomClasse,
+              }))}
               value={selectedStudentId}
-              onChange={(e) => setSelectedStudentId(e.target.value)}
-              className="bg-slate-50 border border-slate-200 text-slate-900 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-            >
-              {mockStudents.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.prenom} {s.nom} ({s.nomClasse})
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedStudentId(val)}
+              className="w-64"
+            />
           </div>
         )}
       </div>
