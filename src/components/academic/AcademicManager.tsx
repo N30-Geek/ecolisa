@@ -102,82 +102,7 @@ interface AnneeScolaireConfig {
   periodes: { id: string; nom: string; debut: string; fin: string; type: 'PERIOD' | 'EXAM' }[];
 }
 
-const mockSchoolYears: AnneeScolaireConfig[] = [
-  {
-    id: 'ay-1',
-    nom: '2025–2026',
-    statut: 'EN_COURS',
-    debut: '01 Septembre 2025',
-    fin: '02 Juillet 2026',
-    nombreElevesTotal: 14295,
-    fraisInscription: 50,
-    fraisConnexion: 15,
-    fraisReinscription: 30,
-    fraisCarte: 10,
-    fraisAnnexes: [
-      { id: 'fa-1', intitule: 'Kit Scolaire & Uniforme Officiel', montant: 25, devise: 'USD', obligatoire: true, typeFrais: 'KIT' },
-      { id: 'fa-2', intitule: 'Frais de Plateforme Système & SMS', montant: 15, devise: 'USD', obligatoire: true, typeFrais: 'CONNEXION' },
-      { id: 'fa-3', intitule: 'Assurance Scolaire & Infirmerie', montant: 10, devise: 'USD', obligatoire: true, typeFrais: 'AUTRE' },
-    ],
-    cycles: [
-      { id: 'cyc-1', code: 'MATERNELLE', nom: 'Cycle Maternelle (3–5 ans)', actif: true, classesCount: 6, sallesCount: 6 },
-      { id: 'cyc-2', code: 'PRIMAIRE', nom: 'Cycle Primaire (1ère–6ème)', actif: true, classesCount: 18, sallesCount: 18 },
-      { id: 'cyc-3', code: 'SECONDAIRE_CTEB', nom: 'Cycle Terminal d’Éducation de Base (7ème–8ème CTEB)', actif: true, classesCount: 8, sallesCount: 8 },
-      { id: 'cyc-4', code: 'HUMANITES', nom: 'Humanités Générales & Techniques (1ère–4ème H)', actif: true, classesCount: 16, sallesCount: 16 },
-    ],
-    salles: [
-      { id: 'sal-1', codeSalle: 'M-101', nomSalle: 'Pavillon Maternelle A — Petite Section', capacite: 35, cycleCode: 'MATERNELLE' },
-      { id: 'sal-2', codeSalle: 'P-201', nomSalle: 'Bâtiment Principal — Salle 1ère Primaire A', capacite: 45, cycleCode: 'PRIMAIRE' },
-      { id: 'sal-3', codeSalle: 'C-301', nomSalle: 'Aile Scientifique — Salle 7ème CTEB A', capacite: 40, cycleCode: 'SECONDAIRE_CTEB' },
-      { id: 'sal-4', codeSalle: 'H-401', nomSalle: 'Bâtiment Humanités — Labo Math-Physique A', capacite: 40, cycleCode: 'HUMANITES' },
-      { id: 'sal-5', codeSalle: 'H-402', nomSalle: 'Bâtiment Humanités — Salle Biologie-Chimie B', capacite: 40, cycleCode: 'HUMANITES' },
-    ],
-    semestres: [
-      { id: 's1', nom: '1er Semestre (S1)', statut: 'EN_COURS', fin: '17 Février 2026' },
-      { id: 's2', nom: '2ème Semestre (S2)', statut: 'PLANIFIE', fin: '02 Juillet 2026' },
-    ],
-    periodes: [
-      { id: 'p1', nom: '1ère Période', debut: '01 Sept', fin: '04 Nov 2025', type: 'PERIOD' },
-      { id: 'p2', nom: '2ème Période & Examens S1', debut: '09 Nov', fin: '17 Fév 2026', type: 'EXAM' },
-      { id: 'p3', nom: '3ème Période', debut: '22 Fév', fin: '24 Avr 2026', type: 'PERIOD' },
-      { id: 'p4', nom: '4ème Période & EXETAT', debut: '26 Avr', fin: '02 Jul 2026', type: 'EXAM' },
-    ],
-  },
-  {
-    id: 'ay-0',
-    nom: '2024–2025',
-    statut: 'CLOTUREE',
-    debut: '02 Septembre 2024',
-    fin: '04 Juillet 2025',
-    nombreElevesTotal: 13800,
-    fraisInscription: 45,
-    fraisConnexion: 12,
-    fraisReinscription: 25,
-    fraisCarte: 10,
-    fraisAnnexes: [
-      { id: 'fa-01', intitule: 'Kit Scolaire 2024', montant: 20, devise: 'USD', obligatoire: true, typeFrais: 'KIT' },
-    ],
-    cycles: [
-      { id: 'cyc-01', code: 'MATERNELLE', nom: 'Cycle Maternelle', actif: true, classesCount: 6, sallesCount: 6 },
-      { id: 'cyc-02', code: 'PRIMAIRE', nom: 'Cycle Primaire', actif: true, classesCount: 18, sallesCount: 18 },
-      { id: 'cyc-03', code: 'SECONDAIRE_CTEB', nom: 'CTEB 7-8', actif: true, classesCount: 8, sallesCount: 8 },
-      { id: 'cyc-04', code: 'HUMANITES', nom: 'Humanités', actif: true, classesCount: 16, sallesCount: 16 },
-    ],
-    salles: [
-      { id: 'sal-01', codeSalle: 'M-101', nomSalle: 'Salle Maternelle 2024', capacite: 35, cycleCode: 'MATERNELLE' },
-    ],
-    semestres: [
-      { id: 's1-24', nom: '1er Semestre (S1)', statut: 'CLOTURE', fin: '31 Jan 2025' },
-      { id: 's2-24', nom: '2ème Semestre (S2)', statut: 'CLOTURE', fin: '04 Jul 2025' },
-    ],
-    periodes: [
-      { id: 'p1-24', nom: '1ère Période', debut: '02 Sept', fin: '04 Nov 2024', type: 'PERIOD' },
-      { id: 'p2-24', nom: '2ème Période', debut: '09 Nov', fin: '31 Jan 2025', type: 'PERIOD' },
-      { id: 'p3-24', nom: '3ème Période', debut: '15 Fév', fin: '20 Avr 2025', type: 'PERIOD' },
-      { id: 'p4-24', nom: '4ème Période', debut: '25 Avr', fin: '04 Jul 2025', type: 'EXAM' },
-    ],
-  },
-];
+const mockSchoolYears: AnneeScolaireConfig[] = [];
 
 // ─── Composant de Pagination Réutilisable Haute Lisibilité ──────────────────
 interface PaginationBarProps {
@@ -1607,7 +1532,27 @@ const SchoolYearsTab: React.FC = () => {
       />
 
       {/* LISTE DES CARTES DES ANNÉES SCOLAIRES (SELECTION & ACTIONS) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {years.length === 0 ? (
+        <div className="p-8 text-center rounded-2xl border shadow-xs space-y-3" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+          <div className="w-12 h-12 rounded-2xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto border border-indigo-500/30">
+            <Calendar className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+          </div>
+          <div>
+            <h3 className="text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>Aucune Année Scolaire Enregistrée</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
+              Le registre des années scolaires est vierge. Lancez l'assistant d'onboarding pour configurer votre première année et ses frais.
+            </p>
+          </div>
+          <button
+            onClick={() => { setWizardStep(1); setShowCreateModal(true); }}
+            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-xs inline-flex items-center gap-2 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>Lancer l'Onboarding</span>
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {years.map(y => {
           const isCurrent = y.statut === 'EN_COURS';
           const isSelected = selectedYearId === y.id;
@@ -1707,6 +1652,7 @@ const SchoolYearsTab: React.FC = () => {
           );
         })}
       </div>
+      )}
 
       {/* SECTION DÉTIAL DE L'ANNÉE SCOLAIRE SÉLECTIONNÉE AVEC 4 SOUS-ONGLETS */}
       {selectedYear && (
