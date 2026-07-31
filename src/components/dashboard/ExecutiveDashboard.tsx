@@ -519,36 +519,36 @@ const mockDailyAttendance: CycleAttendanceData[] = [
     nom: 'Cycle Maternelle (3–5 ans)',
     code: 'MATERNELLE',
     isPresentInSchool: true,
-    effectifTotal: 1250,
-    presentsTotal: 1210,
-    fillesTotal: 625,
-    fillesPresents: 610,
-    garconsTotal: 625,
-    garconsPresents: 600,
+    effectifTotal: 0,
+    presentsTotal: 0,
+    fillesTotal: 0,
+    fillesPresents: 0,
+    garconsTotal: 0,
+    garconsPresents: 0,
   },
   {
     id: 'prim',
     nom: 'Cycle Primaire (1ère–6ème)',
     code: 'PRIMAIRE',
     isPresentInSchool: true,
-    effectifTotal: 5800,
-    presentsTotal: 5620,
-    fillesTotal: 2900,
-    fillesPresents: 2830,
-    garconsTotal: 2900,
-    garconsPresents: 2790,
+    effectifTotal: 0,
+    presentsTotal: 0,
+    fillesTotal: 0,
+    fillesPresents: 0,
+    garconsTotal: 0,
+    garconsPresents: 0,
   },
   {
     id: 'sec',
     nom: 'Secondaire & Humanités',
     code: 'SECONDAIRE',
     isPresentInSchool: true,
-    effectifTotal: 7245,
-    presentsTotal: 7010,
-    fillesTotal: 3620,
-    fillesPresents: 3480,
-    garconsTotal: 3625,
-    garconsPresents: 3530,
+    effectifTotal: 0,
+    presentsTotal: 0,
+    fillesTotal: 0,
+    fillesPresents: 0,
+    garconsTotal: 0,
+    garconsPresents: 0,
   },
 ];
 
@@ -856,54 +856,36 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
   }, [selectedCycleFilter, selectedOptionFilter, selectedPeriodFilter]);
 
   const rawDonneesPerformance = [
-    { mois: 'Sept', moyenneCotes: 58, tauxPresence: 82 },
-    { mois: 'Oct',  moyenneCotes: 64, tauxPresence: 88 },
-    { mois: 'Nov',  moyenneCotes: 61, tauxPresence: 85 },
-    { mois: 'Déc',  moyenneCotes: 72, tauxPresence: 79 },
-    { mois: 'Jan',  moyenneCotes: 68, tauxPresence: 91 },
-    { mois: 'Mar',  moyenneCotes: 76, tauxPresence: 89 },
-    { mois: 'Mai',  moyenneCotes: 81, tauxPresence: 93 },
-    { mois: 'Jul',  moyenneCotes: 88, tauxPresence: 96 },
+    { mois: 'Sept', moyenneCotes: 0, tauxPresence: 0 },
+    { mois: 'Oct',  moyenneCotes: 0, tauxPresence: 0 },
+    { mois: 'Nov',  moyenneCotes: 0, tauxPresence: 0 },
+    { mois: 'Déc',  moyenneCotes: 0, tauxPresence: 0 },
+    { mois: 'Jan',  moyenneCotes: 0, tauxPresence: 0 },
+    { mois: 'Mar',  moyenneCotes: 0, tauxPresence: 0 },
+    { mois: 'Mai',  moyenneCotes: 0, tauxPresence: 0 },
+    { mois: 'Jul',  moyenneCotes: 0, tauxPresence: 0 },
   ];
 
   const rawDonneesFinancieres = [
-    { trimestre: 'T1', encaisse: 3800, objectif: 4500 },
-    { trimestre: 'T2', encaisse: 5200, objectif: 5000 },
-    { trimestre: 'T3', encaisse: 4100, objectif: 5000 },
-    { trimestre: 'T4', encaisse: 6800, objectif: 6000 },
-    { trimestre: "T1'26", encaisse: 4600, objectif: 5500 },
+    { trimestre: 'T1', encaisse: 0, objectif: 0 },
+    { trimestre: 'T2', encaisse: 0, objectif: 0 },
+    { trimestre: 'T3', encaisse: 0, objectif: 0 },
+    { trimestre: 'T4', encaisse: 0, objectif: 0 },
+    { trimestre: "T1'26", encaisse: 0, objectif: 0 },
   ];
 
   const donneesPerformance = useMemo(() => {
-    let multiplier = 1;
-    if (selectedCycleFilter === 'MATERNELLE') multiplier = 0.85;
-    else if (selectedCycleFilter === 'PRIMAIRE') multiplier = 0.95;
-    else if (selectedCycleFilter === 'SECONDAIRE') multiplier = 1.05;
-
-    return rawDonneesPerformance.map(d => ({
-      ...d,
-      moyenneCotes: Math.min(100, Math.round(d.moyenneCotes * multiplier)),
-      tauxPresence: Math.min(100, Math.round(d.tauxPresence * (multiplier > 1 ? 0.98 : 1.02))),
-    }));
-  }, [selectedCycleFilter]);
+    return rawDonneesPerformance;
+  }, []);
 
   const donneesFinancieres = useMemo(() => {
-    let ratio = 1;
-    if (selectedOptionFilter === 'MATH_PHYS') ratio = 1.15;
-    else if (selectedOptionFilter === 'COMMERCE') ratio = 0.9;
-    else if (selectedOptionFilter === 'PEDAGOGIE') ratio = 0.8;
-
-    return rawDonneesFinancieres.map(f => ({
-      ...f,
-      encaisse: Math.round(f.encaisse * ratio),
-      objectif: Math.round(f.objectif * ratio),
-    }));
-  }, [selectedOptionFilter]);
+    return rawDonneesFinancieres;
+  }, []);
 
   const donneesCycle = [
-    { name: 'Maternelle', value: 1250, pct: '8.7%', color: '#6366f1' },
-    { name: 'Primaire', value: 5800, pct: '40.6%', color: '#10b981' },
-    { name: 'Humanités', value: 7245, pct: '50.7%', color: '#818cf8' },
+    { name: 'Maternelle', value: 0, pct: '0%', color: '#6366f1' },
+    { name: 'Primaire', value: 0, pct: '0%', color: '#10b981' },
+    { name: 'Humanités', value: 0, pct: '0%', color: '#818cf8' },
   ];
 
   const approuverConge = (id: string) => {
@@ -911,19 +893,13 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
   };
 
   const kpis: KpiCardProps[] = useMemo(() => {
-    let effectif = '14 295';
-    let recettes = '$12.4M';
-    if (selectedCycleFilter === 'MATERNELLE') { effectif = '1 250'; recettes = '$1.2M'; }
-    else if (selectedCycleFilter === 'PRIMAIRE') { effectif = '5 800'; recettes = '$4.8M'; }
-    else if (selectedCycleFilter === 'SECONDAIRE') { effectif = '7 245'; recettes = '$6.4M'; }
-
     return [
       {
         label: 'Effectif Total Élèves',
-        sublabel: 'Inscrits pour 2025–2026',
-        value: effectif,
-        trend: '+4.2% ce semestre',
-        trendUp: true,
+        sublabel: 'Registre vierge (0 inscrit)',
+        value: '0',
+        trend: '0 inscrit',
+        trendNeutral: true,
         icon: GraduationCap,
         delay: 0,
         onViewDetails: () => onNavigate && onNavigate('students'),
@@ -931,9 +907,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
       {
         label: 'Recettes Perçues',
         sublabel: 'Minerval & frais encaissés',
-        value: recettes,
-        trend: '+12.8% vs an dernier',
-        trendUp: true,
+        value: '$0',
+        trend: '$0 encaissé',
+        trendNeutral: true,
         icon: DollarSign,
         delay: 60,
         onViewDetails: () => onNavigate && onNavigate('invoices'),
@@ -941,8 +917,8 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
       {
         label: 'Présence Enseignants',
         sublabel: 'Taux aujourd’hui',
-        value: '98.2%',
-        trend: '3 absences signalées',
+        value: '0.0%',
+        trend: '0 présent',
         trendNeutral: true,
         icon: UserCheck,
         delay: 120,
@@ -951,15 +927,15 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
       {
         label: 'Taux de Réussite',
         sublabel: 'Moyenne générale école',
-        value: '81.4%',
-        trend: '+6.2% d’amélioration',
-        trendUp: true,
+        value: '0.0%',
+        trend: '0 évaluation',
+        trendNeutral: true,
         icon: Award,
         delay: 180,
         onViewDetails: () => onNavigate && onNavigate('grades'),
       },
     ];
-  }, [selectedCycleFilter, onNavigate]);
+  }, [onNavigate]);
 
   return (
     <div className="space-y-4 w-full px-1 py-1 pb-8">
@@ -1361,28 +1337,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                   </span>
                 </div>
 
-                <div className="space-y-2">
-                  <AlertItem
-                    type="danger"
-                    title="8 élèves en décrochage"
-                    detail="Chute des notes sur 2 périodes"
-                    action="Voir"
-                    onAction={() => onNavigate && onNavigate('students')}
-                  />
-                  <AlertItem
-                    type="warning"
-                    title="54 impayés > 30 jours"
-                    detail="Relances de recouvrement à lancer"
-                    action="Relancer"
-                    onAction={() => onNavigate && onNavigate('invoices')}
-                  />
-                  <AlertItem
-                    type="info"
-                    title="Examens de juillet — J-12"
-                    detail="Préparation des PV d'examens"
-                    action="Préparer"
-                    onAction={() => onNavigate && onNavigate('documents')}
-                  />
+                <div className="p-4 rounded-xl border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucune Alerte Critiques</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Tous les registres et assiduités scolaires sont en ordre.</p>
                 </div>
               </div>
 
@@ -1567,8 +1524,8 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                   </ResponsiveContainer>
 
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-xl font-black" style={{ color: 'var(--text-primary)' }}>14 295</span>
-                    <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Élèves</span>
+                    <span className="text-xl font-black" style={{ color: 'var(--text-primary)' }}>0</span>
+                    <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Élève</span>
                   </div>
                 </div>
 
@@ -1595,7 +1552,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                 className="mt-4 pt-3 border-t w-full flex items-center justify-between text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline transition-colors cursor-pointer"
                 style={{ borderColor: 'var(--border)' }}
               >
-                <span>Accéder au répertoire global des 14 295 élèves</span>
+                <span>Accéder au répertoire global des élèves</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -1657,9 +1614,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
         <div className="space-y-4 animate-fade-in">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
-              { label: 'Total Encaissements Minerval', val: '$12 450 000', sub: '92% des objectifs annuels' },
-              { label: 'Reste à Recouvrer (Impayés)', val: '$840 000', sub: '54 dossiers prioritaires' },
-              { label: 'Solde en Caisse & Banques', val: '$3 120 400', sub: 'Compte Equity BCDC & Rawbank' },
+              { label: 'Total Encaissements Minerval', val: '$0', sub: '0% des objectifs annuels' },
+              { label: 'Reste à Recouvrer (Impayés)', val: '$0', sub: '0 dossier en retard' },
+              { label: 'Solde en Caisse & Banques', val: '$0', sub: 'Comptabilité vierge' },
             ].map((f, i) => (
               <div
                 key={i}
@@ -1692,10 +1649,10 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                 <h3 className="font-bold text-base mb-2" style={{ color: 'var(--text-primary)' }}>Ventilation des Encaissements par Canal</h3>
                 <div className="space-y-2.5 mt-3">
                   {[
-                    { mode: 'Mobile Money (M-Pesa Kinshasa)', mont: '$6 474 000', pct: 52, icon: Smartphone },
-                    { mode: 'Airtel Money RDC', mont: '$2 988 000', pct: 24, icon: Smartphone },
-                    { mode: 'Virement Banque (Equity BCDC)', mont: '$1 992 000', pct: 16, icon: CreditCard },
-                    { mode: 'Caisse Espèces École', mont: '$996 000', pct: 8, icon: DollarSign },
+                    { mode: 'Mobile Money (M-Pesa Kinshasa)', mont: '$0', pct: 0, icon: Smartphone },
+                    { mode: 'Airtel Money RDC', mont: '$0', pct: 0, icon: Smartphone },
+                    { mode: 'Virement Banque (Equity BCDC)', mont: '$0', pct: 0, icon: CreditCard },
+                    { mode: 'Caisse Espèces École', mont: '$0', pct: 0, icon: DollarSign },
                   ].map((m, i) => (
                     <div key={i} className="p-3 rounded-xl flex items-center justify-between" style={{ background: 'var(--bg-sunken)' }}>
                       <div className="flex items-center gap-2.5">
@@ -1726,37 +1683,18 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
             >
               <div>
                 <h3 className="font-bold text-base mb-2" style={{ color: 'var(--text-primary)' }}>Top des Impayés par Promotion</h3>
-                <div className="space-y-2.5 mt-3">
-                  {[
-                    { classe: '7ème CTEB A', impaye: '$18 400', eleves: 18, pct: 24 },
-                    { classe: '3ème Math-Physique B', impaye: '$14 200', eleves: 12, pct: 18 },
-                    { classe: '1ère Primaire C', impaye: '$9 800', eleves: 14, pct: 15 },
-                  ].map((imp, i) => (
-                    <div key={i} className="p-3 rounded-xl flex items-center justify-between" style={{ background: 'var(--bg-sunken)' }}>
-                      <div>
-                        <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{imp.classe}</p>
-                        <p className="text-[10.5px] mt-0.5 text-slate-500 dark:text-slate-400">{imp.eleves} élèves retardataires ({imp.pct}% du total)</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs font-bold text-rose-600 dark:text-rose-400">{imp.impaye}</p>
-                        <button
-                          onClick={() => onNavigate && onNavigate('invoices')}
-                          className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                        >
-                          Relancer SMS
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="p-4 rounded-xl border text-center space-y-1 mt-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucun Impayé Enregistré</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Toutes les factures et minervals sont en ordre.</p>
                 </div>
               </div>
 
               <button
                 onClick={() => onNavigate && onNavigate('invoices')}
-                className="mt-4 pt-3 border-t w-full flex items-center justify-between text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline transition-colors cursor-pointer"
+                className="mt-4 pt-3 border-t w-full flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 hover:underline transition-colors cursor-pointer"
                 style={{ borderColor: 'var(--border)' }}
               >
-                <span>Registre complet des 54 impayés</span>
+                <span>Registre des impayés (0)</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -1781,24 +1719,11 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                     <HeartPulse className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                     <span>Infirmerie & Consultations Récentes</span>
                   </h3>
-                  <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded-full border border-indigo-500/25">14 fiches ce mois</span>
+                  <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded-full border border-indigo-500/25">0 fiche ce mois</span>
                 </div>
-                <div className="space-y-2.5">
-                  {[
-                    { eleve: 'Kabasele Mwamba', classe: '5ème Math-Physique', motif: 'Fièvre passagère', statut: 'Pris en charge', time: '10:30' },
-                    { eleve: 'Mbuyi Kalonji', classe: '3ème Primaire B', motif: 'Blessure légère sport', statut: 'Retour en classe', time: '09:15' },
-                    { eleve: 'Tshimanga David', classe: '7ème CTEB A', motif: 'Maux de tête', statut: 'En repos infirmerie', time: '08:45' },
-                  ].map((inf, i) => (
-                    <div key={i} className="p-3 rounded-xl border flex items-center justify-between" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <div>
-                        <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{inf.eleve} <span className="font-medium text-slate-500 dark:text-slate-400">({inf.classe})</span></p>
-                        <p className="text-[10.5px] mt-0.5 text-slate-500 dark:text-slate-400">{inf.motif} · {inf.time}</p>
-                      </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
-                        {inf.statut}
-                      </span>
-                    </div>
-                  ))}
+                <div className="p-4 rounded-xl border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucune Consultation Récente</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Le registre de santé de l'infirmerie est vierge.</p>
                 </div>
               </div>
 
@@ -1822,24 +1747,11 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                     <Scale className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                     <span>Rapports Disciplinaires Récents</span>
                   </h3>
-                  <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded-full border border-indigo-500/25">3 sanctions</span>
+                  <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded-full border border-indigo-500/25">0 sanction</span>
                 </div>
-                <div className="space-y-2.5">
-                  {[
-                    { type: 'Avertissement', eleve: 'Bokole Jean-Luc (4ème Bio)', raison: '3 retards consécutifs sans motif' },
-                    { type: 'Convocation Parent', eleve: 'Ilunga Sephora (6ème Lit)', raison: 'Absence non justifiée à la composition' },
-                    { type: 'Blâme', eleve: 'Kikuni Marc (3ème Com)', raison: 'Inconduite durant le rassemblement' },
-                  ].map((disp, i) => (
-                    <div key={i} className="p-3 rounded-xl border flex items-center justify-between" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <div>
-                        <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{disp.eleve}</p>
-                        <p className="text-[10.5px] mt-0.5 text-slate-500 dark:text-slate-400">{disp.raison}</p>
-                      </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25 shrink-0">
-                        {disp.type}
-                      </span>
-                    </div>
-                  ))}
+                <div className="p-4 rounded-xl border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucun Rapport Disciplinaire</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Le registre disciplinaire ne contient aucune sanction.</p>
                 </div>
               </div>
 

@@ -537,32 +537,12 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                   <h3 className="text-sm font-black uppercase tracking-wider text-indigo-400 flex items-center gap-2">
                     <ClipboardList className="w-4 h-4" /> Relevé des Cotes & Notes du 1er Semestre (S1)
                   </h3>
-                  <span className="text-xs font-black text-emerald-400">Total : 81.4% (Très Bien)</span>
+                  <span className="text-xs font-black text-slate-400">Total : N/A (0 cote)</span>
                 </div>
 
-                <div className="overflow-x-auto rounded-2xl border" style={{ borderColor: 'var(--border)' }}>
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b uppercase text-[10px] font-black text-slate-400" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                        <th className="p-3">Discipline / Cours</th>
-                        <th className="p-3">Coeff. EPST</th>
-                        <th className="p-3">Interrogation</th>
-                        <th className="p-3">Examen</th>
-                        <th className="p-3 text-right">Moyenne %</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
-                      {mockSubjects.map(sub => (
-                        <tr key={sub.id} className="hover:bg-slate-500/5">
-                          <td className="p-3 font-bold" style={{ color: 'var(--text-primary)' }}>{sub.nom}</td>
-                          <td className="p-3 font-black text-indigo-400">Coeff. {sub.coefficient}</td>
-                          <td className="p-3 font-extrabold text-slate-300">17 / 20</td>
-                          <td className="p-3 font-extrabold text-slate-300">34 / 40</td>
-                          <td className="p-3 text-right font-black text-emerald-400 text-sm">85 %</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="overflow-x-auto rounded-2xl border p-6 text-center" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucune cote enregistrée</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Saisissez les notes dans le module Cotes & Bulletins.</p>
                 </div>
               </div>
             )}
@@ -575,15 +555,15 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                 </h3>
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div className="p-4 rounded-2xl border bg-emerald-500/10 border-emerald-500/20">
-                    <p className="text-3xl font-black text-emerald-400">142</p>
+                    <p className="text-3xl font-black text-emerald-400">0</p>
                     <p className="text-xs font-bold text-slate-300 mt-1">Jours de Présence</p>
                   </div>
                   <div className="p-4 rounded-2xl border bg-amber-500/10 border-amber-500/20">
-                    <p className="text-3xl font-black text-amber-400">3</p>
+                    <p className="text-3xl font-black text-amber-400">0</p>
                     <p className="text-xs font-bold text-slate-300 mt-1">Absences Justifiées</p>
                   </div>
                   <div className="p-4 rounded-2xl border bg-red-500/10 border-red-500/20">
-                    <p className="text-3xl font-black text-red-400">1</p>
+                    <p className="text-3xl font-black text-red-400">0</p>
                     <p className="text-xs font-bold text-slate-300 mt-1">Absence Injustifiée</p>
                   </div>
                 </div>
