@@ -611,8 +611,17 @@ const DailyAttendanceByCategory: React.FC<{ selectedCycleFilter: string }> = ({ 
         </div>
       </div>
 
-      {/* Cartes Synthèse par Catégorie (Filles vs Garçons) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {totals.effectifTotal === 0 ? (
+        <div className="p-6 rounded-xl border text-center space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+          <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucune Donnée d'Assiduité Enregistrée</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+            Le registre de présence quotidienne par cycle est vierge. Inscrivez des élèves et commencez l'enregistrement de l'assiduité.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Cartes Synthèse par Catégorie (Filles vs Garçons) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* CARTE FILLES */}
         <div
           className="p-4 rounded-xl border space-y-2.5 transition-colors"
@@ -735,6 +744,8 @@ const DailyAttendanceByCategory: React.FC<{ selectedCycleFilter: string }> = ({ 
           })}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 };
@@ -1260,7 +1271,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                     Synthèse Financière
                   </h2>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                    +12.8%
+                    0.0%
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3">
@@ -1281,9 +1292,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
 
                 <div className="space-y-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
                   {[
-                    { label: "Frais d'Études (Minerval)", val: '$8.4M', color: '#6366f1', icon: GraduationCap },
-                    { label: 'Subventions & Donateurs', val: '$3.2M', color: '#10b981', icon: Award },
-                    { label: 'Impayés en Recouvrement', val: '-$0.8M', color: '#ef4444', icon: AlertCircle },
+                    { label: "Frais d'Études (Minerval)", val: '$0', color: '#6366f1', icon: GraduationCap },
+                    { label: 'Subventions & Donateurs', val: '$0', color: '#10b981', icon: Award },
+                    { label: 'Impayés en Recouvrement', val: '$0', color: '#ef4444', icon: AlertCircle },
                   ].map((item) => (
                     <div
                       key={item.label}
@@ -1496,7 +1507,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                     Distribution des Élèves par Cycle EPST
                   </h3>
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
-                    Total: 14 295
+                    Total: 0
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Répartition des effectifs selon le filtre actif ({selectedCycleFilter})</p>
@@ -1567,23 +1578,12 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                   Avancement des Programmes & Palmarès
                 </h3>
 
-                <div className="space-y-3 mt-3">
-                  {[
-                    { filiere: 'Mathématique-Physique (6ème CT)', pct: 88 },
-                    { filiere: 'Biologie-Chimie (5ème Bio)', pct: 82 },
-                    { filiere: 'Commerciale & Gestion (4ème Com)', pct: 91 },
-                    { filiere: 'Pédagogie Générale (3ème Péd)', pct: 85 },
-                  ].map((prog, i) => (
-                    <div key={i} className="p-2.5 rounded-xl space-y-1.5" style={{ background: 'var(--bg-sunken)' }}>
-                      <div className="flex items-center justify-between text-xs font-semibold">
-                        <span style={{ color: 'var(--text-primary)' }}>{prog.filiere}</span>
-                        <span className="text-indigo-600 dark:text-indigo-400 font-bold">{prog.pct}%</span>
-                      </div>
-                      <div className="w-full h-1.5 rounded-full overflow-hidden bg-slate-500/15">
-                        <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${prog.pct}%` }} />
-                      </div>
-                    </div>
-                  ))}
+                <div className="mt-4 flex flex-col items-center justify-center py-8 gap-3">
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'var(--bg-sunken)' }}>
+                    <BookOpen className="w-6 h-6 text-slate-400" />
+                  </div>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Aucun avancement enregistré</p>
+                  <p className="text-xs text-center max-w-[200px]" style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Les progressions par filière apparaîtront ici dès qu'une activité pédagogique sera saisie.</p>
                 </div>
               </div>
 
@@ -1593,7 +1593,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                   className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1.5 cursor-pointer"
                 >
                   <Eye className="w-3.5 h-3.5" />
-                  <span>Voir le palmarès des 48 classes</span>
+                  <span>Voir le palmarès des classes</span>
                 </button>
                 <button
                   onClick={() => onNavigate && onNavigate('documents')}
