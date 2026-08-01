@@ -258,7 +258,7 @@ function registerIpcHandlers() {
 
   // Session
   ipcMain.handle('db-get-current-session', () => { if (!db) return null; const r=db.prepare('SELECT user_json FROM current_session WHERE id=1').get(); if(!r||!r.user_json) return null; try{return JSON.parse(r.user_json);}catch{return null;} });
-  ipcMain.handle('db-set-current-session', (_, sess) => { if (!db) return false; if(sess){db.prepare('INSERT OR REPLACE INTO current_session (id,user_json) VALUES (1,?)').run(JSON.stringify(sess)); if(sess.id) db.prepare('UPDATE users SET derniere_connexion=datetime("now") WHERE id=?').run(sess.id);} else {db.prepare('DELETE FROM current_session WHERE id=1').run();} return true; });
+  ipcMain.handle('db-set-current-session', (_, sess) => { if (!db) return false; if(sess){db.prepare('INSERT OR REPLACE INTO current_session (id,user_json) VALUES (1,?)').run(JSON.stringify(sess)); if(sess.id) db.prepare("UPDATE users SET derniere_connexion=datetime('now') WHERE id=?").run(sess.id);} else {db.prepare('DELETE FROM current_session WHERE id=1').run();} return true; });
 
   // Users
   ipcMain.handle('db-get-users', () => { if (!db) return []; return db.prepare('SELECT * FROM users ORDER BY cree_le ASC').all().map(mapUser); });
