@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Home,
   Users,
@@ -27,6 +27,12 @@ interface SidebarProps {
   onLock?: () => void;
 }
 
+interface SubMenuItem {
+  id: string;
+  label: string;
+  badge?: string;
+}
+
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
@@ -36,11 +42,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setIsCollapsed,
   onLock,
 }) => {
-  // Mode Accordéon Stricte : une seule section ouverte à la fois.
-  // Par défaut, aucune section ouverte (état masqué), sauf si activeTab est dans un sous-menu.
+  // Mode Accordéon Stricte pour le mode étendu
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
-  // Déterminer la section associée à un tab
+  // Popover actif en mode compact (collapsed)
+  const [hoveredPopover, setHoveredPopover] = useState<string | null>(null);
+  const popoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const getSectionForTab = (tab: string): string | null => {
     if (['apprenants', 'students', 'classes', 'grades', 'examens', 'schedule', 'subjects'].includes(tab)) {
       return 'pedagogie';
@@ -57,21 +65,123 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return null;
   };
 
-  // Mise à jour automatique de la section active lors du changement de tab
   useEffect(() => {
     const sec = getSectionForTab(activeTab);
-    setExpandedSection(sec); // si sec === null, tous les accordéons se masquent !
+    setExpandedSection(sec);
   }, [activeTab]);
 
-  // Bascule accordéon : ferme toutes les autres sections et toggle la section cliquée
   const handleSectionClick = (sectionKey: string) => {
-    setExpandedSection((prev) => (prev === sectionKey ? null : sectionKey));
+    if (isCollapsed) {
+      // En mode compact, basculer le popover
+      setHoveredPopover((prev) => (prev === sectionKey ? null : sectionKey));
+    } else {
+      // En mode étendu, basculer l'accordéon exclusif
+      setExpandedSection((prev) => (prev === sectionKey ? null : sectionKey));
+    }
+  };
+
+  const handleMouseEnterSection = (sectionKey: string) => {
+    if (isCollapsed) {
+      if (popoverTimeoutRef.current) clearTimeout(popoverTimeoutRef.current);
+      setHoveredPopover(sectionKey);
+    }
+  };
+
+  const handleMouseLeaveSection = () => {
+    if (isCollapsed) {
+      popoverTimeoutRef.current = setTimeout(() => {
+        setHoveredPopover(null);
+      }, 200);
+    }
+  };
+
+  const handlePopoverMouseEnter = () => {
+    if (popoverTimeoutRef.current) clearTimeout(popoverTimeoutRef.current);
+  };
+
+  const selectSubTab = (tabId: string) => {
+    setActiveTab(tabId);
+    setHoveredPopover(null);
   };
 
   const isPedagogieOpen = expandedSection === 'pedagogie';
   const isFinancesOpen = expandedSection === 'finances';
   const isAdminOpen = expandedSection === 'administration';
   const isServicesOpen = expandedSection === 'services';
+
+  // Données des sous-menus
+  const pedagogieItems: SubMenuItem[] = [
+    { id: 'apprenants', label: 'Dossiers Apprenants' },
+    { id: 'students', label: 'Inscriptions & Admissions' },
+    { id: 'classes', label: 'Classes & Promotions' },
+    { id: 'grades', label: 'Cotes & Bulletins' },
+    { id: 'examens', label: 'Examens EPST', badge: 'EXETAT' },
+    { id: 'schedule', label: 'Emplois du Temps' },
+    { id: 'subjects', label: 'Matières & Coefficients' },
+  ];
+
+  const financesItems: SubMenuItem[] = [
+    { id: 'invoices', label: 'Factures & Minerval' },
+    { id: 'payroll', label: 'Gestion Paie & Primes' },
+    { id: 'expenses', label: 'Caisse & Dépenses' },
+  ];
+
+  const adminItems: SubMenuItem[] = [
+    { id: 'teachers', label: 'Gestion des Enseignants' },
+    { id: 'hr', label: 'Dossiers Personnel' },
+    { id: 'leaves', label: 'Congés & Absences' },
+    { id: 'documents', label: 'Documents EPST RDC' },
+    { id: 'years', label: 'Années Scolaires' },
+  ];
+
+  const servicesItems: SubMenuItem[] = [
+    { id: 'discipline', label: 'Discipline & Conduite' },
+    { id: 'infirmerie', label: 'Infirmerie & Santé' },
+    { id: 'cantine', label: 'Cantine & Garderie' },
+    { id: 'transport', label: 'Transport Scolaire' },
+    { id: 'library', label: 'Bibliothèque & CDI' },
+  ];
+
+  // Composant Rendu Popover Flottant (Flyout Menu pour Mode Compact)
+  const renderFlyoutPopover = (title: string, items: SubMenuItem[], icon: React.ElementType) => {
+    const IconComp = icon;
+    return (
+      <div
+        onMouseEnter={handlePopoverMouseEnter}
+        onMouseLeave={handleMouseLeaveSection}
+        className="absolute left-full top-0 ml-2.5 w-60 rounded-2xl border shadow-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 z-50 p-2 space-y-1 animate-scale-in"
+        style={{ backdropFilter: 'blur(20px)' }}
+      >
+        <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800/80 flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-black text-xs">
+          <IconComp className="w-4 h-4 shrink-0" />
+          <span>{title}</span>
+        </div>
+        <div className="py-1 space-y-0.5 max-h-72 overflow-y-auto sidebar-scroll">
+          {items.map((sub) => {
+            const isActive = activeTab === sub.id;
+            return (
+              <button
+                key={sub.id}
+                onClick={() => selectSubTab(sub.id)}
+                className={`w-full flex items-center justify-between py-2 px-3 rounded-xl text-xs transition-all cursor-pointer text-left ${
+                  isActive
+                    ? 'text-indigo-600 dark:text-indigo-400 font-black bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200/60 dark:border-indigo-800/50'
+                    : 'text-slate-700 dark:text-slate-300 font-bold hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/50'
+                }`}
+              >
+                <span className="truncate">{sub.label}</span>
+                {sub.badge && (
+                  <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    {sub.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <aside
@@ -83,34 +193,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
         borderColor: 'var(--sidebar-border)',
       }}
     >
-      {/* ── HEADER : LOGO + TITRE ── */}
-      <div className="px-5 py-4 border-b flex items-center justify-between shrink-0" style={{ borderColor: 'var(--sidebar-border)' }}>
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-white font-black text-sm shadow-md shrink-0">
-            <School className="w-5 h-5 text-white" />
+      {/* ── HEADER : LOGO DE L'APPLICATION ET NOM SEULEMENT (PROFIL RETIRÉ) ── */}
+      <div className="px-4 py-4 border-b flex items-center justify-between shrink-0" style={{ borderColor: 'var(--sidebar-border)' }}>
+        <div className={`flex items-center gap-3 min-w-0 ${isCollapsed ? 'justify-center w-full' : ''}`}>
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white font-black text-sm shadow-md shrink-0">
+            <School className="w-5.5 h-5.5 text-white" />
           </div>
           {!isCollapsed && (
             <div className="min-w-0 leading-tight">
-              <h1 className="font-black text-base tracking-tight text-slate-900 dark:text-white flex items-center gap-1">
-                ECOLISA <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-950 px-1.5 py-0.5 rounded-full">ERP</span>
+              <h1 className="font-black text-base tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
+                ECOLISA <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-950 px-1.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800">ERP</span>
               </h1>
-              <p className="text-[9.5px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+              <p className="text-[9.5px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">
                 Éducation RDC
               </p>
             </div>
           )}
         </div>
-
-        {/* User Profile Avatar */}
-        <div
-          className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-400 text-white font-bold flex items-center justify-center text-xs shadow-xs shrink-0 cursor-pointer hover:ring-2 hover:ring-indigo-500/40 transition-all"
-          title="Promoteur Racine"
-        >
-          P
-        </div>
       </div>
 
-      {/* ── NAVIGATION (ACCORDÉON EXCLUSIF / MASQUÉ PAR DÉFAUT) ── */}
+      {/* ── NAVIGATION (ACCORDÉON EN ÉTENDU / POPOVER EN COMPACT) ── */}
       <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1 sidebar-scroll">
 
         {/* 1. TABLEAU DE BORD */}
@@ -121,25 +223,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black border border-indigo-200 dark:border-indigo-800'
               : 'text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800/60'
           }`}
+          title={isCollapsed ? 'Tableau de Bord' : undefined}
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 justify-center sm:justify-start">
             <Home className={`w-4.5 h-4.5 ${activeTab === 'dashboard' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
             {!isCollapsed && <span>Tableau de Bord</span>}
           </div>
         </button>
 
-        {/* 2. ACCORDEON: PÉDAGOGIE & ÉLÈVES */}
-        <div>
+        {/* 2. ACCORDEON / POPOVER: PÉDAGOGIE & ÉLÈVES */}
+        <div
+          className="relative"
+          onMouseEnter={() => handleMouseEnterSection('pedagogie')}
+          onMouseLeave={handleMouseLeaveSection}
+        >
           <button
             onClick={() => handleSectionClick('pedagogie')}
             className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
-              isPedagogieOpen
+              isPedagogieOpen || (isCollapsed && hoveredPopover === 'pedagogie')
                 ? 'bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-black'
                 : 'text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800/60'
             }`}
+            title={isCollapsed ? 'Pédagogie & Élèves' : undefined}
           >
             <div className="flex items-center gap-3">
-              <GraduationCap className={`w-4.5 h-4.5 ${isPedagogieOpen ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+              <GraduationCap className={`w-4.5 h-4.5 ${isPedagogieOpen || (isCollapsed && hoveredPopover === 'pedagogie') ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
               {!isCollapsed && <span>Pédagogie & Élèves</span>}
             </div>
             {!isCollapsed && (
@@ -147,22 +255,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </button>
 
+          {/* Mode étendu : accordéon vertical */}
           {!isCollapsed && isPedagogieOpen && (
             <div className="pl-6 ml-5 my-1 border-l-2 border-indigo-200 dark:border-indigo-900/60 space-y-1 animate-fade-in">
-              {[
-                { id: 'apprenants', label: 'Dossiers Apprenants' },
-                { id: 'students', label: 'Inscriptions & Admissions' },
-                { id: 'classes', label: 'Classes & Promotions' },
-                { id: 'grades', label: 'Cotes & Bulletins' },
-                { id: 'examens', label: 'Examens EPST', badge: 'EXETAT' },
-                { id: 'schedule', label: 'Emplois du Temps' },
-                { id: 'subjects', label: 'Matières & Coefficients' },
-              ].map((sub) => {
+              {pedagogieItems.map((sub) => {
                 const isActive = activeTab === sub.id;
                 return (
                   <button
                     key={sub.id}
-                    onClick={() => setActiveTab(sub.id)}
+                    onClick={() => selectSubTab(sub.id)}
                     className={`w-full flex items-center justify-between py-1.5 px-2.5 rounded-lg text-xs transition-all cursor-pointer text-left ${
                       isActive
                         ? 'text-indigo-600 dark:text-indigo-400 font-black bg-indigo-100/80 dark:bg-indigo-950/70 border border-indigo-200/60 dark:border-indigo-800/50'
@@ -180,20 +281,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
               })}
             </div>
           )}
+
+          {/* Mode compact : popover flottant à droite */}
+          {isCollapsed && hoveredPopover === 'pedagogie' && renderFlyoutPopover('Pédagogie & Élèves', pedagogieItems, GraduationCap)}
         </div>
 
-        {/* 3. ACCORDEON: FINANCES & CAISSE */}
-        <div>
+        {/* 3. ACCORDEON / POPOVER: FINANCES & CAISSE */}
+        <div
+          className="relative"
+          onMouseEnter={() => handleMouseEnterSection('finances')}
+          onMouseLeave={handleMouseLeaveSection}
+        >
           <button
             onClick={() => handleSectionClick('finances')}
             className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
-              isFinancesOpen
+              isFinancesOpen || (isCollapsed && hoveredPopover === 'finances')
                 ? 'bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-black'
                 : 'text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800/60'
             }`}
+            title={isCollapsed ? 'Finances & Caisse' : undefined}
           >
             <div className="flex items-center gap-3">
-              <Wallet className={`w-4.5 h-4.5 ${isFinancesOpen ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+              <Wallet className={`w-4.5 h-4.5 ${isFinancesOpen || (isCollapsed && hoveredPopover === 'finances') ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
               {!isCollapsed && <span>Finances & Caisse</span>}
             </div>
             {!isCollapsed && (
@@ -203,16 +312,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {!isCollapsed && isFinancesOpen && (
             <div className="pl-6 ml-5 my-1 border-l-2 border-indigo-200 dark:border-indigo-900/60 space-y-1 animate-fade-in">
-              {[
-                { id: 'invoices', label: 'Factures & Minerval' },
-                { id: 'payroll', label: 'Gestion Paie & Primes' },
-                { id: 'expenses', label: 'Caisse & Dépenses' },
-              ].map((sub) => {
+              {financesItems.map((sub) => {
                 const isActive = activeTab === sub.id;
                 return (
                   <button
                     key={sub.id}
-                    onClick={() => setActiveTab(sub.id)}
+                    onClick={() => selectSubTab(sub.id)}
                     className={`w-full flex items-center justify-between py-1.5 px-2.5 rounded-lg text-xs transition-all cursor-pointer text-left ${
                       isActive
                         ? 'text-indigo-600 dark:text-indigo-400 font-black bg-indigo-100/80 dark:bg-indigo-950/70 border border-indigo-200/60 dark:border-indigo-800/50'
@@ -225,20 +330,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
               })}
             </div>
           )}
+
+          {isCollapsed && hoveredPopover === 'finances' && renderFlyoutPopover('Finances & Caisse', financesItems, Wallet)}
         </div>
 
-        {/* 4. ACCORDEON: ADMINISTRATION & RH */}
-        <div>
+        {/* 4. ACCORDEON / POPOVER: ADMINISTRATION & RH */}
+        <div
+          className="relative"
+          onMouseEnter={() => handleMouseEnterSection('administration')}
+          onMouseLeave={handleMouseLeaveSection}
+        >
           <button
             onClick={() => handleSectionClick('administration')}
             className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
-              isAdminOpen
+              isAdminOpen || (isCollapsed && hoveredPopover === 'administration')
                 ? 'bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-black'
                 : 'text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800/60'
             }`}
+            title={isCollapsed ? 'Administration & RH' : undefined}
           >
             <div className="flex items-center gap-3">
-              <Users className={`w-4.5 h-4.5 ${isAdminOpen ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+              <Users className={`w-4.5 h-4.5 ${isAdminOpen || (isCollapsed && hoveredPopover === 'administration') ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
               {!isCollapsed && <span>Administration & RH</span>}
             </div>
             {!isCollapsed && (
@@ -248,18 +360,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {!isCollapsed && isAdminOpen && (
             <div className="pl-6 ml-5 my-1 border-l-2 border-indigo-200 dark:border-indigo-900/60 space-y-1 animate-fade-in">
-              {[
-                { id: 'teachers', label: 'Gestion des Enseignants' },
-                { id: 'hr', label: 'Dossiers Personnel' },
-                { id: 'leaves', label: 'Congés & Absences' },
-                { id: 'documents', label: 'Documents EPST RDC' },
-                { id: 'years', label: 'Années Scolaires' },
-              ].map((sub) => {
+              {adminItems.map((sub) => {
                 const isActive = activeTab === sub.id;
                 return (
                   <button
                     key={sub.id}
-                    onClick={() => setActiveTab(sub.id)}
+                    onClick={() => selectSubTab(sub.id)}
                     className={`w-full flex items-center justify-between py-1.5 px-2.5 rounded-lg text-xs transition-all cursor-pointer text-left ${
                       isActive
                         ? 'text-indigo-600 dark:text-indigo-400 font-black bg-indigo-100/80 dark:bg-indigo-950/70 border border-indigo-200/60 dark:border-indigo-800/50'
@@ -272,6 +378,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               })}
             </div>
           )}
+
+          {isCollapsed && hoveredPopover === 'administration' && renderFlyoutPopover('Administration & RH', adminItems, Users)}
         </div>
 
         {/* 5. MESSAGERIE */}
@@ -282,6 +390,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black border border-indigo-200 dark:border-indigo-800'
               : 'text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800/60'
           }`}
+          title={isCollapsed ? 'Messagerie & SMS (12)' : undefined}
         >
           <div className="flex items-center gap-3">
             <MessageSquare className={`w-4.5 h-4.5 ${activeTab === 'messages' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
@@ -294,18 +403,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </button>
 
-        {/* 6. ACCORDEON: VIE SCOLAIRE & SERVICES */}
-        <div>
+        {/* 6. ACCORDEON / POPOVER: VIE SCOLAIRE & SERVICES */}
+        <div
+          className="relative"
+          onMouseEnter={() => handleMouseEnterSection('services')}
+          onMouseLeave={handleMouseLeaveSection}
+        >
           <button
             onClick={() => handleSectionClick('services')}
             className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
-              isServicesOpen
+              isServicesOpen || (isCollapsed && hoveredPopover === 'services')
                 ? 'bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-black'
                 : 'text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800/60'
             }`}
+            title={isCollapsed ? 'Vie Scolaire & Services' : undefined}
           >
             <div className="flex items-center gap-3">
-              <Trophy className={`w-4.5 h-4.5 ${isServicesOpen ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+              <Trophy className={`w-4.5 h-4.5 ${isServicesOpen || (isCollapsed && hoveredPopover === 'services') ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
               {!isCollapsed && <span>Vie Scolaire & Services</span>}
             </div>
             {!isCollapsed && (
@@ -315,18 +429,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {!isCollapsed && isServicesOpen && (
             <div className="pl-6 ml-5 my-1 border-l-2 border-indigo-200 dark:border-indigo-900/60 space-y-1 animate-fade-in">
-              {[
-                { id: 'discipline', label: 'Discipline & Conduite' },
-                { id: 'infirmerie', label: 'Infirmerie & Santé' },
-                { id: 'cantine', label: 'Cantine & Garderie' },
-                { id: 'transport', label: 'Transport Scolaire' },
-                { id: 'library', label: 'Bibliothèque & CDI' },
-              ].map((sub) => {
+              {servicesItems.map((sub) => {
                 const isActive = activeTab === sub.id;
                 return (
                   <button
                     key={sub.id}
-                    onClick={() => setActiveTab(sub.id)}
+                    onClick={() => selectSubTab(sub.id)}
                     className={`w-full flex items-center justify-between py-1.5 px-2.5 rounded-lg text-xs transition-all cursor-pointer text-left ${
                       isActive
                         ? 'text-indigo-600 dark:text-indigo-400 font-black bg-indigo-100/80 dark:bg-indigo-950/70 border border-indigo-200/60 dark:border-indigo-800/50'
@@ -339,6 +447,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               })}
             </div>
           )}
+
+          {isCollapsed && hoveredPopover === 'services' && renderFlyoutPopover('Vie Scolaire & Services', servicesItems, Trophy)}
         </div>
 
         {/* SÉPARATEUR DE SECTION */}
@@ -352,6 +462,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black border border-indigo-200 dark:border-indigo-800'
               : 'text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800/60'
           }`}
+          title={isCollapsed ? 'Paramètres Système' : undefined}
         >
           <div className="flex items-center gap-3">
             <Settings className={`w-4.5 h-4.5 ${activeTab === 'settings' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
@@ -367,6 +478,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black border border-indigo-200 dark:border-indigo-800'
               : 'text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800/60'
           }`}
+          title={isCollapsed ? 'Licence & Mode Offline' : undefined}
         >
           <div className="flex items-center gap-3">
             <HardDrive className={`w-4.5 h-4.5 ${activeTab === 'license' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
@@ -380,6 +492,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={() => setActiveTab('settings')}
           className="w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all cursor-pointer"
+          title={isCollapsed ? 'Aide Rapide & Support' : undefined}
         >
           <HelpCircle className="w-4.5 h-4.5 text-slate-400" />
           {!isCollapsed && <span>Aide Rapide & Support</span>}
@@ -390,6 +503,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             if (onLock) onLock();
           }}
           className="w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-black text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-all cursor-pointer"
+          title={isCollapsed ? 'Déconnexion / Verrouiller' : undefined}
         >
           <LogOut className="w-4.5 h-4.5 text-red-500" />
           {!isCollapsed && <span>Déconnexion / Verrouiller</span>}
