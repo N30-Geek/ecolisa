@@ -149,8 +149,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div
         onMouseEnter={handlePopoverMouseEnter}
         onMouseLeave={handleMouseLeaveSection}
-        className="absolute left-full top-0 ml-2.5 w-60 rounded-2xl border shadow-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 z-50 p-2 space-y-1 animate-scale-in"
-        style={{ backdropFilter: 'blur(20px)' }}
+        className="absolute left-full top-0 ml-2.5 w-64 rounded-2xl border p-2 space-y-1 animate-scale-in"
+        style={{
+          zIndex: 9999,
+          background: 'var(--sidebar-popover-bg)',
+          borderColor: 'var(--sidebar-popover-border)',
+          boxShadow: '0 20px 56px rgba(0,0,0,0.35), 0 4px 16px rgba(0,0,0,0.20)',
+          backdropFilter: 'blur(20px)',
+        }}
       >
         <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800/80 flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-black text-xs">
           <IconComp className="w-4 h-4 shrink-0" />
@@ -185,8 +191,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`h-full flex flex-col select-none shrink-0 transition-all duration-300 relative border-r shadow-xs ${
-        isCollapsed ? 'w-[74px] overflow-visible' : 'w-[270px] overflow-hidden'
+      className={`h-full flex flex-col select-none shrink-0 transition-all duration-300 relative border-r shadow-xs z-30 ${
+        isCollapsed ? 'w-[74px] overflow-visible' : 'w-[270px]'
       }`}
       style={{
         background: 'var(--sidebar-bg)',
