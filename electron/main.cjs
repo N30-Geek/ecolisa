@@ -311,7 +311,7 @@ function registerIpcHandlers() {
     }
     if (!verifyPassword(password, r.password_hash)) return null;
     // Mise à jour de la dernière connexion
-    db.prepare('UPDATE users SET derniere_connexion=datetime("now") WHERE id=?').run(r.id);
+    db.prepare("UPDATE users SET derniere_connexion=datetime('now') WHERE id=?").run(r.id);
     return mapUser(r);
   });
 
