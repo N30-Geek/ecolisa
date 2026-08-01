@@ -248,7 +248,7 @@ export function App() {
       )}
 
       {/* Conteneur principal sous la TitleBar (Menu latéral FIXE + Zone de travail) */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
+      <div className="flex-1 flex min-h-0 relative">
 
         {/* Sidebar FIXE avec bouton de verrouillage/déconnexion */}
         <Sidebar
