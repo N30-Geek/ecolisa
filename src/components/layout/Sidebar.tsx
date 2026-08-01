@@ -1,38 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Home,
-  BarChart2,
-  LayoutGrid,
-  ArrowLeftRight,
-  Receipt,
   Users,
   MessageSquare,
   Trophy,
-  Calendar,
   Wallet,
-  GitBranch,
-  FileText,
-  Archive,
   Settings,
   HelpCircle,
   LogOut,
   ChevronDown,
   ChevronRight,
   GraduationCap,
-  BookOpen,
-  ClipboardList,
-  FileCheck,
-  Layers,
-  Library,
-  Briefcase,
-  UserCheck,
-  Lock,
-  Heart,
-  Utensils,
-  Bus,
   School,
-  Sparkles,
-  Search,
   HardDrive
 } from 'lucide-react';
 import { RôleSystème } from '../../types';
@@ -48,15 +27,6 @@ interface SidebarProps {
   onLock?: () => void;
 }
 
-interface MenuItem {
-  id: string;
-  label: string;
-  icon: React.ElementType;
-  badge?: number | string;
-  badgeColor?: string;
-  children?: { id: string; label: string; badge?: string }[];
-}
-
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
@@ -66,35 +36,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setIsCollapsed,
   onLock,
 }) => {
-  // Navigation Groups modeled after the clean, modern accordion UI in the inspiration image
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    pedagogie: true,
-    finances: false,
-    administration: false,
-    services: false,
-  });
+  // Mode Accordéon Stricte : une seule section ouverte à la fois.
+  // Par défaut, aucune section ouverte (état masqué), sauf si activeTab est dans un sous-menu.
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
-  const toggleSection = (sectionKey: string) => {
-    setOpenSections((prev) => ({
-      ...prev,
-      [sectionKey]: !prev[sectionKey],
-    }));
+  // Déterminer la section associée à un tab
+  const getSectionForTab = (tab: string): string | null => {
+    if (['apprenants', 'students', 'classes', 'grades', 'examens', 'schedule', 'subjects'].includes(tab)) {
+      return 'pedagogie';
+    }
+    if (['invoices', 'payroll', 'expenses'].includes(tab)) {
+      return 'finances';
+    }
+    if (['teachers', 'hr', 'leaves', 'documents', 'years'].includes(tab)) {
+      return 'administration';
+    }
+    if (['discipline', 'infirmerie', 'cantine', 'transport', 'library'].includes(tab)) {
+      return 'services';
+    }
+    return null;
   };
 
-  // Auto-expand section if activeTab is inside it
+  // Mise à jour automatique de la section active lors du changement de tab
   useEffect(() => {
-    const pedagogieTabs = ['apprenants', 'students', 'classes', 'grades', 'examens', 'schedule', 'subjects'];
-    const financesTabs = ['invoices', 'payroll', 'expenses'];
-    const adminTabs = ['teachers', 'hr', 'leaves', 'documents', 'years'];
-    const servicesTabs = ['discipline', 'messages', 'infirmerie', 'cantine', 'transport', 'library'];
-
-    if (pedagogieTabs.includes(activeTab)) setOpenSections((p) => ({ ...p, pedagogie: true }));
-    if (financesTabs.includes(activeTab)) setOpenSections((p) => ({ ...p, finances: true }));
-    if (adminTabs.includes(activeTab)) setOpenSections((p) => ({ ...p, administration: true }));
-    if (servicesTabs.includes(activeTab)) setOpenSections((p) => ({ ...p, services: true }));
+    const sec = getSectionForTab(activeTab);
+    setExpandedSection(sec); // si sec === null, tous les accordéons se masquent !
   }, [activeTab]);
 
-  const roleBadgeLabel = userRole === 'PROMOTEUR_ADMIN' ? 'Promoteur' : 'Utilisateur';
+  // Bascule accordéon : ferme toutes les autres sections et toggle la section cliquée
+  const handleSectionClick = (sectionKey: string) => {
+    setExpandedSection((prev) => (prev === sectionKey ? null : sectionKey));
+  };
+
+  const isPedagogieOpen = expandedSection === 'pedagogie';
+  const isFinancesOpen = expandedSection === 'finances';
+  const isAdminOpen = expandedSection === 'administration';
+  const isServicesOpen = expandedSection === 'services';
 
   return (
     <aside
@@ -106,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         borderColor: 'var(--sidebar-border)',
       }}
     >
-      {/* ── HEADER : LOGO + TITRE + PROFILE AVATAR ── */}
+      {/* ── HEADER : LOGO + TITRE ── */}
       <div className="px-5 py-4 border-b flex items-center justify-between shrink-0" style={{ borderColor: 'var(--sidebar-border)' }}>
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-white font-black text-sm shadow-md shrink-0">
@@ -124,23 +101,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* User Profile Circle Avatar */}
+        {/* User Profile Avatar */}
         <div
           className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-400 text-white font-bold flex items-center justify-center text-xs shadow-xs shrink-0 cursor-pointer hover:ring-2 hover:ring-indigo-500/40 transition-all"
-          title="Promoteur Racine (Connecté)"
+          title="Promoteur Racine"
         >
           P
         </div>
       </div>
 
-      {/* ── CORPS DU MENU DE NAVIGATION (PIXEL PERFECT REF IMAGE) ── */}
+      {/* ── NAVIGATION (ACCORDÉON EXCLUSIF / MASQUÉ PAR DÉFAUT) ── */}
       <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1 sidebar-scroll">
-        {/* 1. HOME / TABLEAU DE BORD */}
+
+        {/* 1. TABLEAU DE BORD */}
         <button
           onClick={() => setActiveTab('dashboard')}
           className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
             activeTab === 'dashboard'
-              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black shadow-2xs border border-indigo-200 dark:border-indigo-800'
+              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-black border border-indigo-200 dark:border-indigo-800'
               : 'text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800/60'
           }`}
         >
@@ -153,25 +131,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* 2. ACCORDEON: PÉDAGOGIE & ÉLÈVES */}
         <div>
           <button
-            onClick={() => toggleSection('pedagogie')}
+            onClick={() => handleSectionClick('pedagogie')}
             className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
-              openSections.pedagogie
-                ? 'text-indigo-600 dark:text-indigo-400 font-black'
+              isPedagogieOpen
+                ? 'bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-black'
                 : 'text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800/60'
             }`}
           >
             <div className="flex items-center gap-3">
-              <GraduationCap className={`w-4.5 h-4.5 ${openSections.pedagogie ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+              <GraduationCap className={`w-4.5 h-4.5 ${isPedagogieOpen ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
               {!isCollapsed && <span>Pédagogie & Élèves</span>}
             </div>
             {!isCollapsed && (
-              openSections.pedagogie ? <ChevronDown className="w-4 h-4 text-indigo-500" /> : <ChevronRight className="w-4 h-4 text-slate-400" />
+              isPedagogieOpen ? <ChevronDown className="w-4 h-4 text-indigo-500" /> : <ChevronRight className="w-4 h-4 text-slate-400" />
             )}
           </button>
 
-          {/* ARBRE D'OPTIONS SOUS-CATEGORIES AVEC LIGNE VERTICALE (CONNECTEUR BRANCHE) */}
-          {!isCollapsed && openSections.pedagogie && (
-            <div className="pl-6 ml-5 my-1 border-l-2 border-slate-200 dark:border-slate-800 space-y-1">
+          {!isCollapsed && isPedagogieOpen && (
+            <div className="pl-6 ml-5 my-1 border-l-2 border-indigo-200 dark:border-indigo-900/60 space-y-1 animate-fade-in">
               {[
                 { id: 'apprenants', label: 'Dossiers Apprenants' },
                 { id: 'students', label: 'Inscriptions & Admissions' },
@@ -186,10 +163,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <button
                     key={sub.id}
                     onClick={() => setActiveTab(sub.id)}
-                    className={`w-full flex items-center justify-between py-1.5 px-2 rounded-lg text-xs transition-all cursor-pointer text-left ${
+                    className={`w-full flex items-center justify-between py-1.5 px-2.5 rounded-lg text-xs transition-all cursor-pointer text-left ${
                       isActive
-                        ? 'text-indigo-600 dark:text-indigo-400 font-black bg-indigo-50/50 dark:bg-indigo-950/40'
-                        : 'text-slate-600 dark:text-slate-400 font-semibold hover:text-indigo-600 dark:hover:text-indigo-400'
+                        ? 'text-indigo-600 dark:text-indigo-400 font-black bg-indigo-100/80 dark:bg-indigo-950/70 border border-indigo-200/60 dark:border-indigo-800/50'
+                        : 'text-slate-600 dark:text-slate-400 font-semibold hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/40'
                     }`}
                   >
                     <span className="truncate">{sub.label}</span>
@@ -208,24 +185,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* 3. ACCORDEON: FINANCES & CAISSE */}
         <div>
           <button
-            onClick={() => toggleSection('finances')}
+            onClick={() => handleSectionClick('finances')}
             className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
-              openSections.finances
-                ? 'text-indigo-600 dark:text-indigo-400 font-black'
+              isFinancesOpen
+                ? 'bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-black'
                 : 'text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800/60'
             }`}
           >
             <div className="flex items-center gap-3">
-              <Wallet className={`w-4.5 h-4.5 ${openSections.finances ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+              <Wallet className={`w-4.5 h-4.5 ${isFinancesOpen ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
               {!isCollapsed && <span>Finances & Caisse</span>}
             </div>
             {!isCollapsed && (
-              openSections.finances ? <ChevronDown className="w-4 h-4 text-indigo-500" /> : <ChevronRight className="w-4 h-4 text-slate-400" />
+              isFinancesOpen ? <ChevronDown className="w-4 h-4 text-indigo-500" /> : <ChevronRight className="w-4 h-4 text-slate-400" />
             )}
           </button>
 
-          {!isCollapsed && openSections.finances && (
-            <div className="pl-6 ml-5 my-1 border-l-2 border-slate-200 dark:border-slate-800 space-y-1">
+          {!isCollapsed && isFinancesOpen && (
+            <div className="pl-6 ml-5 my-1 border-l-2 border-indigo-200 dark:border-indigo-900/60 space-y-1 animate-fade-in">
               {[
                 { id: 'invoices', label: 'Factures & Minerval' },
                 { id: 'payroll', label: 'Gestion Paie & Primes' },
@@ -236,10 +213,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <button
                     key={sub.id}
                     onClick={() => setActiveTab(sub.id)}
-                    className={`w-full flex items-center justify-between py-1.5 px-2 rounded-lg text-xs transition-all cursor-pointer text-left ${
+                    className={`w-full flex items-center justify-between py-1.5 px-2.5 rounded-lg text-xs transition-all cursor-pointer text-left ${
                       isActive
-                        ? 'text-indigo-600 dark:text-indigo-400 font-black bg-indigo-50/50 dark:bg-indigo-950/40'
-                        : 'text-slate-600 dark:text-slate-400 font-semibold hover:text-indigo-600 dark:hover:text-indigo-400'
+                        ? 'text-indigo-600 dark:text-indigo-400 font-black bg-indigo-100/80 dark:bg-indigo-950/70 border border-indigo-200/60 dark:border-indigo-800/50'
+                        : 'text-slate-600 dark:text-slate-400 font-semibold hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/40'
                     }`}
                   >
                     <span className="truncate">{sub.label}</span>
@@ -253,24 +230,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* 4. ACCORDEON: ADMINISTRATION & RH */}
         <div>
           <button
-            onClick={() => toggleSection('administration')}
+            onClick={() => handleSectionClick('administration')}
             className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
-              openSections.administration
-                ? 'text-indigo-600 dark:text-indigo-400 font-black'
+              isAdminOpen
+                ? 'bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-black'
                 : 'text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800/60'
             }`}
           >
             <div className="flex items-center gap-3">
-              <Users className={`w-4.5 h-4.5 ${openSections.administration ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+              <Users className={`w-4.5 h-4.5 ${isAdminOpen ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
               {!isCollapsed && <span>Administration & RH</span>}
             </div>
             {!isCollapsed && (
-              openSections.administration ? <ChevronDown className="w-4 h-4 text-indigo-500" /> : <ChevronRight className="w-4 h-4 text-slate-400" />
+              isAdminOpen ? <ChevronDown className="w-4 h-4 text-indigo-500" /> : <ChevronRight className="w-4 h-4 text-slate-400" />
             )}
           </button>
 
-          {!isCollapsed && openSections.administration && (
-            <div className="pl-6 ml-5 my-1 border-l-2 border-slate-200 dark:border-slate-800 space-y-1">
+          {!isCollapsed && isAdminOpen && (
+            <div className="pl-6 ml-5 my-1 border-l-2 border-indigo-200 dark:border-indigo-900/60 space-y-1 animate-fade-in">
               {[
                 { id: 'teachers', label: 'Gestion des Enseignants' },
                 { id: 'hr', label: 'Dossiers Personnel' },
@@ -283,10 +260,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <button
                     key={sub.id}
                     onClick={() => setActiveTab(sub.id)}
-                    className={`w-full flex items-center justify-between py-1.5 px-2 rounded-lg text-xs transition-all cursor-pointer text-left ${
+                    className={`w-full flex items-center justify-between py-1.5 px-2.5 rounded-lg text-xs transition-all cursor-pointer text-left ${
                       isActive
-                        ? 'text-indigo-600 dark:text-indigo-400 font-black bg-indigo-50/50 dark:bg-indigo-950/40'
-                        : 'text-slate-600 dark:text-slate-400 font-semibold hover:text-indigo-600 dark:hover:text-indigo-400'
+                        ? 'text-indigo-600 dark:text-indigo-400 font-black bg-indigo-100/80 dark:bg-indigo-950/70 border border-indigo-200/60 dark:border-indigo-800/50'
+                        : 'text-slate-600 dark:text-slate-400 font-semibold hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/40'
                     }`}
                   >
                     <span className="truncate">{sub.label}</span>
@@ -297,7 +274,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* 5. MESSAGERIE (AVEC PILULE BADGE 12 COMME DANS L'IMAGE) */}
+        {/* 5. MESSAGERIE */}
         <button
           onClick={() => setActiveTab('messages')}
           className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
@@ -320,24 +297,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* 6. ACCORDEON: VIE SCOLAIRE & SERVICES */}
         <div>
           <button
-            onClick={() => toggleSection('services')}
+            onClick={() => handleSectionClick('services')}
             className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
-              openSections.services
-                ? 'text-indigo-600 dark:text-indigo-400 font-black'
+              isServicesOpen
+                ? 'bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-black'
                 : 'text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800/60'
             }`}
           >
             <div className="flex items-center gap-3">
-              <Trophy className={`w-4.5 h-4.5 ${openSections.services ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+              <Trophy className={`w-4.5 h-4.5 ${isServicesOpen ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
               {!isCollapsed && <span>Vie Scolaire & Services</span>}
             </div>
             {!isCollapsed && (
-              openSections.services ? <ChevronDown className="w-4 h-4 text-indigo-500" /> : <ChevronRight className="w-4 h-4 text-slate-400" />
+              isServicesOpen ? <ChevronDown className="w-4 h-4 text-indigo-500" /> : <ChevronRight className="w-4 h-4 text-slate-400" />
             )}
           </button>
 
-          {!isCollapsed && openSections.services && (
-            <div className="pl-6 ml-5 my-1 border-l-2 border-slate-200 dark:border-slate-800 space-y-1">
+          {!isCollapsed && isServicesOpen && (
+            <div className="pl-6 ml-5 my-1 border-l-2 border-indigo-200 dark:border-indigo-900/60 space-y-1 animate-fade-in">
               {[
                 { id: 'discipline', label: 'Discipline & Conduite' },
                 { id: 'infirmerie', label: 'Infirmerie & Santé' },
@@ -350,10 +327,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <button
                     key={sub.id}
                     onClick={() => setActiveTab(sub.id)}
-                    className={`w-full flex items-center justify-between py-1.5 px-2 rounded-lg text-xs transition-all cursor-pointer text-left ${
+                    className={`w-full flex items-center justify-between py-1.5 px-2.5 rounded-lg text-xs transition-all cursor-pointer text-left ${
                       isActive
-                        ? 'text-indigo-600 dark:text-indigo-400 font-black bg-indigo-50/50 dark:bg-indigo-950/40'
-                        : 'text-slate-600 dark:text-slate-400 font-semibold hover:text-indigo-600 dark:hover:text-indigo-400'
+                        ? 'text-indigo-600 dark:text-indigo-400 font-black bg-indigo-100/80 dark:bg-indigo-950/70 border border-indigo-200/60 dark:border-indigo-800/50'
+                        : 'text-slate-600 dark:text-slate-400 font-semibold hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/40'
                     }`}
                   >
                     <span className="truncate">{sub.label}</span>
@@ -382,7 +359,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </button>
 
-        {/* 8. LICENCE LOGICIEL & HORS-LIGNE */}
+        {/* 8. LICENCE LOGICIEL */}
         <button
           onClick={() => setActiveTab('license')}
           className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
@@ -398,9 +375,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </nav>
 
-      {/* ── FOOTER: QUICK HELP & SIGN OUT (EXACTEMENT COMME DANS L'IMAGE DE RÉFÉRENCE) ── */}
+      {/* ── FOOTER: AIDE & DÉCONNEXION ── */}
       <div className="p-3 border-t shrink-0 space-y-1" style={{ borderColor: 'var(--sidebar-border)' }}>
-        {/* Quick Help */}
         <button
           onClick={() => setActiveTab('settings')}
           className="w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all cursor-pointer"
@@ -409,7 +385,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {!isCollapsed && <span>Aide Rapide & Support</span>}
         </button>
 
-        {/* Sign Out (Rouge distinct comme dans la maquette du designer) */}
         <button
           onClick={() => {
             if (onLock) onLock();
