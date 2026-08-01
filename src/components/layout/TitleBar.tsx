@@ -9,6 +9,8 @@ declare global {
       maximize: () => void;
       close: () => void;
       isMaximized: () => Promise<boolean>;
+      dbLoad?: () => Promise<any>;
+      dbSave?: (state: any) => Promise<{ success: boolean; error?: string }>;
       platform?: string;
       isElectron?: boolean;
     };

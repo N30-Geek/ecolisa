@@ -13,14 +13,18 @@
     "electron:build": "tsc && vite build && electron-builder"
   },
   "dependencies": {
+    "better-sqlite3": "^13.0.2",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.2",
     "html2pdf.js": "^0.14.0",
     "lucide-react": "^0.469.0",
+    "node-machine-id": "^1.1.12",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.15.0",
-    "tailwind-merge": "^2.6.0"
+    "tailwind-merge": "^2.6.0",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",

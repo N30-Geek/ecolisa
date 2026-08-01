@@ -52,7 +52,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     : options;
 
   return (
-    <div className={`relative inline-block text-left ${className}`} ref={containerRef}>
+    <div className={`relative text-left ${isOpen ? 'z-[9999]' : 'z-10'} ${className}`} ref={containerRef}>
       <button
         type="button"
         disabled={disabled}
@@ -60,7 +60,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
           setIsOpen(!isOpen);
           setSearchTerm('');
         }}
-        className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border shadow-xs cursor-pointer ${
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors border shadow-xs cursor-pointer ${
           isOpen
             ? 'border-indigo-500 ring-2 ring-indigo-500/20'
             : 'hover:border-indigo-500/40'
@@ -88,10 +88,11 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
       {isOpen && (
         <div
-          className="absolute left-0 top-full mt-1 min-w-[200px] w-full rounded-xl border shadow-lg z-[99999] p-1 space-y-1 animate-scale-in"
+          className="absolute left-0 top-full mt-1 min-w-[260px] w-full rounded-xl border shadow-2xl z-[99999] p-1.5 space-y-1.5 animate-scale-in"
           style={{
             background: 'var(--sidebar-popover-bg)',
             borderColor: 'var(--sidebar-popover-border)',
+            boxShadow: '0 20px 30px -10px rgba(0, 0, 0, 0.4)',
           }}
         >
           {isSearchable && (

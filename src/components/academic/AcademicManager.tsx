@@ -49,57 +49,22 @@ import {
   FileCheck
 } from 'lucide-react';
 import { mockStudents, mockClasses, mockCycles, mockSubjects, mockStaff } from '../../data/mockData';
-import { Eleve, Discipline, ClasseScolaire, CycleScolaire } from '../../types';
+import {
+  Eleve,
+  Discipline,
+  ClasseScolaire,
+  CycleScolaire,
+  FraisAnnexeConfig,
+  SalleConfig,
+  CycleConfig,
+  AnneeScolaireConfig
+} from '../../types';
 import { StudentRegistrationModal } from './StudentRegistrationModal';
+import { LocalDatabaseService } from '../../services/localDatabase';
+import { NATIONAL_EPST_OPTIONS } from '../onboarding/OnboardingWizard';
 
 interface AcademicManagerProps {
   activeSubTab?: string;
-}
-
-// ─── Modèle Année Scolaire ──────────────────────────────────────────────────
-// ─── Modèle Année Scolaire & Tarification Complexe ──────────────────────────
-export interface FraisAnnexeConfig {
-  id: string;
-  intitule: string;
-  montant: number;
-  devise: 'USD' | 'CDF';
-  obligatoire: boolean;
-  typeFrais: 'INSCRIPTION' | 'REINSCRIPTION' | 'CONNEXION' | 'CARTE' | 'KIT' | 'AUTRE';
-}
-
-export interface SalleConfig {
-  id: string;
-  codeSalle: string;
-  nomSalle: string;
-  capacite: number;
-  cycleCode: 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES';
-}
-
-export interface CycleConfig {
-  id: string;
-  code: 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES';
-  nom: string;
-  actif: boolean;
-  classesCount: number;
-  sallesCount: number;
-}
-
-interface AnneeScolaireConfig {
-  id: string;
-  nom: string;
-  statut: 'EN_COURS' | 'CLOTUREE' | 'PLANIFIEE';
-  debut: string;
-  fin: string;
-  nombreElevesTotal: number;
-  fraisInscription: number;
-  fraisConnexion: number;
-  fraisReinscription: number;
-  fraisCarte: number;
-  fraisAnnexes: FraisAnnexeConfig[];
-  cycles: CycleConfig[];
-  salles: SalleConfig[];
-  semestres: { id: string; nom: string; statut: string; fin: string }[];
-  periodes: { id: string; nom: string; debut: string; fin: string; type: 'PERIOD' | 'EXAM' }[];
 }
 
 const mockSchoolYears: AnneeScolaireConfig[] = [];
@@ -818,15 +783,29 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
   );
 };
 
-// ─── ONGLET 1 : ÉLÈVES & INSCRIPTIONS AVEC PAGINATION & FICHE COMPLÈTE DÉDIÉE ──
+interface StudentsTabProps {
+  onOpenRegisterStudent?: () => void;
+}
 
-const StudentsTab: React.FC = () => {
-  const [students, setStudents] = useState<Eleve[]>(mockStudents);
+const StudentsTab: React.FC<StudentsTabProps> = ({ onOpenRegisterStudent }) => {
+  const [students, setStudents] = useState<Eleve[]>([]);
+  const [classesList, setClassesList] = useState<ClasseScolaire[]>([]);
   const [search, setSearch] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Eleve | null>(null);
-  const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      const [eleves, classes] = await Promise.all([
+        LocalDatabaseService.getEleves(),
+        LocalDatabaseService.getClasses()
+      ]);
+      setStudents(eleves);
+      setClassesList(classes);
+    };
+    load();
+  }, []);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -837,7 +816,7 @@ const StudentsTab: React.FC = () => {
       const q = search.toLowerCase();
       const match = !q || s.prenom.toLowerCase().includes(q)
         || s.nom.toLowerCase().includes(q)
-        || s.registrationNumber.toLowerCase().includes(q);
+        || (s.registrationNumber && s.registrationNumber.toLowerCase().includes(q));
       const cls = !selectedClass || s.classId === selectedClass;
       return match && cls;
     });
@@ -849,14 +828,9 @@ const StudentsTab: React.FC = () => {
   }, [filtered, currentPage, pageSize]);
 
   const classOptions = useMemo(() => [
-    { value: '', label: `Toutes les classes (${mockClasses.length})` },
-    ...mockClasses.map(cls => ({ value: cls.id, label: cls.nom })),
-  ], []);
-
-  const handleRegisterNewStudent = (newStudent: Eleve) => {
-    setStudents(prev => [newStudent, ...prev]);
-    setShowRegisterModal(false);
-  };
+    { value: '', label: `Toutes les classes (${classesList.length})` },
+    ...classesList.map(cls => ({ value: cls.id, label: cls.nom })),
+  ], [classesList]);
 
   // Si un élève est sélectionné, on affiche la PAGE DÉDIÉE DE L'ÉLÈVE
   if (selectedStudent) {
@@ -884,7 +858,7 @@ const StudentsTab: React.FC = () => {
               <span>Exporter Liste EPST</span>
             </button>
             <button
-              onClick={() => setShowRegisterModal(true)}
+              onClick={() => onOpenRegisterStudent?.()}
               className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer border border-indigo-500/40"
             >
               <Plus className="w-4 h-4 text-white" />
@@ -1135,22 +1109,20 @@ const StudentsTab: React.FC = () => {
           onPageSizeChange={setPageSize}
         />
       </div>
-
-      {/* Onboarding Wizard Inscription Élève */}
-      {showRegisterModal && (
-        <StudentRegistrationModal
-          onClose={() => setShowRegisterModal(false)}
-          onRegister={handleRegisterNewStudent}
-          availableClasses={mockClasses}
-        />
-      )}
     </div>
   );
 };
 
 // ─── ONGLET 2 : CLASSES & CYCLES AVEC PAGINATION & CREATION ───────────────
 
-const ClassesTab: React.FC = () => {
+// ─── ONGLET 2 : CLASSES & CREATION MULTI-FRAYEURS (AVEC SALLES ET TITULAIRES) ───
+
+interface ClassesTabProps {
+  onOpenCreateClass?: () => void;
+  onOpenManageRooms?: () => void;
+}
+
+const ClassesTab: React.FC<ClassesTabProps> = ({ onOpenCreateClass, onOpenManageRooms }) => {
   const [classesList, setClassesList] = useState<ClasseScolaire[]>(mockClasses);
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -1168,12 +1140,26 @@ const ClassesTab: React.FC = () => {
   return (
     <div className="space-y-4">
       <SectionHeader
-        title="Classes, Promotions & Structures EPST"
-        subtitle="Répertoire officiel des salles de classe et affectations des titulaires"
+        title="Classes, Promotions & Salles Physiques EPST"
+        subtitle="Répertoire officiel des salles de classe et affectations des professeurs titulaires"
         actions={
-          <button className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-indigo-500/40">
-            <Plus className="w-4 h-4" /> Créer une Nouvelle Classe
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onOpenManageRooms?.()}
+              className="px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-extrabold text-xs flex items-center gap-1.5 hover:bg-slate-200 transition-all cursor-pointer shadow-2xs"
+            >
+              <School className="w-4 h-4 text-indigo-500" />
+              <span>Gérer les Salles Physiques</span>
+            </button>
+
+            <button
+              onClick={() => onOpenCreateClass?.()}
+              className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Créer une Nouvelle Classe</span>
+            </button>
+          </div>
         }
       />
 
@@ -1196,7 +1182,7 @@ const ClassesTab: React.FC = () => {
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60">
                 <th className="py-3 px-4">Classe / Promotion</th>
-                <th className="py-3 px-4">Local / Salle</th>
+                <th className="py-3 px-4">Local / Salle Physique</th>
                 <th className="py-3 px-4">Professeur Titulaire</th>
                 <th className="py-3 px-4">Effectif Inscrit</th>
                 <th className="py-3 px-4 text-right">Actions</th>
@@ -1208,13 +1194,13 @@ const ClassesTab: React.FC = () => {
                   <td className="py-3 px-4 font-semibold text-xs text-slate-900 dark:text-slate-100">
                     <div className="flex items-center gap-2">
                       <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                      <span>{c.nom}</span>
+                      <span className="font-extrabold">{c.nom}</span>
                     </div>
                   </td>
-                  <td className="py-3 px-4 font-medium text-slate-500 dark:text-slate-400">{c.salle}</td>
+                  <td className="py-3 px-4 font-bold text-slate-700 dark:text-slate-300">{c.salle}</td>
                   <td className="py-3 px-4 font-medium text-slate-900 dark:text-slate-100">{c.professeurTitulaire}</td>
                   <td className="py-3 px-4 font-medium">
-                    <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800/60">
+                    <span className="px-2.5 py-0.5 rounded text-[11px] font-black bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800/60">
                       {c.nombreEleves} élèves
                     </span>
                   </td>
@@ -1241,9 +1227,11 @@ const ClassesTab: React.FC = () => {
   );
 };
 
-// ─── ONGLET 3 : MATIÈRES, DISCIPLINES & COEFFICIENTS EPST ─────────────────
+interface SubjectsTabProps {
+  onOpenCreateSubject?: () => void;
+}
 
-const SubjectsTab: React.FC = () => {
+const SubjectsTab: React.FC<SubjectsTabProps> = ({ onOpenCreateSubject }) => {
   const [subjectsList, setSubjectsList] = useState<Discipline[]>(mockSubjects);
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -1264,8 +1252,12 @@ const SubjectsTab: React.FC = () => {
         title="Matières, Disciplines & Coefficients EPST"
         subtitle="Pondérations et maxima officiels du programme national de l'EPST RDC"
         actions={
-          <button className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-black text-xs shadow-md shadow-indigo-600/30 flex items-center gap-1.5 hover:bg-indigo-700 transition-all cursor-pointer">
-            <Plus className="w-4 h-4" /> Ajouter une Matière
+          <button
+            onClick={() => onOpenCreateSubject?.()}
+            className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-black text-xs shadow-md flex items-center gap-1.5 hover:bg-indigo-700 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Ajouter une Matière</span>
           </button>
         }
       />
@@ -1336,163 +1328,53 @@ const SubjectsTab: React.FC = () => {
 
 // ─── ONGLET 4 : GESTION DE L'ANNÉE SCOLAIRE, TARIFICATION & STRUCTURE EPST ──
 
-const SchoolYearsTab: React.FC = () => {
-  const [years, setYears] = useState<AnneeScolaireConfig[]>(mockSchoolYears);
-  const [selectedYearId, setSelectedYearId] = useState<string>('ay-1');
-  const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
+interface SchoolYearsTabProps {
+  onOpenCreateYear?: () => void;
+}
+
+const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ onOpenCreateYear }) => {
+  const [years, setYears] = useState<AnneeScolaireConfig[]>([]);
+  const [selectedYearId, setSelectedYearId] = useState<string>('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<'frais' | 'cycles_salles' | 'periodes' | 'rapports'>('frais');
 
-  // ── ÉTATS DU FORMULAIRE ONBOARDING MULTI-ÉTAPES (CREATION ANNÉE SCOLAIRE) ──
-  const [wizardStep, setWizardStep] = useState<number>(1);
-  const [newNom, setNewNom] = useState('2026–2027');
-  const [newDebut, setNewDebut] = useState('07 Septembre 2026');
-  const [newFin, setNewFin] = useState('03 Juillet 2027');
-  const [newStatut, setNewStatut] = useState<'PLANIFIEE' | 'EN_COURS'>('PLANIFIEE');
-  const [newTargetEleves, setNewTargetEleves] = useState<number>(15000);
+  const refreshYears = async () => {
+    const list = await LocalDatabaseService.getSchoolYears();
+    setYears(list);
+    if (!selectedYearId && list.length > 0) {
+      const active = list.find(y => y.statut === 'EN_COURS');
+      setSelectedYearId(active?.id || list[0]?.id || '');
+    }
+    return list;
+  };
 
-  // Tarification
-  const [newFraisInscription, setNewFraisInscription] = useState<number>(50);
-  const [newFraisConnexion, setNewFraisConnexion] = useState<number>(15);
-  const [newFraisReinscription, setNewFraisReinscription] = useState<number>(30);
-  const [newFraisCarte, setNewFraisCarte] = useState<number>(10);
-  const [newFraisAnnexes, setNewFraisAnnexes] = useState<FraisAnnexeConfig[]>([
-    { id: 'fa-new-1', intitule: 'Kit Scolaire & Uniforme Officiel', montant: 25, devise: 'USD', obligatoire: true, typeFrais: 'KIT' },
-    { id: 'fa-new-2', intitule: 'Assurance Scolaire & Infirmerie', montant: 10, devise: 'USD', obligatoire: true, typeFrais: 'AUTRE' },
-  ]);
-
-  // Champs temporaires pour ajout d'un frais annexe
-  const [tempIntituleFrais, setTempIntituleFrais] = useState('');
-  const [tempMontantFrais, setTempMontantFrais] = useState<number>(15);
-  const [tempTypeFrais, setTempTypeFrais] = useState<'INSCRIPTION' | 'REINSCRIPTION' | 'CONNEXION' | 'CARTE' | 'KIT' | 'AUTRE'>('AUTRE');
-
-  // Cycles & Salles
-  const [newActiveCycles, setNewActiveCycles] = useState<Record<string, boolean>>({
-    MATERNELLE: true,
-    PRIMAIRE: true,
-    SECONDAIRE_CTEB: true,
-    HUMANITES: true,
-  });
-
-  const [newSalles, setNewSalles] = useState<SalleConfig[]>([
-    { id: 'sal-new-1', codeSalle: 'M-101', nomSalle: 'Salle Petite Section Maternelle', capacite: 35, cycleCode: 'MATERNELLE' },
-    { id: 'sal-new-2', codeSalle: 'P-201', nomSalle: 'Salle 1ère Primaire A', capacite: 45, cycleCode: 'PRIMAIRE' },
-    { id: 'sal-new-3', codeSalle: 'C-301', nomSalle: 'Salle 7ème CTEB A', capacite: 40, cycleCode: 'SECONDAIRE_CTEB' },
-    { id: 'sal-new-4', codeSalle: 'H-401', nomSalle: 'Labo Math-Physique 1ère H', capacite: 40, cycleCode: 'HUMANITES' },
-  ]);
-
-  // Champs temporaires pour ajout d'une salle
-  const [tempCodeSalle, setTempCodeSalle] = useState('');
-  const [tempNomSalle, setTempNomSalle] = useState('');
-  const [tempCapaciteSalle, setTempCapaciteSalle] = useState<number>(40);
-  const [tempCycleSalle, setTempCycleSalle] = useState<'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES'>('HUMANITES');
-
-  // Découpage Pédagogique
-  const [newStructure, setNewStructure] = useState<'SEMESTRES' | 'TRIMESTRES'>('SEMESTRES');
+  useEffect(() => {
+    refreshYears();
+  }, []);
 
   const selectedYear = useMemo(() => {
     return years.find(y => y.id === selectedYearId) || years[0];
   }, [years, selectedYearId]);
 
-  // Ajouter un frais annexe
-  const handleAddFraisAnnexe = () => {
-    if (!tempIntituleFrais.trim()) return;
-    const newFraisItem: FraisAnnexeConfig = {
-      id: `fa-${Date.now()}`,
-      intitule: tempIntituleFrais.trim(),
-      montant: tempMontantFrais,
-      devise: 'USD',
-      obligatoire: true,
-      typeFrais: tempTypeFrais,
-    };
-    setNewFraisAnnexes(prev => [...prev, newFraisItem]);
-    setTempIntituleFrais('');
-    setTempMontantFrais(15);
-  };
-
-  const handleRemoveFraisAnnexe = (id: string) => {
-    setNewFraisAnnexes(prev => prev.filter(f => f.id !== id));
-  };
-
-  // Ajouter une salle
-  const handleAddSalle = () => {
-    if (!tempNomSalle.trim() || !tempCodeSalle.trim()) return;
-    const newSalleItem: SalleConfig = {
-      id: `sal-${Date.now()}`,
-      codeSalle: tempCodeSalle.trim().toUpperCase(),
-      nomSalle: tempNomSalle.trim(),
-      capacite: tempCapaciteSalle,
-      cycleCode: tempCycleSalle,
-    };
-    setNewSalles(prev => [...prev, newSalleItem]);
-    setTempCodeSalle('');
-    setTempNomSalle('');
-    setTempCapaciteSalle(40);
-  };
-
-  const handleRemoveSalle = (id: string) => {
-    setNewSalles(prev => prev.filter(s => s.id !== id));
-  };
-
-  // Enregistrement final du Wizard Onboarding
-  const handleCompleteWizard = (e: React.FormEvent) => {
-    e.preventDefault();
-    const createdCycles: CycleConfig[] = [
-      { id: `c-1-${Date.now()}`, code: 'MATERNELLE', nom: 'Cycle Maternelle (3–5 ans)', actif: newActiveCycles.MATERNELLE, classesCount: 6, sallesCount: newSalles.filter(s => s.cycleCode === 'MATERNELLE').length },
-      { id: `c-2-${Date.now()}`, code: 'PRIMAIRE', nom: 'Cycle Primaire (1ère–6ème)', actif: newActiveCycles.PRIMAIRE, classesCount: 18, sallesCount: newSalles.filter(s => s.cycleCode === 'PRIMAIRE').length },
-      { id: `c-3-${Date.now()}`, code: 'SECONDAIRE_CTEB', nom: 'Cycle Terminal d’Éducation de Base (7ème–8ème CTEB)', actif: newActiveCycles.SECONDAIRE_CTEB, classesCount: 8, sallesCount: newSalles.filter(s => s.cycleCode === 'SECONDAIRE_CTEB').length },
-      { id: `c-4-${Date.now()}`, code: 'HUMANITES', nom: 'Humanités Générales & Techniques (1ère–4ème H)', actif: newActiveCycles.HUMANITES, classesCount: 16, sallesCount: newSalles.filter(s => s.cycleCode === 'HUMANITES').length },
-    ];
-
-    const newYear: AnneeScolaireConfig = {
-      id: `ay-${Date.now()}`,
-      nom: newNom,
-      statut: newStatut,
-      debut: newDebut,
-      fin: newFin,
-      nombreElevesTotal: newTargetEleves,
-      fraisInscription: newFraisInscription,
-      fraisConnexion: newFraisConnexion,
-      fraisReinscription: newFraisReinscription,
-      fraisCarte: newFraisCarte,
-      fraisAnnexes: newFraisAnnexes,
-      cycles: createdCycles,
-      salles: newSalles,
-      semestres: newStructure === 'SEMESTRES' ? [
-        { id: `s1-${Date.now()}`, nom: '1er Semestre (S1)', statut: 'PLANIFIE', fin: '17 Février' },
-        { id: `s2-${Date.now()}`, nom: '2ème Semestre (S2)', statut: 'PLANIFIE', fin: '03 Juillet' },
-      ] : [
-        { id: `t1-${Date.now()}`, nom: '1er Trimestre (T1)', statut: 'PLANIFIE', fin: '30 Novembre' },
-        { id: `t2-${Date.now()}`, nom: '2ème Trimestre (T2)', statut: 'PLANIFIE', fin: '28 Février' },
-        { id: `t3-${Date.now()}`, nom: '3ème Trimestre (T3)', statut: 'PLANIFIE', fin: '03 Juillet' },
-      ],
-      periodes: [
-        { id: `p1-${Date.now()}`, nom: '1ère Période', debut: newDebut.split(' ')[0] + ' Sept', fin: '04 Nov', type: 'PERIOD' },
-        { id: `p2-${Date.now()}`, nom: '2ème Période & Examens S1', debut: '09 Nov', fin: '17 Fév', type: 'EXAM' },
-        { id: `p3-${Date.now()}`, nom: '3ème Période', debut: '22 Fév', fin: '24 Avr', type: 'PERIOD' },
-        { id: `p4-${Date.now()}`, nom: '4ème Période & EXETAT', debut: '26 Avr', fin: newFin.split(' ')[0] + ' Jul', type: 'EXAM' },
-      ],
-    };
-
-    setYears(prev => [newYear, ...prev]);
-    setSelectedYearId(newYear.id);
-    setShowCreateModal(false);
-    setWizardStep(1);
-  };
-
-  const handleDeleteYear = (id: string) => {
-    setYears(prev => prev.filter(y => y.id !== id));
+  const handleDeleteYear = async (id: string) => {
+    await LocalDatabaseService.deleteSchoolYear(id);
+    const updated = await LocalDatabaseService.getSchoolYears();
+    setYears(updated);
     if (selectedYearId === id) {
-      setSelectedYearId(years.find(y => y.id !== id)?.id || '');
+      setSelectedYearId(updated.find(y => y.id !== id)?.id || '');
     }
     setDeleteConfirmId(null);
   };
 
-  const handleActivateYear = (id: string) => {
-    setYears(prev => prev.map(y => ({
-      ...y,
-      statut: y.id === id ? 'EN_COURS' : y.statut === 'EN_COURS' ? 'CLOTUREE' : y.statut
-    })));
+  const handleActivateYear = async (id: string) => {
+    const list = await LocalDatabaseService.getSchoolYears();
+    await Promise.all(list.map(y => {
+      if (y.id === id) return LocalDatabaseService.updateSchoolYear(y.id, { statut: 'EN_COURS' });
+      if (y.statut === 'EN_COURS') return LocalDatabaseService.updateSchoolYear(y.id, { statut: 'CLOTUREE' });
+      return Promise.resolve();
+    }));
+    const updated = await LocalDatabaseService.getSchoolYears();
+    setYears(updated);
   };
 
   return (
@@ -1502,11 +1384,11 @@ const SchoolYearsTab: React.FC = () => {
         subtitle="Configuration des frais d'inscription, frais de connexion, attribution des salles d'études et découpage des périodes"
         actions={
           <button
-            onClick={() => { setWizardStep(1); setShowCreateModal(true); }}
+            onClick={() => onOpenCreateYear?.()}
             className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-black text-xs shadow-md shadow-indigo-600/30 flex items-center gap-2 transition-all cursor-pointer border border-indigo-400/40"
           >
             <Sparkles className="w-4 h-4 text-amber-300" />
-            <span>Onboarding : Créer une Nouvelle Année</span>
+            <span>Créer une Nouvelle Année (Plein Écran)</span>
           </button>
         }
       />
@@ -1520,15 +1402,15 @@ const SchoolYearsTab: React.FC = () => {
           <div>
             <h3 className="text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>Aucune Année Scolaire Enregistrée</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-              Le registre des années scolaires est vierge. Lancez l'assistant d'onboarding pour configurer votre première année et ses frais.
+              Le registre des années scolaires est vierge. Lancez l'assistant pour configurer votre première année et ses frais.
             </p>
           </div>
           <button
-            onClick={() => { setWizardStep(1); setShowCreateModal(true); }}
+            onClick={() => onOpenCreateYear?.()}
             className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-xs inline-flex items-center gap-2 cursor-pointer"
           >
             <Sparkles className="w-4 h-4 text-amber-300" />
-            <span>Lancer l'Onboarding</span>
+            <span>Lancer la Configuration</span>
           </button>
         </div>
       ) : (
@@ -1832,515 +1714,6 @@ const SchoolYearsTab: React.FC = () => {
         </div>
       )}
 
-      {/* ── MODAL ONBOARDING MULTI-ÉTAPES (AGRANDI MAX-W-5XL) POUR CRÉER UNE ANNÉE ── */}
-      {showCreateModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in select-none" onClick={() => setShowCreateModal(false)}>
-          <div
-            className="w-full max-w-5xl rounded-2xl shadow-2xl border overflow-hidden flex flex-col max-h-[90vh]"
-            style={{ background: 'var(--sidebar-popover-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* EN-TÊTE DU WIZARD */}
-            <div className="p-5 border-b flex items-center justify-between shrink-0" style={{ background: 'var(--header-bg)', borderColor: 'var(--border)' }}>
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
-                  <Sparkles className="w-5 h-5 text-amber-500" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-extrabold text-base" style={{ color: 'var(--text-primary)' }}>Assistant d'Onboarding — Année Scolaire</h3>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
-                      Étape {wizardStep} sur 5
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Configuration intégrale : Général, Tarification Inscription/Connexion, Cycles & Salles physiques.
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => setShowCreateModal(false)} className="p-1.5 rounded-xl hover:bg-slate-500/20 text-slate-400 hover:text-white cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* STEPPER BAR D'AVANCEMENT */}
-            <div className="px-6 py-3 border-b overflow-x-auto sidebar-scroll shrink-0" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-              <div className="flex items-center justify-between min-w-[650px] gap-2">
-                {[
-                  { step: 1, label: '1. Général & Dates', icon: Calendar },
-                  { step: 2, label: '2. Tarification & Frais', icon: CreditCard },
-                  { step: 3, label: '3. Cycles & Salles', icon: School },
-                  { step: 4, label: '4. Périodes EPST', icon: Layers },
-                  { step: 5, label: '5. Validation', icon: CheckCircle2 },
-                ].map(s => {
-                  const SIcon = s.icon;
-                  const isActive = wizardStep === s.step;
-                  const isDone = wizardStep > s.step;
-                  return (
-                    <button
-                      key={s.step}
-                      onClick={() => setWizardStep(s.step)}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                        isActive
-                          ? 'bg-indigo-600 text-white shadow-xs'
-                          : isDone
-                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
-                          : 'text-slate-500 dark:text-slate-400 hover:bg-slate-500/10'
-                      }`}
-                    >
-                      <SIcon className="w-3.5 h-3.5" />
-                      <span>{s.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* CORPS DU FORMULAIRE WIZARD (CONTENU DYNAMIQUE SELON STEP) */}
-            <div className="p-6 overflow-y-auto space-y-5 flex-1">
-
-              {/* ÉTAPE 1 : INFORMATIONS GÉNÉRALES */}
-              {wizardStep === 1 && (
-                <div className="space-y-4 animate-fade-in">
-                  <div className="p-3.5 rounded-xl border bg-indigo-500/10 border-indigo-500/25 flex items-center gap-3">
-                    <Calendar className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      Définissez l'intitulé officiel de l'année scolaire et le calendrier de rentrée/clôture publié par le Ministère EPST RDC.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Intitulé de l'Année Scolaire *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="ex: 2026–2027"
-                        value={newNom}
-                        onChange={e => setNewNom(e.target.value)}
-                        className="w-full px-3.5 py-2 text-xs rounded-lg border font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                        style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Objectif Prévisionnel d'Élèves</label>
-                      <input
-                        type="number"
-                        value={newTargetEleves}
-                        onChange={e => setNewTargetEleves(Number(e.target.value))}
-                        className="w-full px-3.5 py-2 text-xs rounded-lg border font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                        style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Date de Début (Rentrée Scolaire) *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="07 Septembre 2026"
-                        value={newDebut}
-                        onChange={e => setNewDebut(e.target.value)}
-                        className="w-full px-3.5 py-2 text-xs rounded-lg border font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                        style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Date de Clôture Officielle *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="03 Juillet 2027"
-                        value={newFin}
-                        onChange={e => setNewFin(e.target.value)}
-                        className="w-full px-3.5 py-2 text-xs rounded-lg border font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                        style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5 pt-2">
-                    <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Statut Initial de l'Année *</label>
-                    <CustomSelect
-                      options={[
-                        { value: 'PLANIFIEE', label: 'PLANIFIÉE — Préparation administrative (Prochaine année)' },
-                        { value: 'EN_COURS', label: 'EN COURS — Basculer immédiatement comme année active' },
-                      ]}
-                      value={newStatut}
-                      onChange={val => setNewStatut(val as any)}
-                      className="w-full"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* ÉTAPE 2 : TARIFICATION & FRAIS D'INSCRIPTION / CONNEXION */}
-              {wizardStep === 2 && (
-                <div className="space-y-4 animate-fade-in">
-                  <div className="p-3.5 rounded-xl border bg-emerald-500/10 border-emerald-500/25 flex items-center gap-3">
-                    <CreditCard className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      Fixez les frais d'inscription obligatoire, les frais de connexion/plateforme système et ajoutez d'autres frais annexes (frais de carte, kit scolaire, etc.).
-                    </p>
-                  </div>
-
-                  {/* 4 CHAMPS DE FRAIS MAJEURS */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div className="p-3 rounded-xl border space-y-1.5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <label className="font-bold text-xs text-indigo-600 dark:text-indigo-400 block">Frais d'Inscription ($)</label>
-                      <input
-                        type="number"
-                        value={newFraisInscription}
-                        onChange={e => setNewFraisInscription(Number(e.target.value))}
-                        className="w-full px-3 py-1.5 text-xs rounded-lg border font-black"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div className="p-3 rounded-xl border space-y-1.5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <label className="font-bold text-xs text-emerald-600 dark:text-emerald-400 block">Frais de Connexion Syst. ($)</label>
-                      <input
-                        type="number"
-                        value={newFraisConnexion}
-                        onChange={e => setNewFraisConnexion(Number(e.target.value))}
-                        className="w-full px-3 py-1.5 text-xs rounded-lg border font-black"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div className="p-3 rounded-xl border space-y-1.5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <label className="font-bold text-xs text-indigo-600 dark:text-indigo-400 block">Frais de Réinscription ($)</label>
-                      <input
-                        type="number"
-                        value={newFraisReinscription}
-                        onChange={e => setNewFraisReinscription(Number(e.target.value))}
-                        className="w-full px-3 py-1.5 text-xs rounded-lg border font-black"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div className="p-3 rounded-xl border space-y-1.5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <label className="font-bold text-xs text-amber-600 dark:text-amber-400 block">Frais Carte d'Élève ($)</label>
-                      <input
-                        type="number"
-                        value={newFraisCarte}
-                        onChange={e => setNewFraisCarte(Number(e.target.value))}
-                        className="w-full px-3 py-1.5 text-xs rounded-lg border font-black"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* FORMULAIRE D'AJOUT D'UN FRAIS ANNEXE PERSONNALISÉ */}
-                  <div className="p-4 rounded-xl border space-y-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ajouter un Frais Annexe / Optionnel</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                      <input
-                        type="text"
-                        placeholder="Intitulé (ex: Kit Uniforme)"
-                        value={tempIntituleFrais}
-                        onChange={e => setTempIntituleFrais(e.target.value)}
-                        className="px-3 py-1.5 text-xs rounded-lg border font-medium"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                      <input
-                        type="number"
-                        placeholder="Montant en $"
-                        value={tempMontantFrais}
-                        onChange={e => setTempMontantFrais(Number(e.target.value))}
-                        className="px-3 py-1.5 text-xs rounded-lg border font-black"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                      <CustomSelect
-                        options={[
-                          { value: 'KIT', label: 'Kit Scolaire & Uniforme' },
-                          { value: 'CONNEXION', label: 'Frais informatique' },
-                          { value: 'AUTRE', label: 'Autre frais annexe' },
-                        ]}
-                        value={tempTypeFrais}
-                        onChange={val => setTempTypeFrais(val as any)}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddFraisAnnexe}
-                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1 cursor-pointer shadow-xs"
-                      >
-                        <Plus className="w-4 h-4" /> Ajouter
-                      </button>
-                    </div>
-
-                    {/* LISTE DES FRAIS ANNEXES AJOUTÉS */}
-                    <div className="space-y-1.5 pt-2">
-                      {newFraisAnnexes.map(fa => (
-                        <div key={fa.id} className="p-2.5 rounded-lg border flex items-center justify-between text-xs font-medium" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                          <div>
-                            <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{fa.intitule}</span>
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400 ml-2">({fa.typeFrais})</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="font-black text-indigo-600 dark:text-indigo-400">${fa.montant} {fa.devise}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveFraisAnnexe(fa.id)}
-                              className="text-rose-500 hover:text-rose-700 cursor-pointer"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ÉTAPE 3 : CYCLES SCOLAIRES & CONFIGURATION DES SALLES PHYSIQUES */}
-              {wizardStep === 3 && (
-                <div className="space-y-4 animate-fade-in">
-                  <div className="p-3.5 rounded-xl border bg-indigo-500/10 border-indigo-500/25 flex items-center gap-3">
-                    <School className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      Sélectionnez les cycles scolaires actifs pour cette année et créez les salles physiques d'études nécessaires à l'attribution des classes.
-                    </p>
-                  </div>
-
-                  {/* SÉLECTION DES CYCLES ACTIFS */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    {[
-                      { code: 'MATERNELLE', label: 'Cycle Maternelle (3–5 ans)' },
-                      { code: 'PRIMAIRE', label: 'Cycle Primaire (1ère–6ème)' },
-                      { code: 'SECONDAIRE_CTEB', label: 'CTEB (7ème–8ème Base)' },
-                      { code: 'HUMANITES', label: 'Humanités & Techniques' },
-                    ].map(cyc => (
-                      <label
-                        key={cyc.code}
-                        className={`p-3 rounded-xl border flex items-center gap-2.5 cursor-pointer transition-all ${
-                          newActiveCycles[cyc.code]
-                            ? 'border-indigo-500 bg-indigo-500/10 font-bold'
-                            : 'opacity-60'
-                        }`}
-                        style={{ background: 'var(--bg-sunken)', borderColor: newActiveCycles[cyc.code] ? '#6366f1' : 'var(--border)' }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!!newActiveCycles[cyc.code]}
-                          onChange={e => setNewActiveCycles(prev => ({ ...prev, [cyc.code]: e.target.checked }))}
-                          className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                        />
-                        <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{cyc.label}</span>
-                      </label>
-                    ))}
-                  </div>
-
-                  {/* FORMULAIRE D'AJOUT D'UNE SALLE PHYSIQUE */}
-                  <div className="p-4 rounded-xl border space-y-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Créer une Salle Physique d'Études dans un Cycle</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-                      <input
-                        type="text"
-                        placeholder="Code salle (ex: H-401)"
-                        value={tempCodeSalle}
-                        onChange={e => setTempCodeSalle(e.target.value)}
-                        className="px-3 py-1.5 text-xs rounded-lg border font-mono font-bold"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Nom salle (ex: Labo Math A)"
-                        value={tempNomSalle}
-                        onChange={e => setTempNomSalle(e.target.value)}
-                        className="px-3 py-1.5 text-xs rounded-lg border font-medium"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                      <input
-                        type="number"
-                        placeholder="Capacité max"
-                        value={tempCapaciteSalle}
-                        onChange={e => setTempCapaciteSalle(Number(e.target.value))}
-                        className="px-3 py-1.5 text-xs rounded-lg border font-bold"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                      <CustomSelect
-                        options={[
-                          { value: 'MATERNELLE', label: 'Maternelle' },
-                          { value: 'PRIMAIRE', label: 'Primaire' },
-                          { value: 'SECONDAIRE_CTEB', label: '7-8 CTEB' },
-                          { value: 'HUMANITES', label: 'Humanités' },
-                        ]}
-                        value={tempCycleSalle}
-                        onChange={val => setTempCycleSalle(val as any)}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddSalle}
-                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1 cursor-pointer shadow-xs"
-                      >
-                        <Plus className="w-4 h-4" /> Créer Salle
-                      </button>
-                    </div>
-
-                    {/* LISTE DES SALLES CRÉÉES */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2">
-                      {newSalles.map(s => (
-                        <div key={s.id} className="p-2.5 rounded-lg border flex items-center justify-between text-xs" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                          <div>
-                            <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold mr-2">{s.codeSalle}</span>
-                            <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{s.nomSalle}</span>
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">{s.cycleCode} · Capacité: {s.capacite} élèves</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSalle(s.id)}
-                            className="text-rose-500 hover:text-rose-700 cursor-pointer"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ÉTAPE 4 : DÉCOUPAGE PÉDAGOGIQUE & PÉRIODES */}
-              {wizardStep === 4 && (
-                <div className="space-y-4 animate-fade-in">
-                  <div className="p-3.5 rounded-xl border bg-amber-500/10 border-amber-500/25 flex items-center gap-3">
-                    <Layers className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      Configurez la structure périodique (Semestres S1 & S2 ou Trimestres T1, T2 & T3) et validez le calendrier des examens.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Structure Globale du Calendrier *</label>
-                    <CustomSelect
-                      options={[
-                        { value: 'SEMESTRES', label: '2 Semestres (S1 & S2) — Standard EPST RDC' },
-                        { value: 'TRIMESTRES', label: '3 Trimestres (T1, T2 & T3)' },
-                      ]}
-                      value={newStructure}
-                      onChange={val => setNewStructure(val as any)}
-                      className="w-full"
-                    />
-                  </div>
-
-                  <div className="p-4 rounded-xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Découpage Récapitulatif des 4 Périodes EPST</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-semibold">
-                      <div className="p-2.5 rounded-lg border bg-slate-500/5 flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
-                        <span>1ère Période : Septembre – Novembre</span>
-                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Cours & Interros</span>
-                      </div>
-                      <div className="p-2.5 rounded-lg border bg-slate-500/5 flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
-                        <span>2ème Période & Examens S1 : Novembre – Février</span>
-                        <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">Examens S1</span>
-                      </div>
-                      <div className="p-2.5 rounded-lg border bg-slate-500/5 flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
-                        <span>3ème Période : Février – Avril</span>
-                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Cours & Interros</span>
-                      </div>
-                      <div className="p-2.5 rounded-lg border bg-slate-500/5 flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
-                        <span>4ème Période & EXETAT : Avril – Juillet</span>
-                        <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400">EXETAT & Clôture</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ÉTAPE 5 : RÉCAPITULATIF & VALIDATION */}
-              {wizardStep === 5 && (
-                <div className="space-y-4 animate-fade-in">
-                  <div className="p-3.5 rounded-xl border bg-emerald-500/10 border-emerald-500/25 flex items-center gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      Vérifiez les paramètres de la nouvelle année scolaire avant confirmation et enregistrement final.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-4 rounded-xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Année & Dates</h4>
-                      <p className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>Année Scolaire {newNom}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Période : {newDebut} — {newFin}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Statut initial : <span className="font-bold text-indigo-600 dark:text-indigo-400">{newStatut}</span></p>
-                    </div>
-
-                    <div className="p-4 rounded-xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Tarification Fixée</h4>
-                      <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Inscription : ${newFraisInscription} · Connexion : ${newFraisConnexion}</p>
-                      <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Réinscription : ${newFraisReinscription} · Carte : ${newFraisCarte}</p>
-                      <p className="text-[10.5px] text-slate-500 dark:text-slate-400">{newFraisAnnexes.length} frais annexes configurés</p>
-                    </div>
-
-                    <div className="p-4 rounded-xl border space-y-2 md:col-span-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Salles Physiques d'Études ({newSalles.length})</h4>
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {newSalles.map(s => (
-                          <span key={s.id} className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
-                            {s.codeSalle} — {s.nomSalle} ({s.capacite} pl)
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-            </div>
-
-            {/* PIED DE PAGE & BOUTONS DE NAVIGATION STEPPER */}
-            <div className="p-4 border-t flex items-center justify-between shrink-0" style={{ background: 'var(--header-bg)', borderColor: 'var(--border)' }}>
-              <button
-                type="button"
-                disabled={wizardStep === 1}
-                onClick={() => setWizardStep(prev => Math.max(1, prev - 1))}
-                className="px-4 py-2 rounded-lg border text-xs font-bold flex items-center gap-1 hover:bg-slate-500/10 disabled:opacity-40 transition-all cursor-pointer"
-                style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-              >
-                <ChevronLeft className="w-4 h-4" /> Précédent
-              </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 rounded-lg border text-xs font-bold hover:bg-slate-500/10 transition-all cursor-pointer"
-                  style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                >
-                  Annuler
-                </button>
-
-                {wizardStep < 5 ? (
-                  <button
-                    type="button"
-                    onClick={() => setWizardStep(prev => Math.min(5, prev + 1))}
-                    className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer"
-                  >
-                    <span>Suivant</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleCompleteWizard}
-                    className="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
-                  >
-                    <Sparkles className="w-4 h-4 text-amber-300" />
-                    <span>Créer l'Année Scolaire</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-          </div>
-        </div>,
-        document.body
-      )}
-
       {/* CONFIRMATION DE SUPPRESSION D'ANNÉE SCOLAIRE */}
       {deleteConfirmId && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in select-none" onClick={() => setDeleteConfirmId(null)}>
@@ -2462,42 +1835,990 @@ const GradesTab: React.FC = () => (
 
 // ─── MAIN MANAGER ─────────────────────────────────────────────────────────
 
-export const AcademicManager: React.FC<AcademicManagerProps> = ({ activeSubTab = 'students' }) => {
-  const tabs = [
-    { id: 'students', label: 'Élèves & Inscriptions', icon: GraduationCap },
-    { id: 'classes', label: 'Classes & Local', icon: BookOpen },
-    { id: 'subjects', label: 'Matières & Coefficients', icon: Layers },
-    { id: 'years', label: 'Année Scolaire & Périodes', icon: Calendar },
-    { id: 'teachers', label: 'Enseignants & Personnel', icon: Users },
-    { id: 'schedule', label: 'Emploi du Temps', icon: Calendar },
-    { id: 'grades', label: 'Cotes & Bulletins', icon: ClipboardList },
-  ];
+// ─── FULL-PAGE CREATION WRAPPERS ───────────────────────────────────────────
 
+const CreateSubjectPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+  const [nom, setNom] = useState('');
+  const [code, setCode] = useState('');
+  const [categorie, setCategorie] = useState('Sciences & Mathématiques');
+  const [coefficient, setCoefficient] = useState(4);
+  const [maxScore, setMaxScore] = useState(40);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nom.trim() || !code.trim()) return;
+    await LocalDatabaseService.addSubject({
+      id: `sub-${Date.now()}`,
+      code: code.toUpperCase(),
+      nom,
+      coefficient,
+      maxScore,
+      categorie
+    } as any);
+    onBack();
+  };
+
+  return (
+    <div className="space-y-5 animate-fade-in">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-xl border font-bold text-xs hover:bg-slate-500/10 transition-all cursor-pointer"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+        >
+          <ChevronLeft className="w-4 h-4" /> Retour aux Matières
+        </button>
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-xl bg-indigo-600 text-white">
+            <Layers className="w-4 h-4" />
+          </div>
+          <div>
+            <h2 className="text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>Ajouter une Matière EPST</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Pondération et coefficient officiel</p>
+          </div>
+        </div>
+      </div>
+      <form onSubmit={handleSubmit} className="max-w-2xl space-y-4 p-6 rounded-2xl border shadow-xs" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-extrabold uppercase" style={{ color: 'var(--text-primary)' }}>Nom de la Matière *</label>
+            <input type="text" required placeholder="ex: Mathématiques Générales" value={nom} onChange={e => setNom(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border font-bold text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-extrabold uppercase" style={{ color: 'var(--text-primary)' }}>Code EPST *</label>
+            <input type="text" required placeholder="ex: MATH" value={code} onChange={e => setCode(e.target.value.toUpperCase())}
+              className="w-full px-4 py-2.5 rounded-xl border font-mono font-bold text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-extrabold uppercase" style={{ color: 'var(--text-primary)' }}>Catégorie EPST RDC</label>
+          <CustomSelect
+            options={[
+              { value: 'Sciences & Mathématiques', label: 'Sciences & Mathématiques (STEM)' },
+              { value: 'Langues & Lettres', label: 'Langues, Français & Anglais' },
+              { value: 'Commercial & OHADA', label: 'Commerciale, Comptabilité & Gestion' },
+              { value: 'Sciences Humaines', label: 'Sciences Humaines, Histoire & Géo' },
+              { value: 'Technologie & Arts', label: 'Technologie, Informatique & Métiers' },
+            ]}
+            value={categorie}
+            onChange={setCategorie}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-extrabold uppercase" style={{ color: 'var(--text-primary)' }}>Coefficient</label>
+            <input type="number" min={1} max={10} value={coefficient} onChange={e => setCoefficient(Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border font-black text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-extrabold uppercase" style={{ color: 'var(--text-primary)' }}>Maximum Points</label>
+            <input type="number" min={10} value={maxScore} onChange={e => setMaxScore(Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border font-black text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+          </div>
+        </div>
+        <div className="pt-2 flex justify-end gap-2">
+          <button type="button" onClick={onBack} className="px-4 py-2 rounded-xl border font-bold text-xs hover:bg-slate-500/10 cursor-pointer" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>Annuler</button>
+          <button type="submit" className="px-6 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-sm cursor-pointer">Enregistrer la Matière</button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+const CreateClassPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+  const [nom, setNom] = useState('');
+  const [salle, setSalle] = useState('');
+  const [titulaire, setTitulaire] = useState('');
+  const [cycle, setCycle] = useState('PRIMAIRE');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nom.trim()) return;
+    await LocalDatabaseService.addClass({
+      id: `cls-${Date.now()}`,
+      cycleId: cycle,
+      nom,
+      salle,
+      nombreEleves: 0,
+      professeurTitulaire: titulaire || 'A affecter'
+    } as any);
+    onBack();
+  };
+
+  return (
+    <div className="space-y-5 animate-fade-in">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="flex items-center gap-2 px-3 py-1.5 rounded-xl border font-bold text-xs hover:bg-slate-500/10 transition-all cursor-pointer" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+          <ChevronLeft className="w-4 h-4" /> Retour aux Classes
+        </button>
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-xl bg-indigo-600 text-white"><BookOpen className="w-4 h-4" /></div>
+          <div>
+            <h2 className="text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>Créer une Nouvelle Classe</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Promotion scolaire avec affectation de titulaire</p>
+          </div>
+        </div>
+      </div>
+      <form onSubmit={handleSubmit} className="max-w-2xl space-y-4 p-6 rounded-2xl border shadow-xs" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+        <div className="space-y-1.5">
+          <label className="text-xs font-extrabold uppercase" style={{ color: 'var(--text-primary)' }}>Nom de la Classe *</label>
+          <input type="text" required placeholder="ex: 4ème Primaire B" value={nom} onChange={e => setNom(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl border font-bold text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+            style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-extrabold uppercase" style={{ color: 'var(--text-primary)' }}>Cycle</label>
+          <CustomSelect
+            options={[
+              { value: 'MATERNELLE', label: 'Cycle Maternelle' },
+              { value: 'PRIMAIRE', label: 'Cycle Primaire' },
+              { value: 'SECONDAIRE_CTEB', label: '7ème & 8ème CTEB' },
+              { value: 'HUMANITES', label: 'Humanités Générales & Techniques' },
+            ]}
+            value={cycle}
+            onChange={setCycle}
+          />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-extrabold uppercase" style={{ color: 'var(--text-primary)' }}>Salle Attribuée</label>
+            <input type="text" placeholder="ex: Salle B-205" value={salle} onChange={e => setSalle(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border font-bold text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-extrabold uppercase" style={{ color: 'var(--text-primary)' }}>Professeur Titulaire</label>
+            <input type="text" placeholder="ex: M. Jean Kabila" value={titulaire} onChange={e => setTitulaire(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border font-bold text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+          </div>
+        </div>
+        <div className="pt-2 flex justify-end gap-2">
+          <button type="button" onClick={onBack} className="px-4 py-2 rounded-xl border font-bold text-xs hover:bg-slate-500/10 cursor-pointer" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>Annuler</button>
+          <button type="submit" className="px-6 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-sm cursor-pointer">Créer la Classe</button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+const ManageRoomsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => (
+  <div className="space-y-5 animate-fade-in">
+    <div className="flex items-center gap-3">
+      <button onClick={onBack} className="flex items-center gap-2 px-3 py-1.5 rounded-xl border font-bold text-xs hover:bg-slate-500/10 transition-all cursor-pointer" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+        <ChevronLeft className="w-4 h-4" /> Retour aux Classes
+      </button>
+      <div className="flex items-center gap-2.5">
+        <div className="p-2 rounded-xl bg-indigo-600 text-white"><School className="w-4 h-4" /></div>
+        <div>
+          <h2 className="text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>Gestion des Salles Physiques</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Locaux et attribution par cycle d'enseignement</p>
+        </div>
+      </div>
+    </div>
+    <div className="p-8 rounded-2xl border text-center" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+      <School className="w-10 h-10 text-indigo-400 mx-auto mb-3" />
+      <h3 className="text-sm font-extrabold mb-1" style={{ color: 'var(--text-primary)' }}>Gestion des Salles via l'Année Scolaire</h3>
+      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">Les salles physiques sont configurées lors de la création d'une année scolaire. Accédez à l'onglet "Année Scolaire" pour gérer les salles d'études.</p>
+    </div>
+  </div>
+);
+
+const CreateYearPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+
+  // Étape 1 : Infos Générales
+  const [nom, setNom] = useState('2026–2027');
+  const [debut, setDebut] = useState('07 Septembre 2026');
+  const [fin, setFin] = useState('03 Juillet 2027');
+  const [statut, setStatut] = useState<'PLANIFIEE' | 'EN_COURS'>('PLANIFIEE');
+  const [targetEleves, setTargetEleves] = useState(0);
+
+  // Étape 2 : Configuration des frais par portée / variation
+  const [porteeType, setPorteeType] = useState<'general' | 'cycle' | 'option' | 'classe'>('general');
+  const [selectedPorteeVal, setSelectedPorteeVal] = useState('Général (Tous)');
+  const [tempLibelle, setTempLibelle] = useState('');
+  const [tempMontant, setTempMontant] = useState(0);
+  const [tempPriorite, setTempPriorite] = useState('Priorité 1 — Exigible à l\'inscription');
+  const [currentFraisItems, setCurrentFraisItems] = useState<{ id: string; libelle: string; montant: number; priorite: string }[]>([]);
+  const [configuredFraisGroups, setConfiguredFraisGroups] = useState<{ id: string; porteeType: string; porteeVal: string; fraisList: { id: string; libelle: string; montant: number; priorite: string }[] }[]>([]);
+
+  // Étape 3 : Salles & Classes par Cycle
+  const [selectedCycle, setSelectedCycle] = useState<'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES'>('PRIMAIRE');
+  const [selectedOption, setSelectedOption] = useState('TRONC_COMMUN');
+  const [tempClassName, setTempClassName] = useState('');
+  const [tempRoomCode, setTempRoomCode] = useState('');
+  const [tempRoomCapacity, setTempRoomCapacity] = useState(40);
+  const [configuredClassesAndRooms, setConfiguredClassesAndRooms] = useState<{ id: string; cycleCode: string; optionCode: string; nomClasse: string; codeSalle: string; capacite: number }[]>([]);
+
+  // Étape 4 : Découpage Evaluation par Cycle
+  const [selectedCycleDecoupage, setSelectedCycleDecoupage] = useState<'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES'>('PRIMAIRE');
+  const [decoupageType, setDecoupageType] = useState<'TRIMESTRES_SIMPLE' | 'TRIMESTRES_DECOUPES' | 'SEMESTRES_DECOUPES'>('TRIMESTRES_SIMPLE');
+  const [configuredDecoupages, setConfiguredDecoupages] = useState<Record<string, 'TRIMESTRES_SIMPLE' | 'TRIMESTRES_DECOUPES' | 'SEMESTRES_DECOUPES'>>({
+    MATERNELLE: 'TRIMESTRES_SIMPLE',
+    PRIMAIRE: 'TRIMESTRES_SIMPLE',
+    SECONDAIRE_CTEB: 'TRIMESTRES_DECOUPES',
+    HUMANITES: 'TRIMESTRES_DECOUPES',
+  });
+
+  // Devise du système
+  const systemCurrency = useMemo(() => {
+    try {
+      const cfg = JSON.parse(localStorage.getItem('ecolisa_school_config') || '{}');
+      return cfg.devise || cfg.currency || 'USD';
+    } catch { return 'USD'; }
+  }, []);
+
+  // Étape 2 : Ajouter un frais à la portée courante
+  const handleAddFraisItem = () => {
+    if (!tempLibelle.trim()) return;
+    setCurrentFraisItems(prev => [
+      ...prev,
+      { id: `fi-${Date.now()}`, libelle: tempLibelle.trim(), montant: tempMontant, priorite: tempPriorite }
+    ]);
+    setTempLibelle('');
+    setTempMontant(0);
+  };
+
+  // Étape 2 : Enregistrer la configuration de frais pour cette portée
+  const handleSaveFraisGroup = () => {
+    if (currentFraisItems.length === 0) return;
+    setConfiguredFraisGroups(prev => [
+      ...prev,
+      {
+        id: `fg-${Date.now()}`,
+        porteeType,
+        porteeVal: selectedPorteeVal,
+        fraisList: currentFraisItems
+      }
+    ]);
+    setCurrentFraisItems([]);
+    setSelectedPorteeVal('');
+  };
+
+  // Étape 3 : Ajouter une classe et sa salle au cycle courant
+  const handleAddClassAndRoom = () => {
+    if (!tempClassName.trim() || !tempRoomCode.trim()) return;
+    setConfiguredClassesAndRooms(prev => [
+      ...prev,
+      {
+        id: `cr-${Date.now()}`,
+        cycleCode: selectedCycle,
+        optionCode: selectedCycle === 'HUMANITES' ? selectedOption : 'TRONC_COMMUN',
+        nomClasse: tempClassName.trim(),
+        codeSalle: tempRoomCode.toUpperCase().trim(),
+        capacite: tempRoomCapacity
+      }
+    ]);
+    setTempClassName('');
+    setTempRoomCode('');
+  };
+
+  // Étape 4 : Assigner le découpage au cycle sélectionné
+  const handleSaveDecoupage = () => {
+    setConfiguredDecoupages(prev => ({
+      ...prev,
+      [selectedCycleDecoupage]: decoupageType
+    }));
+  };
+
+  // Étape 5 : Persistance générale dans la base de données
+  const handleCreateYear = async () => {
+    // 1. Extraire les frais généraux pour peupler les champs de base de l'année scolaire
+    const generalGroup = configuredFraisGroups.find(g => g.porteeType === 'general');
+    const getFraisAmount = (name: string): number => {
+      const match = generalGroup?.fraisList.find(f => f.libelle.toLowerCase().includes(name.toLowerCase()));
+      return match ? match.montant : 0;
+    };
+
+    // 2. Transformer configuredFraisGroups en FraisAnnexeConfig[]
+    const fraisAnnexes: FraisAnnexeConfig[] = [];
+    configuredFraisGroups.forEach(g => {
+      g.fraisList.forEach(f => {
+        fraisAnnexes.push({
+          id: f.id,
+          intitule: `${f.libelle} (${g.porteeVal})`,
+          montant: f.montant,
+          devise: systemCurrency === 'CDF' ? 'CDF' : 'USD',
+          obligatoire: true,
+          typeFrais: f.libelle.toLowerCase().includes('inscription') ? 'INSCRIPTION' :
+                     f.libelle.toLowerCase().includes('connexion') ? 'CONNEXION' :
+                     f.libelle.toLowerCase().includes('carte') ? 'CARTE' : 'AUTRE',
+          priorite: f.priorite,
+          portee: g.porteeVal
+        });
+      });
+    });
+
+    // 3. Transformer configuredClassesAndRooms en cycles et salles configs
+    const cycles: CycleConfig[] = Object.keys(configuredDecoupages).map(c => {
+      const classesForCycle = configuredClassesAndRooms.filter(cr => cr.cycleCode === c);
+      return {
+        id: `cy-${c}`,
+        code: c as any,
+        nom: c === 'MATERNELLE' ? 'Cycle Maternelle' :
+             c === 'PRIMAIRE' ? 'Cycle Primaire' :
+             c === 'SECONDAIRE_CTEB' ? '7ème & 8ème CTEB' : 'Humanités',
+        actif: true,
+        classesCount: classesForCycle.length,
+        sallesCount: new Set(classesForCycle.map(cr => cr.codeSalle)).size
+      };
+    });
+
+    const salles: SalleConfig[] = configuredClassesAndRooms.map(cr => ({
+      id: `sa-${cr.id}`,
+      codeSalle: cr.codeSalle,
+      nomSalle: `Local ${cr.codeSalle} - ${cr.nomClasse}`,
+      capacite: cr.capacite,
+      cycleCode: cr.cycleCode as any
+    }));
+
+    // 4. Générer les périodes basées sur le découpage configuré
+    const periodes: { id: string; nom: string; debut: string; fin: string; type: 'PERIOD' | 'EXAM' }[] = [];
+    Object.entries(configuredDecoupages).forEach(([c, type]) => {
+      const cycleLabel = c === 'PRIMAIRE' ? 'Primaire' : 'Secondaire';
+      if (type === 'TRIMESTRES_SIMPLE') {
+        periodes.push(
+          { id: `p-${c}-t1`, nom: `1er Trimestre (${cycleLabel})`, debut: 'Septembre', fin: 'Décembre', type: 'PERIOD' },
+          { id: `p-${c}-t2`, nom: `2ème Trimestre (${cycleLabel})`, debut: 'Janvier', fin: 'Mars', type: 'PERIOD' },
+          { id: `p-${c}-t3`, nom: `3ème Trimestre (${cycleLabel})`, debut: 'Avril', fin: 'Juillet', type: 'PERIOD' }
+        );
+      } else if (type === 'TRIMESTRES_DECOUPES') {
+        periodes.push(
+          { id: `p-${c}-t1p1`, nom: `T1 - 1ère Période (${cycleLabel})`, debut: 'Septembre', fin: 'Octobre', type: 'PERIOD' },
+          { id: `p-${c}-t1p2`, nom: `T1 - 2ème Période (${cycleLabel})`, debut: 'Novembre', fin: 'Décembre', type: 'PERIOD' },
+          { id: `p-${c}-t1ex`, nom: `T1 - Examens (${cycleLabel})`, debut: 'Décembre', fin: 'Décembre', type: 'EXAM' },
+          { id: `p-${c}-t2p3`, nom: `T2 - 3ème Période (${cycleLabel})`, debut: 'Janvier', fin: 'Février', type: 'PERIOD' },
+          { id: `p-${c}-t2p4`, nom: `T2 - 4ème Période (${cycleLabel})`, debut: 'Février', fin: 'Mars', type: 'PERIOD' },
+          { id: `p-${c}-t2ex`, nom: `T2 - Examens (${cycleLabel})`, debut: 'Mars', fin: 'Mars', type: 'EXAM' },
+          { id: `p-${c}-t3ex`, nom: `T3 - Examens & Jurys (${cycleLabel})`, debut: 'Juin', fin: 'Juillet', type: 'EXAM' }
+        );
+      } else {
+        periodes.push(
+          { id: `p-${c}-s1p1`, nom: `S1 - 1ère Période (${cycleLabel})`, debut: 'Septembre', fin: 'Novembre', type: 'PERIOD' },
+          { id: `p-${c}-s1p2`, nom: `S1 - 2ème Période (${cycleLabel})`, debut: 'Novembre', fin: 'Janvier', type: 'PERIOD' },
+          { id: `p-${c}-s1ex`, nom: `S1 - Examens Semestriels (${cycleLabel})`, debut: 'Janvier', fin: 'Janvier', type: 'EXAM' },
+          { id: `p-${c}-s2p3`, nom: `S2 - 3ème Période (${cycleLabel})`, debut: 'Février', fin: 'Avril', type: 'PERIOD' },
+          { id: `p-${c}-s2p4`, nom: `S2 - 4ème Période (${cycleLabel})`, debut: 'Avril', fin: 'Juin', type: 'PERIOD' },
+          { id: `p-${c}-s2ex`, nom: `S2 - Examens Finaux (${cycleLabel})`, debut: 'Juin', fin: 'Juillet', type: 'EXAM' }
+        );
+      }
+    });
+
+    const newYear: AnneeScolaireConfig = {
+      id: `ay-${Date.now()}`,
+      nom,
+      statut,
+      debut,
+      fin,
+      nombreElevesTotal: 0,
+      fraisInscription: getFraisAmount('inscription') || getFraisAmount('minerval') || 50,
+      fraisConnexion: getFraisAmount('connexion') || getFraisAmount('système') || 15,
+      fraisReinscription: getFraisAmount('réinscription') || 30,
+      fraisCarte: getFraisAmount('carte') || getFraisAmount('badge') || 10,
+      fraisAnnexes,
+      cycles,
+      salles,
+      semestres: [],
+      periodes
+    };
+
+    // Sauvegarder dans SQLite via IPC
+    await LocalDatabaseService.addSchoolYear(newYear);
+
+    await Promise.all(configuredClassesAndRooms.map(cr =>
+      LocalDatabaseService.addClass({
+        id: `cls-${cr.id}`,
+        cycleId: cr.cycleCode,
+        schoolYearId: newYear.id,
+        nom: cr.nomClasse,
+        salle: cr.codeSalle,
+        nombreEleves: 0,
+        professeurTitulaire: 'A affecter'
+      } as any)
+    ));
+
+    onBack();
+  };
+
+  const steps = [
+    { n: 1, label: 'Général & Dates', icon: Calendar },
+    { n: 2, label: 'Frais & Tarification', icon: CreditCard },
+    { n: 3, label: 'Cycles, Classes & Salles', icon: School },
+    { n: 4, label: 'Découpage Pédagogique', icon: Layers },
+    { n: 5, label: 'Validation Finale', icon: CheckCircle2 },
+  ] as const;
+
+  return (
+    <div className="space-y-5 animate-fade-in">
+      {/* Barre supérieure */}
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="flex items-center gap-2 px-3 py-1.5 rounded-xl border font-bold text-xs hover:bg-slate-500/10 transition-all cursor-pointer" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+          <ChevronLeft className="w-4 h-4" /> Retour aux Années Scolaires
+        </button>
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-xl bg-indigo-600 text-white"><Sparkles className="w-4 h-4 text-amber-300" /></div>
+          <div>
+            <h2 className="text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>Créer une Nouvelle Année Scolaire</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Configuration complète · Devise active : <span className="font-black text-indigo-600 dark:text-indigo-400">{systemCurrency}</span></p>
+          </div>
+        </div>
+      </div>
+
+      {/* Stepper horizontal */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {steps.map(s => {
+          const SIcon = s.icon;
+          const isActive = wizardStep === s.n;
+          const isDone = wizardStep > s.n;
+          return (
+            <button key={s.n} onClick={() => setWizardStep(s.n as any)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                isActive ? 'bg-indigo-600 text-white' : isDone ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-500/10'
+              }`}>
+              <SIcon className="w-3.5 h-3.5" />
+              <span>{s.n}. {s.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Contenu principal de l'assistant */}
+      <div className="p-6 rounded-2xl border shadow-xs" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+
+        {/* ÉTAPE 1 : Infos Générales & Dates */}
+        {wizardStep === 1 && (
+          <div className="space-y-4 animate-fade-in">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Intitulé de l'Année Scolaire *</label>
+                <input type="text" required value={nom} onChange={e => setNom(e.target.value)} placeholder="ex: 2026–2027"
+                  className="w-full px-3.5 py-2 rounded-lg border font-bold text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Objectif Prévisionnel d'Élèves</label>
+                <input type="number" value={targetEleves} onChange={e => setTargetEleves(Number(e.target.value))}
+                  className="w-full px-3.5 py-2 rounded-lg border font-bold text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Date de Rentrée *</label>
+                <input type="text" required value={debut} onChange={e => setDebut(e.target.value)} placeholder="07 Septembre 2026"
+                  className="w-full px-3.5 py-2 rounded-lg border font-bold text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Date de Clôture *</label>
+                <input type="text" required value={fin} onChange={e => setFin(e.target.value)} placeholder="03 Juillet 2027"
+                  className="w-full px-3.5 py-2 rounded-lg border font-bold text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Statut Initial *</label>
+              <CustomSelect
+                options={[
+                  { value: 'PLANIFIEE', label: 'PLANIFIÉE — Préparation administrative' },
+                  { value: 'EN_COURS', label: 'EN COURS — Année active immédiatement' },
+                ]}
+                value={statut}
+                onChange={val => setStatut(val as any)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ÉTAPE 2 : Configuration des frais par portée / variation */}
+        {wizardStep === 2 && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="p-4 rounded-xl border bg-indigo-500/10 border-indigo-500/25 flex items-start gap-3">
+              <CreditCard className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Configuration Modulaire des Frais</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Sélectionnez d'abord la portée (Cycle, Option...) pour laquelle vous souhaitez définir des frais, puis configurez-les un par un. Ajoutez ensuite cette configuration pour passer aux autres variations.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Formulaire de saisie courante */}
+              <div className="p-4 rounded-xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                <h3 className="text-xs font-black uppercase text-indigo-500 tracking-wider">1. Portée de la Variation</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Type de Portée</label>
+                    <CustomSelect
+                      options={[
+                        { value: 'general', label: 'Général (Tous)' },
+                        { value: 'cycle', label: 'Cycle' },
+                        { value: 'option', label: 'Option Spécifique' },
+                      ]}
+                      value={porteeType}
+                      onChange={val => {
+                        setPorteeType(val as any);
+                        setSelectedPorteeVal(val === 'general' ? 'Général (Tous)' : '');
+                      }}
+                    />
+                  </div>
+
+                  {porteeType === 'cycle' && (
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Choix du Cycle</label>
+                      <CustomSelect
+                        options={[
+                          { value: 'Cycle Maternelle', label: 'Maternelle' },
+                          { value: 'Cycle Primaire', label: 'Primaire' },
+                          { value: 'Cycle CTEB (7e/8e)', label: 'CTEB (7e/8e)' },
+                          { value: 'Cycle Humanités', label: 'Humanités' },
+                        ]}
+                        value={selectedPorteeVal}
+                        onChange={setSelectedPorteeVal}
+                      />
+                    </div>
+                  )}
+
+                  {porteeType === 'option' && (
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Choix de l'Option</label>
+                      <CustomSelect
+                        options={[
+                          { value: 'Option Math-Physique', label: 'Math-Physique' },
+                          { value: 'Option Biologie-Chimie', label: 'Biologie-Chimie' },
+                          { value: 'Option Commerciale & Gestion', label: 'Commerciale & Gestion' },
+                          { value: 'Option Pédagogie Générale', label: 'Pédagogie Générale' },
+                        ]}
+                        value={selectedPorteeVal}
+                        onChange={setSelectedPorteeVal}
+                      />
+                    </div>
+                  )}
+
+                  {porteeType === 'general' && (
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Valeur</label>
+                      <input type="text" readOnly value="Général (Tous)" className="w-full px-3 py-2 rounded-lg border text-xs bg-slate-500/10 font-bold" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t pt-4 space-y-3" style={{ borderColor: 'var(--border)' }}>
+                  <h3 className="text-xs font-black uppercase text-indigo-500 tracking-wider">2. Ajouter des frais pour cette portée</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Libellé du frais</label>
+                      <input type="text" placeholder="ex: Frais d'inscription" value={tempLibelle} onChange={e => setTempLibelle(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border font-bold text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Montant ({systemCurrency})</label>
+                      <input type="number" min={0} value={tempMontant} onChange={e => setTempMontant(Number(e.target.value))}
+                        className="w-full px-3 py-2 rounded-lg border font-black text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Priorité</label>
+                    <CustomSelect
+                      options={[
+                        { value: 'Priorité 1 — Exigible à l\'inscription', label: 'Priorité 1 — Exigible à l\'inscription' },
+                        { value: 'Priorité 2 — Exigible au 1er mois', label: 'Priorité 2 — Exigible au 1er mois' },
+                        { value: 'Priorité 3 — Exigible ultérieurement', label: 'Priorité 3 — Exigible ultérieurement' },
+                      ]}
+                      value={tempPriorite}
+                      onChange={setTempPriorite}
+                    />
+                  </div>
+
+                  <button type="button" onClick={handleAddFraisItem} className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs">
+                    <Plus className="w-4 h-4" /> Ajouter ce frais à la liste temporaire
+                  </button>
+                </div>
+
+                {/* Liste temporaire pour la portée en cours */}
+                {currentFraisItems.length > 0 && (
+                  <div className="p-3.5 rounded-lg border space-y-2" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+                    <p className="text-xs font-black uppercase text-slate-500">Frais définis pour : {selectedPorteeVal}</p>
+                    <div className="space-y-1">
+                      {currentFraisItems.map(item => (
+                        <div key={item.id} className="flex justify-between items-center text-xs py-1">
+                          <span className="font-bold text-slate-600 dark:text-slate-300">{item.libelle} ({item.priorite})</span>
+                          <span className="font-black text-indigo-600 dark:text-indigo-400">{item.montant} {systemCurrency}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <button type="button" onClick={handleSaveFraisGroup} className="w-full py-2 mt-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer">
+                      <Check className="w-4 h-4" /> Valider & Enregistrer cette Portée
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Récapitulatif des configurations de frais enregistrées */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">Configurations de Frais Enregistrées ({configuredFraisGroups.length})</h3>
+                {configuredFraisGroups.length === 0 ? (
+                  <div className="p-8 text-center rounded-xl border border-dashed" style={{ borderColor: 'var(--border)' }}>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">Aucune configuration de portée enregistrée pour l'instant.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {configuredFraisGroups.map(g => (
+                      <div key={g.id} className="p-4 rounded-xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                        <div className="flex justify-between items-center">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
+                            PORTÉE : {g.porteeVal}
+                          </span>
+                          <button onClick={() => setConfiguredFraisGroups(prev => prev.filter(x => x.id !== g.id))} className="text-rose-500 hover:bg-rose-500/15 p-1 rounded-md cursor-pointer">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="divide-y divide-slate-200 dark:divide-slate-800 text-xs">
+                          {g.fraisList.map(f => (
+                            <div key={f.id} className="flex justify-between items-center py-1.5">
+                              <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{f.libelle}</span>
+                              <span className="font-black text-indigo-600 dark:text-indigo-400">{f.montant} {systemCurrency}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ÉTAPE 3 : Configuration des cycles, classes et salles */}
+        {wizardStep === 3 && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="p-4 rounded-xl border bg-indigo-500/10 border-indigo-500/25 flex items-start gap-3">
+              <School className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Saisie Itérative des Classes & Salles Physiques</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Sélectionnez un cycle (et une option si applicable), puis créez progressivement chaque classe physique avec sa salle d'études et sa capacité maximale.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Formulaire de configuration */}
+              <div className="p-4 rounded-xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                <h3 className="text-xs font-black uppercase text-indigo-500 tracking-wider">1. Cibler le Cycle</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Cycle d'Enseignement</label>
+                    <CustomSelect
+                      options={[
+                        { value: 'MATERNELLE', label: 'Cycle Maternelle' },
+                        { value: 'PRIMAIRE', label: 'Cycle Primaire' },
+                        { value: 'SECONDAIRE_CTEB', label: '7ème & 8ème CTEB' },
+                        { value: 'HUMANITES', label: 'Secondaire / Humanités' },
+                      ]}
+                      value={selectedCycle}
+                      onChange={val => setSelectedCycle(val as any)}
+                    />
+                  </div>
+
+                  {selectedCycle === 'HUMANITES' ? (
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Option / Section</label>
+                      <CustomSelect
+                        options={[
+                          { value: 'Math-Physique', label: 'Mathématique-Physique' },
+                          { value: 'Biologie-Chimie', label: 'Biologie-Chimie' },
+                          { value: 'Commerciale', label: 'Commerciale & Gestion' },
+                          { value: 'Pédagogie', label: 'Pédagogie Générale' },
+                          { value: 'Littéraire', label: 'Littéraire & Langues' },
+                        ]}
+                        value={selectedOption}
+                        onChange={setSelectedOption}
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Option</label>
+                      <input type="text" readOnly value="Tronc commun" className="w-full px-3 py-2 rounded-lg border text-xs bg-slate-500/10 font-bold" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t pt-4 space-y-3" style={{ borderColor: 'var(--border)' }}>
+                  <h3 className="text-xs font-black uppercase text-indigo-500 tracking-wider">2. Ajouter des classes et salles</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1 col-span-2">
+                      <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Nom de la Classe</label>
+                      <input type="text" placeholder="ex: 5ème Primaire A ou 3ème Commerciale A" value={tempClassName} onChange={e => setTempClassName(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border font-bold text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Code de la Salle Physique</label>
+                      <input type="text" placeholder="ex: Salle B-102" value={tempRoomCode} onChange={e => setTempRoomCode(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border font-bold text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Capacité max élèves</label>
+                      <input type="number" min={1} value={tempRoomCapacity} onChange={e => setTempRoomCapacity(Number(e.target.value))}
+                        className="w-full px-3 py-2 rounded-lg border font-black text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+                    </div>
+                  </div>
+
+                  <button type="button" onClick={handleAddClassAndRoom} className="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm">
+                    <Plus className="w-4 h-4" /> Ajouter cette classe et salle physique
+                  </button>
+                </div>
+              </div>
+
+              {/* Récapitulatif des classes configurées */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">Classes & Salles enregistrées ({configuredClassesAndRooms.length})</h3>
+                {configuredClassesAndRooms.length === 0 ? (
+                  <div className="p-8 text-center rounded-xl border border-dashed" style={{ borderColor: 'var(--border)' }}>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">Aucune salle ou classe configurée pour le moment.</p>
+                  </div>
+                ) : (
+                  <div className="max-h-96 overflow-y-auto space-y-2">
+                    {configuredClassesAndRooms.map(cr => (
+                      <div key={cr.id} className="p-3 rounded-xl border flex items-center justify-between text-xs" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                        <div>
+                          <p className="font-extrabold" style={{ color: 'var(--text-primary)' }}>{cr.nomClasse}</p>
+                          <div className="flex gap-2 items-center text-[10.5px] mt-0.5 text-slate-500">
+                            <span>Cycle: {cr.cycleCode}</span>
+                            <span>· Salle: {cr.codeSalle} (max: {cr.capacite})</span>
+                            {cr.optionCode !== 'TRONC_COMMUN' && <span className="text-indigo-500">· {cr.optionCode}</span>}
+                          </div>
+                        </div>
+                        <button onClick={() => setConfiguredClassesAndRooms(prev => prev.filter(x => x.id !== cr.id))} className="text-rose-500 hover:bg-rose-500/15 p-1 rounded-md cursor-pointer">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ÉTAPE 4 : Découpage Pédagogique spécifique selon cycle */}
+        {wizardStep === 4 && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="p-4 rounded-xl border bg-indigo-500/10 border-indigo-500/25 flex items-start gap-3">
+              <Layers className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Découpage & Évaluations par Cycle (RDC EPST)</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Au Primaire en RDC, les élèves sont évalués par trimestres simples. Au Secondaire, 7e/8e EB et Humanités, chaque trimestre comprend des périodes d'interrogation et un examen périodique.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Formulaire */}
+              <div className="p-4 rounded-xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>1. Sélectionnez le Cycle</label>
+                  <CustomSelect
+                    options={[
+                      { value: 'MATERNELLE', label: 'Cycle Maternelle' },
+                      { value: 'PRIMAIRE', label: 'Cycle Primaire' },
+                      { value: 'SECONDAIRE_CTEB', label: '7ème & 8ème CTEB' },
+                      { value: 'HUMANITES', label: 'Secondaire / Humanités' },
+                    ]}
+                    value={selectedCycleDecoupage}
+                    onChange={val => {
+                      setSelectedCycleDecoupage(val as any);
+                      // Auto-select recommendations based on cycle
+                      if (val === 'PRIMAIRE' || val === 'MATERNELLE') {
+                        setDecoupageType('TRIMESTRES_SIMPLE');
+                      } else {
+                        setDecoupageType('TRIMESTRES_DECOUPES');
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-2 border-t pt-4" style={{ borderColor: 'var(--border)' }}>
+                  <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>2. Modèle d'évaluation conseillé</label>
+                  <div className="space-y-2">
+                    {[
+                      { val: 'TRIMESTRES_SIMPLE', label: 'Trimestres simples (Sans sous-périodes)', desc: '3 évaluations trimestrielles directes (Recommandé pour Primaire & Maternelle)' },
+                      { val: 'TRIMESTRES_DECOUPES', label: 'Trimestres découpés en périodes', desc: 'Trimestre 1 & 2 divisés en 2 Périodes + Examens (Recommandé pour Secondaire & CTEB)' },
+                      { val: 'SEMESTRES_DECOUPES', label: '2 Semestres découpés en périodes', desc: '2 grands semestres divisés chacun en 2 Périodes + Examens' },
+                    ].map(o => (
+                      <div key={o.val} onClick={() => setDecoupageType(o.val as any)}
+                        className={`p-3 rounded-xl border cursor-pointer text-left transition-all ${decoupageType === o.val ? 'bg-indigo-500/10 border-indigo-500/40 ring-1 ring-indigo-500/30' : 'hover:bg-slate-500/5 opacity-80'}`}
+                        style={decoupageType === o.val ? {} : { borderColor: 'var(--border)' }}>
+                        <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{o.label}</p>
+                        <p className="text-[10.5px] text-slate-500 dark:text-slate-400 mt-0.5">{o.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <button type="button" onClick={handleSaveDecoupage} className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm">
+                  <Check className="w-4 h-4" /> Enregistrer le Découpage pour ce Cycle
+                </button>
+              </div>
+
+              {/* Récapitulatif du découpage */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">Configurations de découpage par cycle</h3>
+                <div className="p-4 rounded-xl border divide-y divide-slate-200 dark:divide-slate-800 space-y-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  {Object.entries(configuredDecoupages).map(([cycle, type]) => (
+                    <div key={cycle} className="flex justify-between items-center py-2 text-xs">
+                      <div>
+                        <p className="font-extrabold" style={{ color: 'var(--text-primary)' }}>
+                          {cycle === 'MATERNELLE' ? 'Maternelle' : cycle === 'PRIMAIRE' ? 'Primaire' : cycle === 'SECONDAIRE_CTEB' ? 'CTEB (7e/8e)' : 'Humanités'}
+                        </p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                          {type === 'TRIMESTRES_SIMPLE' ? 'Trimestres simples' : type === 'TRIMESTRES_DECOUPES' ? 'Trimestres découpés en périodes' : 'Semestres découpés'}
+                        </p>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
+                        ACTIF
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ÉTAPE 5 : Validation Finale & Persistance générale */}
+        {wizardStep === 5 && (
+          <div className="space-y-6 animate-fade-in">
+            <div className="text-center py-4 space-y-2">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-500/30">
+                <CheckCircle2 className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-black" style={{ color: 'var(--text-primary)' }}>Validation Générale & Création de l'Année Scolaire</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                Toutes les configurations sont prêtes à être sauvegardées définitivement dans la base de données.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl border space-y-2 text-xs" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                <h4 className="font-extrabold uppercase text-indigo-500">Général & Dates</h4>
+                <p style={{ color: 'var(--text-primary)' }}><span className="font-bold">Libellé :</span> Année {nom}</p>
+                <p style={{ color: 'var(--text-primary)' }}><span className="font-bold">Période :</span> du {debut} au {fin}</p>
+                <p style={{ color: 'var(--text-primary)' }}><span className="font-bold">Objectif :</span> {targetEleves} élèves</p>
+                <p style={{ color: 'var(--text-primary)' }}><span className="font-bold">Statut initial :</span> {statut}</p>
+              </div>
+
+              <div className="p-4 rounded-xl border space-y-2 text-xs" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                <h4 className="font-extrabold uppercase text-indigo-500">Statistiques de Structure</h4>
+                <p style={{ color: 'var(--text-primary)' }}><span className="font-bold">Rubriques de frais configurées :</span> {configuredFraisGroups.reduce((acc, g) => acc + g.fraisList.length, 0)}</p>
+                <p style={{ color: 'var(--text-primary)' }}><span className="font-bold">Classes d'études configurées :</span> {configuredClassesAndRooms.length}</p>
+                <p style={{ color: 'var(--text-primary)' }}><span className="font-bold">Salles physiques attribuées :</span> {new Set(configuredClassesAndRooms.map(cr => cr.codeSalle)).size}</p>
+              </div>
+            </div>
+
+            <div className="flex justify-center pt-4">
+              <button type="button" onClick={handleCreateYear}
+                className="px-8 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm flex items-center gap-2 shadow-md cursor-pointer transition-all border border-emerald-500/40">
+                <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
+                <span>Créer & Enregistrer l'Année Scolaire</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Boutons de navigation globale */}
+        {wizardStep < 5 && (
+          <div className="flex justify-between items-center mt-6 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+            <button type="button" onClick={() => wizardStep > 1 && setWizardStep(prev => (prev - 1) as any)} disabled={wizardStep === 1}
+              className="flex items-center gap-1 px-4 py-2 rounded-lg border font-bold text-xs disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-500/10 cursor-pointer transition-all"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+              <ChevronLeft className="w-4 h-4" /> Précédent
+            </button>
+            <button type="button" onClick={() => setWizardStep(prev => (prev + 1) as any)}
+              className="flex items-center gap-1 px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs cursor-pointer shadow-sm">
+              Suivant <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+// ─── MAIN MANAGER ─────────────────────────────────────────────────────────
+
+type CreationView = 'none' | 'register_student' | 'create_class' | 'manage_rooms' | 'create_subject' | 'create_year';
+
+export const AcademicManager: React.FC<AcademicManagerProps> = ({ activeSubTab = 'students' }) => {
   const [localTab, setLocalTab] = useState(activeSubTab);
+  const [creationView, setCreationView] = useState<CreationView>('none');
 
   React.useEffect(() => {
     setLocalTab(activeSubTab);
+    setCreationView('none');
   }, [activeSubTab]);
+
+  // ── FULL-PAGE CREATION VIEWS ──
+  if (creationView === 'create_subject') {
+    return <div className="p-4 sm:p-6 animate-fade-in"><CreateSubjectPage onBack={() => setCreationView('none')} /></div>;
+  }
+  if (creationView === 'create_year') {
+    return <div className="p-4 sm:p-6 animate-fade-in"><CreateYearPage onBack={() => setCreationView('none')} /></div>;
+  }
+  if (creationView === 'create_class') {
+    return <div className="p-4 sm:p-6 animate-fade-in"><CreateClassPage onBack={() => setCreationView('none')} /></div>;
+  }
+  if (creationView === 'manage_rooms') {
+    return <div className="p-4 sm:p-6 animate-fade-in"><ManageRoomsPage onBack={() => setCreationView('none')} /></div>;
+  }
+  if (creationView === 'register_student') {
+    // availableClasses sera chargé de façon async dans StudentRegistrationModal
+    const classesList: { id: string; nom: string }[] = [];
+    return (
+      <div className="p-4 sm:p-6 animate-fade-in">
+        <StudentRegistrationModal
+          inline
+          onClose={() => setCreationView('none')}
+          onRegister={() => setCreationView('none')}
+          availableClasses={classesList}
+        />
+      </div>
+    );
+  }
 
   const renderTab = () => {
     switch (localTab) {
-      case 'students': return <StudentsTab />;
-      case 'classes':  return <ClassesTab />;
-      case 'subjects': return <SubjectsTab />;
-      case 'years':    return <SchoolYearsTab />;
+      case 'students': return <StudentsTab onOpenRegisterStudent={() => setCreationView('register_student')} />;
+      case 'classes':  return <ClassesTab onOpenCreateClass={() => setCreationView('create_class')} onOpenManageRooms={() => setCreationView('manage_rooms')} />;
+      case 'subjects': return <SubjectsTab onOpenCreateSubject={() => setCreationView('create_subject')} />;
+      case 'years':    return <SchoolYearsTab onOpenCreateYear={() => setCreationView('create_year')} />;
       case 'teachers': return <TeachersTab />;
       case 'schedule': return <ScheduleTab />;
       case 'grades':   return <GradesTab />;
-      default:         return <StudentsTab />;
+      default:         return <StudentsTab onOpenRegisterStudent={() => setCreationView('register_student')} />;
     }
   };
 
   return (
     <div className="p-4 sm:p-6">
-      {/* Content */}
       <div className="animate-fade-in" key={localTab}>
         {renderTab()}
       </div>
     </div>
   );
 };
+

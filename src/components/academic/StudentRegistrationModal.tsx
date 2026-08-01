@@ -26,6 +26,7 @@ import {
 import { Eleve } from '../../types';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
+import { LocalDatabaseService } from '../../services/localDatabase';
 
 export const PROVINCES_RDC = [
   'Kinshasa',
@@ -107,12 +108,14 @@ interface StudentRegistrationModalProps {
   onClose: () => void;
   onRegister: (newStudent: Eleve) => void;
   availableClasses: { id: string; nom: string }[];
+  inline?: boolean;
 }
 
 export const StudentRegistrationModal: React.FC<StudentRegistrationModalProps> = ({
   onClose,
   onRegister,
-  availableClasses
+  availableClasses,
+  inline = false
 }) => {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
@@ -284,19 +287,35 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationModalProps> =
       photoUrl: formData.photoUrl,
     };
 
+    LocalDatabaseService.addEleve(newStudent);
     onRegister(newStudent);
   };
 
   const modalJSX = (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-950/80 backdrop-blur-lg animate-fade-in select-none">
+    <div className={inline ? "w-full animate-fade-in select-none space-y-4" : "fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-950/80 backdrop-blur-lg animate-fade-in select-none"}>
       <div
-        className="w-full max-w-5xl rounded-[32px] shadow-2xl overflow-hidden flex flex-col border h-[90vh] max-h-[920px]"
+        className={inline ? "w-full rounded-2xl shadow-xl overflow-hidden flex flex-col border" : "w-full max-w-5xl rounded-[32px] shadow-2xl overflow-hidden flex flex-col border h-[90vh] max-h-[920px]"}
         style={{
           background: 'var(--sidebar-popover-bg)',
           borderColor: 'var(--border-strong)',
           color: 'var(--text-primary)',
         }}
       >
+        {/* BOUTON RETOUR QUAND EN MODE PAGE DÉDIÉE */}
+        {inline && (
+          <div className="px-6 py-3 border-b flex items-center gap-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+            <button
+              onClick={onClose}
+              className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-indigo-500/40"
+            >
+              <ChevronLeft className="w-4 h-4 text-white" />
+              <span>Retour à la Liste des Élèves</span>
+            </button>
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Formulaire Officiel d'Inscription de l'Élève
+            </span>
+          </div>
+        )}
         {/* ===== HEADER ONBOARDING WIZARD ===== */}
         <div
           className="px-8 py-6 border-b flex items-center justify-between gap-6 shrink-0"
@@ -1127,5 +1146,5 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationModalProps> =
     </div>
   );
 
-  return createPortal(modalJSX, document.body);
+  return inline ? modalJSX : createPortal(modalJSX, document.body);
 };

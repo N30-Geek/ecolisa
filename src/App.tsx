@@ -7,11 +7,14 @@ import { AcademicManager } from './components/academic/AcademicManager';
 import { FinanceManager } from './components/finance/FinanceManager';
 import { DocumentEngine } from './components/documents/DocumentEngine';
 import { LicenseSyncManager } from './components/system/LicenseSyncManager';
-import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
+import { OnboardingWizard, SchoolConfig } from './components/onboarding/OnboardingWizard';
+import { SettingsManager } from './components/settings/SettingsManager';
 import { StudentRegistrationModal } from './components/academic/StudentRegistrationModal';
+import { LoginScreen } from './components/auth/LoginScreen';
 import { mockClasses } from './data/mockData';
 import { RôleSystème } from './types';
 import { OfflineStorageService } from './services/offlineStorage';
+import { LocalDatabaseService, UserSession } from './services/localDatabase';
 
 // ─── Placeholder pour les modules en développement ───────────────────────────
 const ComingSoonModule: React.FC<{ title: string; icon: string; description: string }> = ({
@@ -38,8 +41,15 @@ export function App() {
   const [userRole, setUserRole] = useState<RôleSystème>('PROMOTEUR_ADMIN');
   const [activeSchoolYear, setActiveSchoolYear] = useState<string>('2025–2026');
   const [isOnline, setIsOnline] = useState<boolean>(true);
-  const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
   const [showRegistrationModal, setShowRegistrationModal] = useState<boolean>(false);
+  
+  // Auth & Onboarding State
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<UserSession | null>(null);
+  const [showOnboardingModal, setShowOnboardingModal] = useState<boolean>(false);
+  const [appLoading, setAppLoading] = useState<boolean>(true);
+
+  // Le theme reste dans localStorage (preference UI seulement)
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('ecolisa_theme') as 'dark' | 'light') || 'light';
   });
@@ -53,6 +63,27 @@ export function App() {
     root.classList.add(theme);
     body.classList.add(theme);
   }, [theme]);
+
+  // Chargement initial depuis SQLite via IPC
+  useEffect(() => {
+    const initApp = async () => {
+      await LocalDatabaseService.init();
+
+      // Lire l'onboarding depuis SQLite
+      const onboardingDone = await LocalDatabaseService.getConfig('onboarding_completed');
+      setIsOnboardingCompleted(!!onboardingDone);
+
+      // Restaurer la session utilisateur depuis SQLite
+      const user = LocalDatabaseService.getCurrentUser();
+      if (user) {
+        setCurrentUser(user);
+        setUserRole(user.role);
+      }
+
+      setAppLoading(false);
+    };
+    initApp();
+  }, []);
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
@@ -68,10 +99,46 @@ export function App() {
     setIsSidebarCollapsed(prev => !prev);
   };
 
-  const handleCompleteOnboarding = (config: any) => {
-    setShowOnboarding(false);
-    console.log('Préconfiguration Ecolisa Enregistrée :', config);
+  const handleCompleteOnboarding = async (config: SchoolConfig) => {
+    // Persister l'etat onboarding et la config ecole dans SQLite
+    await LocalDatabaseService.setConfig('onboarding_completed', true);
+    await LocalDatabaseService.setConfig('school_config', config);
+    setIsOnboardingCompleted(true);
+    setShowOnboardingModal(false);
   };
+
+  const handleLoginSuccess = async (user: UserSession) => {
+    await LocalDatabaseService.setCurrentUser(user);
+    setCurrentUser(user);
+    setUserRole(user.role);
+    setActiveTab('dashboard');
+  };
+
+  const handleLogout = async () => {
+    await LocalDatabaseService.logout();
+    setCurrentUser(null);
+  };
+
+  const handleResetAndReconfigure = async () => {
+    if (window.confirm('Etes-vous sur de vouloir reinitialiser la base de donnees et relancer la configuration initiale ?')) {
+      await LocalDatabaseService.resetDatabase();
+      setCurrentUser(null);
+      setIsOnboardingCompleted(false);
+      setShowOnboardingModal(true);
+    }
+  };
+
+  // Ecran de chargement pendant l'init SQLite
+  if (appLoading) {
+    return (
+      <div className={`h-screen w-screen flex items-center justify-center ${theme} bg-slate-50 dark:bg-slate-950`}>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-600 animate-pulse" />
+          <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Chargement de la base de donnees...</p>
+        </div>
+      </div>
+    );
+  }
 
   const renderContent = () => {
     switch (activeTab) {
@@ -123,33 +190,56 @@ export function App() {
       case 'license':
         return <LicenseSyncManager />;
       case 'settings':
-        return <ComingSoonModule title="Paramètres du Système" icon="⚙️" description="Configuration de l'établissement, années scolaires, RBAC et intégrations." />;
+        return <SettingsManager onOpenOnboarding={() => setShowOnboardingModal(true)} />;
 
       default:
         return <ExecutiveDashboard onNavigate={setActiveTab} onOpenRegistration={() => setShowRegistrationModal(true)} />;
     }
   };
 
+  // PHASES DE RENDU :
+  // 1. Si Onboarding pas encore effectué ou réinitialisé -> Afficher l'Onboarding Principal
+  if (!isOnboardingCompleted || showOnboardingModal) {
+    return (
+      <div className={`h-screen w-screen overflow-hidden flex flex-col antialiased font-sans select-none ${theme}`}>
+        <TitleBar isOnline={isOnline} />
+        <OnboardingWizard
+          onComplete={handleCompleteOnboarding}
+          onSkip={isOnboardingCompleted ? () => setShowOnboardingModal(false) : undefined}
+          isDarkMode={theme === 'dark'}
+          toggleTheme={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+        />
+      </div>
+    );
+  }
+
+  // 2. Si non authentifié -> Afficher l'Écran de Connexion
+  if (!currentUser) {
+    return (
+      <div className={`h-screen w-screen overflow-hidden flex flex-col antialiased font-sans select-none ${theme}`}>
+        <TitleBar isOnline={isOnline} />
+        <LoginScreen
+          onLoginSuccess={handleLoginSuccess}
+          onResetAndReconfigure={handleResetAndReconfigure}
+          isDarkMode={theme === 'dark'}
+          toggleTheme={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+        />
+      </div>
+    );
+  }
+
+  // 3. Authentification Réussie -> Accès à l'Application Complète
   return (
     <div className={`h-screen w-screen overflow-hidden flex flex-col antialiased font-sans select-none ${theme}`}>
 
       {/* Barre de titre frameless Electron */}
       <TitleBar isOnline={isOnline} />
 
-      {/* Onboarding Wizard */}
-      {showOnboarding && (
-        <OnboardingWizard
-          onComplete={handleCompleteOnboarding}
-          onSkip={() => setShowOnboarding(false)}
-        />
-      )}
-
       {/* Modal d'Inscription Élève Global */}
       {showRegistrationModal && (
         <StudentRegistrationModal
           onClose={() => setShowRegistrationModal(false)}
           onRegister={(newStudent) => {
-            console.log('Nouveau dossier élève inscrit :', newStudent);
             setShowRegistrationModal(false);
             setActiveTab('apprenants');
           }}
@@ -160,7 +250,7 @@ export function App() {
       {/* Conteneur principal sous la TitleBar (Menu latéral FIXE + Zone de travail) */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
 
-        {/* Sidebar FIXE */}
+        {/* Sidebar FIXE avec bouton de verrouillage/déconnexion */}
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -169,12 +259,13 @@ export function App() {
           isCollapsed={isSidebarCollapsed}
           setIsCollapsed={setIsSidebarCollapsed}
           onOpenRegistration={() => setShowRegistrationModal(true)}
+          onLock={handleLogout}
         />
 
         {/* Colonne de droite : Header FIXE + Zone de contenu défilante */}
         <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden" style={{ background: 'var(--bg-base)' }}>
 
-          {/* Navbar FIXE (avec switcher Dark/Light mode & Toggle Sidebar) */}
+          {/* Navbar FIXE */}
           <Navbar
             userRole={userRole}
             setUserRole={setUserRole}
@@ -183,16 +274,17 @@ export function App() {
             isOnline={isOnline}
             setIsOnline={setIsOnline}
             pendingQueueCount={pendingQueueCount}
-            onOpenOnboarding={() => setShowOnboarding(true)}
+            onOpenOnboarding={() => setShowOnboardingModal(true)}
             activeTab={activeTab}
             onNavigate={setActiveTab}
             isDarkMode={theme === 'dark'}
             toggleTheme={toggleTheme}
             isSidebarCollapsed={isSidebarCollapsed}
             toggleSidebar={toggleSidebar}
+            onLogout={handleLogout}
           />
 
-          {/* Zone de contenu principale (Seule zone qui défile - Pleine largeur sans marges excessives) */}
+          {/* Zone de contenu principale */}
           <main className="flex-1 overflow-y-auto p-3 sm:p-4" style={{ background: 'var(--bg-base)' }}>
             <div key={activeTab} className="animate-fade-in w-full">
               {renderContent()}

@@ -202,3 +202,163 @@ export interface EvenementScolaire {
   titre: string;
   heureLieu: string;
 }
+
+// ─── Settings Module Types ────────────────────────────────────────────────────
+
+export interface ConfigEtablissement {
+  // Identité
+  nomOfficiel: string;
+  acronyme: string;
+  devise: string; // Slogan/devise
+  // Agrément EPST
+  numeroAgrement: string;
+  numeroIdentificationNationale: string;
+  codeEPST: string;
+  // Localisation
+  province: string;
+  territoireCommune: string;
+  quartier: string;
+  avenue: string;
+  numero: string;
+  // Contact
+  telephone1: string;
+  telephone2?: string;
+  email: string;
+  siteWeb?: string;
+  // Direction
+  nomPrefetDirecteur: string;
+  nomDirecteurEtudes: string;
+  nomCenseur?: string;
+  nomSecrétaireGeneral?: string;
+  // Financier
+  deviseLocale: 'USD' | 'CDF' | 'USD_CDF';
+  // Visuel
+  logoUrl?: string;
+  couleurPrimaire?: string;
+  couleurSecondaire?: string;
+}
+
+export interface AnneeScolaire {
+  id: string;
+  libelle: string; // ex: "2025-2026"
+  dateDebut: string;
+  dateFin: string;
+  debutTrimestre1: string;
+  finTrimestre1: string;
+  debutTrimestre2: string;
+  finTrimestre2: string;
+  debutTrimestre3: string;
+  finTrimestre3: string;
+  estActive: boolean;
+  estArchivee: boolean;
+}
+
+export interface Salle {
+  id: string;
+  classId: string;
+  nomSalle: string; // ex: "Salle 1", "Bloc A - S3"
+  capacite: number;
+  batiment?: string;
+}
+
+export interface OptionSecondaire {
+  id: string;
+  code: string; // ex: "MATH_PHY"
+  nom: string; // ex: "Mathématiques-Physique"
+  filiere: 'GENERALES' | 'TECHNIQUES' | 'PROFESSIONNELLES';
+  description?: string;
+}
+
+export interface MatièreEPST {
+  id: string;
+  code: string; // ex: "FR", "MATH", "PHYS"
+  nom: string;
+  categorie: 'GENERALE' | 'SPECIFIQUE' | 'PRATIQUE' | 'RELIGIEUSE';
+  optionsApplicables: string[]; // IDs des options ou ['ALL'] pour cours généraux
+  coefficientDefaut: number;
+  maxScoreDefaut: number;
+  isActive: boolean; // L'admin peut la désactiver
+}
+
+export interface ClasseConfig {
+  id: string;
+  cycleId: string;
+  optionId?: string; // Seulement pour humanités
+  nom: string; // ex: "3ème Math-Physique A"
+  effectifMax: number;
+  salles: Salle[];
+  professeurTitulaireNom?: string;
+}
+
+export interface FraisAnnexeConfig {
+  id: string;
+  intitule: string;
+  montant: number;
+  devise: 'USD' | 'CDF';
+  obligatoire: boolean;
+  typeFrais: 'INSCRIPTION' | 'REINSCRIPTION' | 'CONNEXION' | 'CARTE' | 'KIT' | 'AUTRE';
+  priorite?: string;
+  portee?: string;
+}
+
+export interface SalleConfig {
+  id: string;
+  codeSalle: string;
+  nomSalle: string;
+  capacite: number;
+  cycleCode: 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES';
+}
+
+export interface CycleConfig {
+  id: string;
+  code: 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES';
+  nom: string;
+  actif: boolean;
+  classesCount: number;
+  sallesCount: number;
+}
+
+export interface AnneeScolaireConfig {
+  id: string;
+  nom: string;
+  statut: 'EN_COURS' | 'CLOTUREE' | 'PLANIFIEE';
+  debut: string;
+  fin: string;
+  nombreElevesTotal: number;
+  fraisInscription: number;
+  fraisConnexion: number;
+  fraisReinscription: number;
+  fraisCarte: number;
+  fraisAnnexes: FraisAnnexeConfig[];
+  cycles: CycleConfig[];
+  salles: SalleConfig[];
+  semestres: { id: string; nom: string; statut: string; fin: string }[];
+  periodes: { id: string; nom: string; debut: string; fin: string; type: 'PERIOD' | 'EXAM' }[];
+}
+
+export interface UserAccount {
+  id: string;
+  email: string;
+  nom: string;
+  prenom?: string;
+  role: RôleSystème;
+  pinCode?: string;
+  avatarUrl?: string;
+  statut: 'ACTIF' | 'SUSPENDU';
+  telephone?: string;
+  creeLe: string;
+  derniereConnexion?: string;
+}
+
+export interface RolePermissions {
+  role: RôleSystème;
+  label: string;
+  description: string;
+  allowedTabs: string[];
+  canEditConfig: boolean;
+  canManageUsers: boolean;
+  canManageFinance: boolean;
+  canManagePedagogy: boolean;
+  canEnterGrades: boolean;
+}
+

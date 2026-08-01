@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { mockInvoices, mockPayments, mockStaff } from '../../data/mockData';
 import { ResponsiveContainer, AreaChart, Area, XAxis, Tooltip, BarChart, Bar } from 'recharts';
+import { LocalDatabaseService } from '../../services/localDatabase';
 
 interface FinanceManagerProps {
   activeSubTab?: string;
@@ -308,22 +309,29 @@ const PaymentModal: React.FC<{ invoice: typeof mockInvoices[0]; onClose: () => v
 // ─── INVOICES TAB ─────────────────────────────────────────────────────────
 
 const InvoicesTab: React.FC = () => {
+  const [invoices, setInvoices] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [payingInvoice, setPayingInvoice] = useState<typeof mockInvoices[0] | null>(null);
+  const [payingInvoice, setPayingInvoice] = useState<any | null>(null);
 
-  const filtered = mockInvoices.filter(inv => {
+  React.useEffect(() => {
+    LocalDatabaseService.getInvoices().then((data) => {
+      setInvoices(data.length > 0 ? data : []);
+    });
+  }, []);
+
+  const filtered = invoices.filter(inv => {
     const q = search.toLowerCase();
-    const match = !q || inv.nomEleve.toLowerCase().includes(q) || inv.numeroFacture.toLowerCase().includes(q);
+    const match = !q || (inv.nomEleve && inv.nomEleve.toLowerCase().includes(q)) || (inv.numeroFacture && inv.numeroFacture.toLowerCase().includes(q));
     const status = !filterStatus || inv.statut === filterStatus;
     return match && status;
   });
 
   const stats = {
-    total: mockInvoices.reduce((a, b) => a + b.montantTotal, 0),
-    paye: mockInvoices.reduce((a, b) => a + b.montantPaye, 0),
-    impaye: mockInvoices.filter(i => i.statut === 'NON_PAYE').length,
-    partiel: mockInvoices.filter(i => i.statut === 'PARTIEL').length,
+    total: invoices.reduce((a: number, b: any) => a + (b.montantTotal || 0), 0),
+    paye: invoices.reduce((a: number, b: any) => a + (b.montantPaye || 0), 0),
+    impaye: invoices.filter((i: any) => i.statut === 'NON_PAYE').length,
+    partiel: invoices.filter((i: any) => i.statut === 'PARTIEL').length,
   };
 
   return (

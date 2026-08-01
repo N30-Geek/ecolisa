@@ -40,7 +40,11 @@ import {
   CheckCircle2,
   Search,
   Command,
-  ArrowRight
+  ArrowRight,
+  Menu,
+  Briefcase,
+  Layers,
+  HardDrive
 } from 'lucide-react';
 import { RôleSystème } from '../../types';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
@@ -61,6 +65,7 @@ interface NavbarProps {
   toggleTheme: () => void;
   isSidebarCollapsed?: boolean;
   toggleSidebar?: () => void;
+  onLogout?: () => void;
 }
 
 const roleLabels: Record<RôleSystème, string> = {
@@ -119,6 +124,16 @@ const tabBreadcrumbs: Record<string, { label: string; icon: React.ElementType; c
   settings:    { label: 'Paramètres du Système', icon: Settings, category: 'Système' },
 };
 
+// CATEGORIES PRINCIPALES POUR LE MENU STRIP HAUT DE GRANDE CLASSE
+const NAV_CATEGORIES = [
+  { id: 'dashboard', label: 'Vue Générale', icon: LayoutDashboard, defaultTab: 'dashboard', tabs: ['dashboard'] },
+  { id: 'pedagogie', label: 'Pédagogie', icon: GraduationCap, defaultTab: 'apprenants', tabs: ['students', 'apprenants', 'grades', 'classes', 'schedule', 'subjects', 'examens'] },
+  { id: 'finances', label: 'Finances & Caisse', icon: Wallet, defaultTab: 'invoices', tabs: ['invoices', 'payroll', 'expenses'] },
+  { id: 'admin', label: 'Administration & RH', icon: Briefcase, defaultTab: 'teachers', tabs: ['teachers', 'hr', 'leaves', 'documents', 'years'] },
+  { id: 'services', label: 'Vie Scolaire & Services', icon: Layers, defaultTab: 'infirmerie', tabs: ['discipline', 'infirmerie', 'cantine', 'transport', 'ressources', 'library', 'messages'] },
+  { id: 'systeme', label: 'Système', icon: Settings, defaultTab: 'settings', tabs: ['settings', 'license'] },
+];
+
 export const Navbar: React.FC<NavbarProps> = ({
   userRole,
   setUserRole,
@@ -134,6 +149,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   toggleTheme,
   isSidebarCollapsed,
   toggleSidebar,
+  onLogout
 }) => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
@@ -171,225 +187,188 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       <header
-        className="h-16 px-4 border-b flex items-center justify-between gap-4 shrink-0 relative z-30 transition-all duration-200"
+        className="px-4 py-2 border-b flex flex-col justify-center gap-2 shrink-0 relative z-30 transition-all duration-200"
         style={{
           background: 'var(--header-bg)',
           borderColor: 'var(--border)',
           backdropFilter: 'blur(12px)',
         }}
       >
-        {/* ===== LEFT SECTION: TOGGLE SIDEBAR + BREADCRUMB & ACADEMIC YEAR SELECTOR ===== */}
-        <div className="flex items-center gap-3 min-w-0">
-          {toggleSidebar && (
-            <button
-              onClick={toggleSidebar}
-              className="w-9 h-9 rounded-lg border flex items-center justify-center transition-all duration-150 hover:bg-slate-500/10 active:scale-95 cursor-pointer shadow-xs"
-              style={{
-                background: 'var(--bg-sunken)',
-                borderColor: 'var(--border)',
-                color: 'var(--text-primary)',
-              }}
-              title={isSidebarCollapsed ? 'Déplier le menu latéral (Sidebar)' : 'Réduire le menu latéral (Sidebar)'}
-            >
-              {isSidebarCollapsed ? (
-                <PanelLeftOpen className="w-4 h-4 text-indigo-500" />
-              ) : (
-                <PanelLeftClose className="w-4 h-4 text-slate-400" />
-              )}
-            </button>
-          )}
-
-          {/* Module Icon & Active View Info */}
+        {/* LIGNE SUPÉRIEURE : OUTILS, RECHERCHE ET PROFIL */}
+        <div className="flex items-center justify-between gap-4 w-full">
+          {/* ===== SECTION GAUCHE: TOGGLE SIDEBAR + PROFIL MODULE COURANT ===== */}
           <div className="flex items-center gap-3 min-w-0">
-            <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border shadow-xs"
-              style={{
-                background: 'rgba(99,102,241,0.12)',
-                borderColor: 'rgba(99,102,241,0.25)',
-              }}
-            >
-              <CurrentIcon className="w-4.5 h-4.5 text-indigo-500" />
-            </div>
-
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-500">
-                  {currentTabInfo.category}
-                </span>
-                <span className="w-1 h-1 rounded-full bg-slate-400 opacity-50" />
-                <span className="text-[9.5px] font-bold text-emerald-500 dark:text-emerald-400 uppercase tracking-widest hidden sm:inline">
-                  EPST RDC
-                </span>
-              </div>
-
-              <h1
-                className="text-sm font-black tracking-tight truncate leading-tight mt-0.5"
-                style={{ color: 'var(--text-primary)' }}
+            {toggleSidebar && (
+              <button
+                onClick={toggleSidebar}
+                className="w-9 h-9 rounded-xl border border-indigo-500/30 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-2xs cursor-pointer shrink-0"
+                title={isSidebarCollapsed ? 'Déplier le menu latéral' : 'Réduire le menu latéral'}
               >
-                {currentTabInfo.label}
-              </h1>
-            </div>
-          </div>
-
-          {/* Academic Year Quick Selector via CustomSelect */}
-          <div className="hidden lg:block ml-2 shrink-0">
-            <CustomSelect
-              options={schoolYearOptions}
-              value={activeSchoolYear}
-              onChange={(val) => setActiveSchoolYear && setActiveSchoolYear(val)}
-              icon={Calendar}
-              className="w-44"
-            />
-          </div>
-        </div>
-
-        {/* ===== CENTER SECTION: GLOBAL COMMAND PALETTE SEARCH TRIGGER ===== */}
-        <div className="hidden md:flex items-center justify-center max-w-xs xl:max-w-sm w-full mx-2">
-          <button
-            onClick={() => setIsCommandPaletteOpen(true)}
-            className="w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all duration-150 hover:border-indigo-500/40 active:scale-98 shadow-xs cursor-pointer group"
-            style={{
-              background: 'var(--bg-sunken)',
-              borderColor: 'var(--border)',
-              color: 'var(--text-muted)',
-            }}
-          >
-            <div className="flex items-center gap-2 truncate">
-              <Search className="w-3.5 h-3.5 text-indigo-500 group-hover:scale-110 transition-transform" />
-              <span className="truncate group-hover:text-indigo-400 transition-colors">
-                Rechercher un module, élève...
-              </span>
-            </div>
-            <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-500/15 border border-slate-500/20 text-[10px] font-mono font-bold text-indigo-400">
-              <Command className="w-2.5 h-2.5" /> K
-            </kbd>
-          </button>
-        </div>
-
-        {/* ===== RIGHT SECTION: CONTROLS, SYNC, NOTIFICATIONS & PROFILE ===== */}
-        <div className="flex items-center gap-2 shrink-0">
-
-
-          {/* Theme Toggle Button */}
-          <button
-            onClick={toggleTheme}
-            className="w-9 h-9 rounded-lg border flex items-center justify-center transition-all duration-150 hover:bg-slate-500/10 active:scale-95 cursor-pointer shadow-xs"
-            style={{
-              background: 'var(--bg-sunken)',
-              borderColor: 'var(--border)',
-              color: 'var(--text-primary)',
-            }}
-            title={isDarkMode ? 'Passer en Mode Clair' : 'Passer en Mode Sombre'}
-          >
-            {isDarkMode ? (
-              <Sun className="w-4 h-4 text-amber-400 transition-transform duration-300 hover:rotate-45" />
-            ) : (
-              <Moon className="w-4 h-4 text-indigo-600 transition-transform duration-300 hover:-rotate-12" />
+                <Menu className="w-4.5 h-4.5" />
+              </button>
             )}
-          </button>
 
-          {/* Offline Sync Button */}
-          <button
-            onClick={() => {
-              if (isOnline) handleSync();
-              else setIsOnline(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all duration-150 active:scale-95 shadow-xs cursor-pointer"
-            style={{
-              background: isOnline ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-              borderColor: isOnline ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)',
-              color: isOnline ? '#34d399' : '#f87171',
-            }}
-            title={isOnline ? 'Cliquer pour synchroniser avec le réseau local / Cloud' : 'Mode hors-ligne. Cliquer pour reconnecter.'}
-          >
-            {isSyncing ? (
-              <Loader className="w-3.5 h-3.5 animate-spin" />
-            ) : isOnline ? (
-              <RefreshCw className="w-3.5 h-3.5" />
-            ) : (
-              <WifiOff className="w-3.5 h-3.5" />
-            )}
-            <span className="hidden sm:inline">
-              {isSyncing ? 'Synchro...' : isOnline ? 'En ligne' : 'Hors-ligne'}
-            </span>
-            {pendingQueueCount > 0 && (
-              <span className="w-4 h-4 rounded-full text-slate-900 bg-amber-400 text-[9px] flex items-center justify-center font-black">
-                {pendingQueueCount}
-              </span>
-            )}
-          </button>
-
-          {/* Notifications Center */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setShowNotifMenu(!showNotifMenu);
-                setShowProfileMenu(false);
-              }}
-              className="w-9 h-9 rounded-lg border flex items-center justify-center relative transition-all duration-150 hover:bg-slate-500/10 active:scale-95 cursor-pointer shadow-xs"
-              style={{
-                background: 'var(--bg-sunken)',
-                borderColor: 'var(--border)',
-                color: 'var(--text-primary)',
-              }}
-              title="Centre de Notifications"
-            >
-              <Bell className="w-4 h-4 text-slate-400" />
-              {notifications.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9.5px] font-black flex items-center justify-center shadow-xs border-2 border-white dark:border-slate-900">
-                  {notifications.length}
-                </span>
-              )}
-            </button>
-
-            {/* Notifications Popover */}
-            {showNotifMenu && (
+            {/* Icone & Titre du module courant */}
+            <div className="flex items-center gap-2.5 min-w-0">
               <div
-                className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-xl border shadow-xl z-50 overflow-hidden animate-scale-in"
+                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border shadow-2xs"
                 style={{
-                  background: 'var(--sidebar-popover-bg)',
-                  borderColor: 'var(--sidebar-popover-border)',
+                  background: 'rgba(99,102,241,0.12)',
+                  borderColor: 'rgba(99,102,241,0.25)',
                 }}
               >
-                <div
-                  className="p-3.5 border-b flex items-center justify-between"
-                  style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}
-                >
-                  <div>
-                    <h3 className="font-extrabold text-xs" style={{ color: 'var(--text-primary)' }}>
-                      Notifications Système
-                    </h3>
-                    <p className="text-[10px] text-slate-400 mt-0.5">
-                      {notifications.length} nouvelles mises à jour récents
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setNotifFilter('all')}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
-                        notifFilter === 'all' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Toutes
-                    </button>
-                    <button
-                      onClick={() => setNotifFilter('finance')}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
-                        notifFilter === 'finance' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Finances
-                    </button>
-                  </div>
+                <CurrentIcon className="w-4 h-4 text-indigo-500" />
+              </div>
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                    {currentTabInfo.category}
+                  </span>
+                  <span className="w-1 h-1 rounded-full bg-slate-400 opacity-50" />
+                  <span className="text-[9.5px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest hidden sm:inline flex items-center gap-1">
+                    <HardDrive className="w-3 h-3 inline" /> LOCAL-FIRST
+                  </span>
                 </div>
 
-                <div className="divide-y divide-slate-500/10 max-h-72 overflow-y-auto">
-                  {filteredNotifs.length === 0 ? (
-                    <div className="p-6 text-center text-xs text-slate-400">
-                      Aucune notification dans cette catégorie.
+                <h1
+                  className="text-sm font-black tracking-tight truncate leading-none mt-0.5"
+                  style={{ color: 'var(--text-primary)' }}
+                >
+                  {currentTabInfo.label}
+                </h1>
+              </div>
+            </div>
+
+            {/* Selecteur Rapide d'Année Scolaire */}
+            <div className="hidden lg:block ml-2 shrink-0">
+              <CustomSelect
+                options={schoolYearOptions}
+                value={activeSchoolYear}
+                onChange={(val) => setActiveSchoolYear && setActiveSchoolYear(val)}
+                icon={Calendar}
+                className="w-44"
+              />
+            </div>
+          </div>
+
+          {/* ===== SECTION CENTRALE: RECHERCHE GLOBALE ===== */}
+          <div className="hidden md:flex items-center justify-center max-w-xs xl:max-w-sm w-full mx-2">
+            <button
+              onClick={() => setIsCommandPaletteOpen(true)}
+              className="w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all duration-150 hover:border-indigo-500/40 active:scale-98 shadow-xs cursor-pointer group"
+              style={{
+                background: 'var(--bg-sunken)',
+                borderColor: 'var(--border)',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <div className="flex items-center gap-2 truncate">
+                <Search className="w-3.5 h-3.5 text-indigo-500 group-hover:scale-110 transition-transform" />
+                <span className="truncate group-hover:text-indigo-500 transition-colors">
+                  Rechercher un élève, reçu, classe...
+                </span>
+              </div>
+              <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-500/15 border border-slate-500/20 text-[10px] font-mono font-black text-indigo-500">
+                <Command className="w-2.5 h-2.5" /> K
+              </kbd>
+            </button>
+          </div>
+
+          {/* ===== SECTION DROITE: SYNCHRO, THÈME, NOTIFS & PROFIL ===== */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Bascule Thème Clair / Sombre */}
+            <button
+              onClick={toggleTheme}
+              className="w-9 h-9 rounded-xl border flex items-center justify-center transition-all duration-150 hover:bg-slate-500/10 active:scale-95 cursor-pointer shadow-xs"
+              style={{
+                background: 'var(--bg-sunken)',
+                borderColor: 'var(--border)',
+                color: 'var(--text-primary)',
+              }}
+              title={isDarkMode ? 'Passer en Mode Clair' : 'Passer en Mode Sombre'}
+            >
+              {isDarkMode ? (
+                <Sun className="w-4 h-4 text-amber-400 transition-transform duration-300 hover:rotate-45" />
+              ) : (
+                <Moon className="w-4 h-4 text-indigo-600 transition-transform duration-300 hover:-rotate-12" />
+              )}
+            </button>
+
+            {/* Statut Local-First & Synchro */}
+            <button
+              onClick={() => {
+                if (isOnline) handleSync();
+                else setIsOnline(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold border transition-all duration-150 active:scale-95 shadow-xs cursor-pointer"
+              style={{
+                background: isOnline ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                borderColor: isOnline ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)',
+                color: isOnline ? '#10b981' : '#f87171',
+              }}
+              title={isOnline ? 'Base SQLite locale synchronsée' : 'Mode Hors-Ligne'}
+            >
+              {isSyncing ? (
+                <Loader className="w-3.5 h-3.5 animate-spin" />
+              ) : isOnline ? (
+                <RefreshCw className="w-3.5 h-3.5" />
+              ) : (
+                <WifiOff className="w-3.5 h-3.5" />
+              )}
+              <span className="hidden sm:inline">
+                {isSyncing ? 'Synchro...' : isOnline ? 'SQLite WAL' : 'Hors-ligne'}
+              </span>
+            </button>
+
+            {/* Centre de Notifications */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setShowNotifMenu(!showNotifMenu);
+                  setShowProfileMenu(false);
+                }}
+                className="w-9 h-9 rounded-xl border flex items-center justify-center relative transition-all duration-150 hover:bg-slate-500/10 active:scale-95 cursor-pointer shadow-xs"
+                style={{
+                  background: 'var(--bg-sunken)',
+                  borderColor: 'var(--border)',
+                  color: 'var(--text-primary)',
+                }}
+                title="Notifications Système"
+              >
+                <Bell className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                {notifications.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9.5px] font-black flex items-center justify-center shadow-xs border-2 border-white dark:border-slate-900">
+                    {notifications.length}
+                  </span>
+                )}
+              </button>
+
+              {/* Popover Notifications */}
+              {showNotifMenu && (
+                <div
+                  className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl border shadow-2xl z-50 overflow-hidden animate-scale-in"
+                  style={{
+                    background: 'var(--sidebar-popover-bg)',
+                    borderColor: 'var(--sidebar-popover-border)',
+                  }}
+                >
+                  <div
+                    className="p-3.5 border-b flex items-center justify-between"
+                    style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}
+                  >
+                    <div>
+                      <h3 className="font-black text-xs" style={{ color: 'var(--text-primary)' }}>
+                        Notifications Système
+                      </h3>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        {notifications.length} nouvelles mises à jour récents
+                      </p>
                     </div>
-                  ) : (
-                    filteredNotifs.map((n) => {
+                  </div>
+
+                  <div className="divide-y divide-slate-500/10 max-h-72 overflow-y-auto">
+                    {filteredNotifs.map((n) => {
                       const NotifIcon = n.icon;
                       return (
                         <div
@@ -397,7 +376,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           className="flex items-start gap-3 p-3 hover:bg-indigo-500/10 cursor-pointer transition-colors"
                         >
                           <div
-                            className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 mt-0.5 border"
+                            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 border"
                             style={{
                               background: 'rgba(99,102,241,0.1)',
                               borderColor: 'rgba(99,102,241,0.2)',
@@ -406,155 +385,162 @@ export const Navbar: React.FC<NavbarProps> = ({
                             <NotifIcon className="w-3.5 h-3.5" style={{ color: n.iconColor }} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-[11.5px] font-bold leading-snug" style={{ color: 'var(--text-primary)' }}>
+                            <p className="text-[11.5px] font-extrabold leading-snug" style={{ color: 'var(--text-primary)' }}>
                               {n.text}
                             </p>
-                            <p className="text-[9.5px] text-slate-400 font-semibold mt-0.5">{n.time}</p>
+                            <p className="text-[9.5px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">{n.time}</p>
                           </div>
                         </div>
                       );
-                    })
-                  )}
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
-          {/* User Profile & Role Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setShowProfileMenu(!showProfileMenu);
-                setShowNotifMenu(false);
-              }}
-              className="flex items-center gap-2 p-1.5 pr-2.5 rounded-lg border transition-all duration-150 hover:border-indigo-500/40 active:scale-95 shadow-xs cursor-pointer"
-              style={{
-                background: 'var(--bg-sunken)',
-                borderColor: 'var(--border)',
-              }}
-            >
-              <div className="w-7 h-7 rounded-md bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center font-black text-xs text-white shadow-xs">
-                J
-              </div>
-              <div className="text-left hidden md:block leading-tight">
-                <p className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>
-                  Jean-Paul Mukendi
-                </p>
-                <p className="text-[9px] font-bold text-indigo-400">{roleLabels[userRole]}</p>
-              </div>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-            </button>
-
-            {/* Profile & Settings Popover */}
-            {showProfileMenu && (
-              <div
-                className="absolute right-0 top-full mt-2 w-72 rounded-xl border shadow-xl z-50 overflow-hidden animate-scale-in"
+            {/* Menu Profil Utilisateur */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setShowProfileMenu(!showProfileMenu);
+                  setShowNotifMenu(false);
+                }}
+                className="flex items-center gap-2 p-1.5 pr-2.5 rounded-xl border transition-all duration-150 hover:border-indigo-500/40 active:scale-95 shadow-xs cursor-pointer"
                 style={{
-                  background: 'var(--sidebar-popover-bg)',
-                  borderColor: 'var(--sidebar-popover-border)',
+                  background: 'var(--bg-sunken)',
+                  borderColor: 'var(--border)',
                 }}
               >
-                {/* Profile Header */}
+                <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center font-black text-xs text-white shadow-xs">
+                  P
+                </div>
+                <div className="text-left hidden md:block leading-tight">
+                  <p className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>
+                    Promoteur Racine
+                  </p>
+                  <p className="text-[9px] font-extrabold text-indigo-600 dark:text-indigo-400">{roleLabels[userRole]}</p>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+
+              {/* Popover Profil & Actions */}
+              {showProfileMenu && (
                 <div
-                  className="p-3.5 border-b space-y-2"
-                  style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}
+                  className="absolute right-0 top-full mt-2 w-72 rounded-2xl border shadow-2xl z-50 overflow-hidden animate-scale-in"
+                  style={{
+                    background: 'var(--sidebar-popover-bg)',
+                    borderColor: 'var(--sidebar-popover-border)',
+                  }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center font-black text-white text-sm shadow-xs">
-                      J
+                  <div
+                    className="p-3.5 border-b space-y-2"
+                    style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-white text-sm shadow-xs">
+                        P
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black truncate" style={{ color: 'var(--text-primary)' }}>
+                          Promoteur Administrateur
+                        </p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">admin@ecolisa.cd</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-black truncate" style={{ color: 'var(--text-primary)' }}>
-                        Jean-Paul Mukendi
-                      </p>
-                      <p className="text-[10px] text-slate-400 truncate">j.mukendi@ecolisa.cd</p>
-                      <span className="inline-block mt-0.5 px-2 py-0.5 rounded text-[9px] font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/25">
-                        Licence Enterprise RDC
-                      </span>
+
+                    <div className="pt-2 border-t border-slate-500/10">
+                      <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                        Changer de Rôle Système :
+                      </label>
+                      <CustomSelect
+                        options={roleOptions}
+                        value={userRole}
+                        onChange={(val) => setUserRole(val as RôleSystème)}
+                        icon={User}
+                        className="w-full"
+                      />
                     </div>
                   </div>
 
-                  {/* Role Selector via CustomSelect inside profile popover */}
-                  <div className="pt-2 border-t border-slate-500/10">
-                    <label className="block text-[10px] font-bold text-slate-400 mb-1">
-                      Simuler un Rôle Utilisateur :
-                    </label>
-                    <CustomSelect
-                      options={roleOptions}
-                      value={userRole}
-                      onChange={(val) => setUserRole(val as RôleSystème)}
-                      icon={User}
-                      className="w-full"
-                    />
+                  <div className="p-1.5 space-y-0.5 text-xs font-extrabold">
+                    <button
+                      onClick={() => {
+                        onNavigate?.('settings');
+                        setShowProfileMenu(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-black hover:bg-slate-500/10 transition-all text-left cursor-pointer"
+                      style={{ color: 'var(--text-primary)' }}
+                    >
+                      <Settings className="w-4 h-4 text-indigo-500" />
+                      <span>Paramètres Système & Accès</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        onNavigate?.('license');
+                        setShowProfileMenu(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-black hover:bg-slate-500/10 transition-all text-left cursor-pointer"
+                      style={{ color: 'var(--text-primary)' }}
+                    >
+                      <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                      <span>Licence & Synchro Offline</span>
+                    </button>
+
+                    <div className="my-1 border-t" style={{ borderColor: 'var(--border)' }} />
+
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        if (onLogout) onLogout();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-black text-red-500 hover:bg-red-500/10 transition-all text-left cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4 text-red-500" />
+                      <span>Verrouiller la Session</span>
+                    </button>
                   </div>
                 </div>
-
-                {/* Quick Menu Actions */}
-                <div className="p-1.5 space-y-0.5 text-xs">
-                  <button
-                    onClick={() => {
-                      onNavigate?.('settings');
-                      setShowProfileMenu(false);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-bold hover:bg-slate-500/10 transition-all text-left cursor-pointer"
-                    style={{ color: 'var(--text-primary)' }}
-                  >
-                    <Settings className="w-4 h-4 text-indigo-400" />
-                    <span>Paramètres Système & Accès</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      onNavigate?.('license');
-                      setShowProfileMenu(false);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-bold hover:bg-slate-500/10 transition-all text-left cursor-pointer"
-                    style={{ color: 'var(--text-primary)' }}
-                  >
-                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <span>Licence & Synchro Offline</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setShowHelpModal(true);
-                      setShowProfileMenu(false);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-bold hover:bg-slate-500/10 transition-all text-left cursor-pointer"
-                    style={{ color: 'var(--text-primary)' }}
-                  >
-                    <LifeBuoy className="w-4 h-4 text-amber-400" />
-                    <span>Aide & Support Technique EPST</span>
-                  </button>
-
-                  <div className="my-1 border-t" style={{ borderColor: 'var(--border)' }} />
-
-                  <button
-                    onClick={() => setShowProfileMenu(false)}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-bold text-red-400 hover:bg-red-500/10 transition-all text-left cursor-pointer"
-                  >
-                    <LogOut className="w-4 h-4 text-red-400" />
-                    <span>Verrouiller la Session</span>
-                  </button>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Global Click Outside Overlay */}
-        {(showProfileMenu || showNotifMenu) && (
-          <div
-            className="fixed inset-0 z-40 bg-black/10"
-            onClick={() => {
-              setShowNotifMenu(false);
-              setShowProfileMenu(false);
-            }}
-          />
-        )}
+        {/* LIGNE INFÉRIEURE : BARRE DE NAVIGATION PRINCIPALE DES PÔLES (MENU STRIP DE GRANDE CLASSE) */}
+        <div className="flex items-center gap-1 overflow-x-auto sidebar-scroll pt-1 border-t" style={{ borderColor: 'var(--border)' }}>
+          {NAV_CATEGORIES.map((cat) => {
+            const CatIcon = cat.icon;
+            const isCatActive = cat.tabs.includes(activeTab);
+            return (
+              <button
+                key={cat.id}
+                onClick={() => onNavigate?.(cat.defaultTab)}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all whitespace-nowrap cursor-pointer ${
+                  isCatActive
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
+                }`}
+              >
+                <CatIcon className={`w-3.5 h-3.5 ${isCatActive ? 'text-white' : 'text-indigo-500'}`} />
+                <span>{cat.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </header>
 
-      {/* ===== COMMAND PALETTE MODAL ===== */}
+      {/* OVERLAY FERMETURE MENUS */}
+      {(showProfileMenu || showNotifMenu) && (
+        <div
+          className="fixed inset-0 z-40 bg-black/10"
+          onClick={() => {
+            setShowNotifMenu(false);
+            setShowProfileMenu(false);
+          }}
+        />
+      )}
+
+      {/* PALETTE DE COMMANDES (CTRL+K) */}
       <CommandPalette
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
@@ -563,88 +549,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           setIsCommandPaletteOpen(false);
         }}
       />
-
-      {/* ===== HELP & EPST SUPPORT MODAL ===== */}
-      {showHelpModal &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in select-none"
-            onClick={() => setShowHelpModal(false)}
-          >
-            <div
-              className="w-full max-w-lg rounded-2xl border shadow-2xl overflow-hidden flex flex-col"
-              style={{
-                background: 'var(--sidebar-popover-bg)',
-                borderColor: 'var(--border)',
-                color: 'var(--text-primary)',
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div
-                className="p-4 border-b flex items-center justify-between"
-                style={{ background: 'var(--header-bg)', borderColor: 'var(--border)' }}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center border border-amber-500/25">
-                    <LifeBuoy className="w-4.5 h-4.5" />
-                  </div>
-                  <div>
-                    <h3 className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>
-                      Support Technique ECOLISA EPST
-                    </h3>
-                    <p className="text-[10.5px] text-slate-400">
-                      Assistance officielle pour établissements scolaires RDC
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowHelpModal(false)}
-                  className="p-1 rounded-lg hover:bg-slate-500/20 text-slate-400 hover:text-white cursor-pointer transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="p-5 space-y-4 text-xs">
-                <div className="p-3.5 rounded-xl border bg-indigo-500/10 border-indigo-500/20 space-y-1">
-                  <p className="font-black text-indigo-400 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4" /> Assistance & Maintenance 24/7
-                  </p>
-                  <p className="text-slate-300 leading-relaxed text-[11px]">
-                    Notre équipe d'ingénieurs intervient sur site et à distance pour assurer le suivi de vos données scolaires et la synchronisation avec le ministère de l'EPST RDC.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <div
-                    className="p-3 rounded-lg border flex items-center justify-between"
-                    style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
-                  >
-                    <span className="font-bold">Hotline WhatsApp Support EPST :</span>
-                    <span className="font-mono font-black text-emerald-400">+243 81 555 0192</span>
-                  </div>
-                  <div
-                    className="p-3 rounded-lg border flex items-center justify-between"
-                    style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
-                  >
-                    <span className="font-bold">Email Support Technique :</span>
-                    <span className="font-mono font-black text-indigo-400">support@ecolisa.cd</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-3 border-t flex justify-end" style={{ borderColor: 'var(--border)' }}>
-                <button
-                  onClick={() => setShowHelpModal(false)}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-black text-xs cursor-pointer hover:bg-indigo-700 transition-colors"
-                >
-                  Fermer l'Aide
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
     </>
   );
 };
