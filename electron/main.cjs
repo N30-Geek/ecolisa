@@ -187,8 +187,23 @@ const initDatabase = () => {
       );
     `);
 
-    // 3. Aucun seed utilisateur — les comptes sont créés manuellement par l'administrateur
-    console.log('[ECOLISA] Base de donnees prete. Aucun compte predefini (securite maximale).');
+    // 3. Seed des comptes de test par defaut (scrypt hashé)
+    const insUser = db.prepare(`INSERT OR IGNORE INTO users (id,email,nom,prenom,role,pin_code,password_hash,statut,telephone) VALUES (?,?,?,?,?,?,?,?,?)`);
+    const defaultAccounts = [
+      ['usr_admin',      'admin@ecolisa.cd',      'KABANGE',   'Jean-Baptiste','PROMOTEUR_ADMIN',    '992001', hashPassword('admin123'),     'ACTIF', '+243 81 555 0192'],
+      ['usr_prefet',     'prefet@ecolisa.cd',     'MUKENDI',   'Alphonse',     'PREFET_DIRECTEUR',   '112233', hashPassword('prefet123'),    'ACTIF', '+243 99 444 0123'],
+      ['usr_comptable',  'comptable@ecolisa.cd',  'BAJIKA',    'Christian',    'COMPTABLE',          '123456', hashPassword('comptable123'), 'ACTIF', '+243 85 777 6655'],
+    ];
+
+    const seedTx = db.transaction(() => {
+      defaultAccounts.forEach(u => insUser.run(...u));
+    });
+    seedTx();
+
+    // Mettre à jour tout compte de test existant s'il n'avait pas de mot de passe haché
+    db.prepare(`UPDATE users SET password_hash = ? WHERE email = 'admin@ecolisa.cd' AND (password_hash IS NULL OR password_hash = '')`).run(hashPassword('admin123'));
+
+    console.log('[ECOLISA] Comptes de test prets : admin@ecolisa.cd (mdp: admin123, pin: 992001)');
 
     // 4. Seed annee scolaire par defaut si vide
     const yc = db.prepare('SELECT COUNT(*) as c FROM school_years').get();
