@@ -205,16 +205,6 @@ const initDatabase = () => {
 
     console.log('[ECOLISA] Comptes de test prets : admin@ecolisa.cd (mdp: admin123, pin: 992001)');
 
-    // 4. Seed annee scolaire par defaut si vide
-    const yc = db.prepare('SELECT COUNT(*) as c FROM school_years').get();
-    if (yc.c === 0) {
-      db.prepare(`INSERT INTO school_years (id,nom,statut,debut,fin,cycles_json,salles_json,periodes_json) VALUES (?,?,?,?,?,?,?,?)`).run(
-        'ay-default','2025-2026','EN_COURS','2025-09-08','2026-07-04',
-        '[{"id":"cy-1","code":"PRIMAIRE","nom":"Cycle Primaire","actif":true,"classesCount":0,"sallesCount":0}]',
-        '[{"id":"sa-1","codeSalle":"A01","nomSalle":"Salle A01","capacite":40,"cycleCode":"PRIMAIRE"}]',
-        '[{"id":"pe-1","nom":"1ere Periode","debut":"2025-09-08","fin":"2025-10-31","type":"PERIOD"}]'
-      );
-    }
 
     console.log('✅ [ECOLISA] SQLite relationnel pret :', dbPath);
     return true;

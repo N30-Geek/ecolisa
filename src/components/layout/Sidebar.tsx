@@ -425,34 +425,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {/* SÉPARATEUR */}
           <div className="my-2 border-t border-slate-200 dark:border-slate-800/80" />
-
-          {/* 7. PARAMÈTRES SYSTÈME */}
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={navItemCls(activeTab === 'settings')}
-            title={isCollapsed ? 'Paramètres Système' : undefined}
-          >
-            <div className="flex items-center gap-3">
-              <Settings className={`w-4.5 h-4.5 ${activeTab === 'settings' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
-              {!isCollapsed && <span>Paramètres Système</span>}
-            </div>
-          </button>
-
-          {/* 8. LICENCE LOGICIEL */}
-          <button
-            onClick={() => setActiveTab('license')}
-            className={navItemCls(activeTab === 'license')}
-            title={isCollapsed ? 'Licence & Mode Offline' : undefined}
-          >
-            <div className="flex items-center gap-3">
-              <HardDrive className={`w-4.5 h-4.5 ${activeTab === 'license' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
-              {!isCollapsed && <span>Licence & Mode Offline</span>}
-            </div>
-          </button>
         </nav>
 
         {/* ── FOOTER ── */}
         <div className="p-3 border-t shrink-0 space-y-1" style={{ borderColor: 'var(--sidebar-border)' }}>
+
+          {/* PARAMÈTRES SYSTÈME (toujours en bas) */}
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'settings'
+                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800'
+                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+            }`}
+            title={isCollapsed ? 'Paramètres Système' : undefined}
+          >
+            <Settings className={`w-4.5 h-4.5 shrink-0 ${activeTab === 'settings' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+            {!isCollapsed && <span>Paramètres Système</span>}
+          </button>
+
+          {/* LICENCE (toujours en bas) */}
+          <button
+            onClick={() => setActiveTab('license')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'license'
+                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800'
+                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+            }`}
+            title={isCollapsed ? 'Licence & Mode Offline' : undefined}
+          >
+            <HardDrive className={`w-4.5 h-4.5 shrink-0 ${activeTab === 'license' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+            {!isCollapsed && <span>Licence & Mode Offline</span>}
+          </button>
+
+          <div className="my-1 border-t border-slate-200 dark:border-slate-800/60" />
+
           <button
             onClick={() => setActiveTab('settings')}
             className="w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all cursor-pointer"
