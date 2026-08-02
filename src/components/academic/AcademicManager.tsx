@@ -1333,53 +1333,46 @@ interface SchoolYearsTabProps {
 const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ onOpenCreateYear }) => {
   const [years, setYears] = useState<AnneeScolaireConfig[]>([]);
   const [selectedYearId, setSelectedYearId] = useState<string>('');
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [activeDetailTab, setActiveDetailTab] = useState<'frais' | 'cycles_salles' | 'periodes' | 'rapports'>('frais');
+  const [editingYear, setEditingYear] = useState<AnneeScolaireConfig | null>(null);
+  const [printYear, setPrintYear] = useState<AnneeScolaireConfig | null>(null);
 
-  const refreshYears = async () => {
-    const list = await LocalDatabaseService.getSchoolYears();
-    setYears(list);
-    if (!selectedYearId && list.length > 0) {
-      const active = list.find(y => y.statut === 'EN_COURS');
-      setSelectedYearId(active?.id || list[0]?.id || '');
-    }
-    return list;
+  // Form states for editing year
+  const [editNom, setEditNom] = useState('');
+  const [editDebut, setEditDebut] = useState('');
+  const [editFin, setEditFin] = useState('');
+  const [editStatut, setEditStatut] = useState<'PLANIFIEE' | 'EN_COURS' | 'CLOTUREE'>('EN_COURS');
+  const [editFraisInscription, setEditFraisInscription] = useState(0);
+  const [editFraisConnexion, setEditFraisConnexion] = useState(0);
+  const [editFraisReinscription, setEditFraisReinscription] = useState(0);
+  const [editFraisCarte, setEditFraisCarte] = useState(0);
+
+  const openEditModal = (y: AnneeScolaireConfig) => {
+    setEditingYear(y);
+    setEditNom(y.nom || '');
+    setEditDebut(y.debut || '');
+    setEditFin(y.fin || '');
+    setEditStatut(y.statut as any || 'EN_COURS');
+    setEditFraisInscription(y.fraisInscription || 0);
+    setEditFraisConnexion(y.fraisConnexion || 0);
+    setEditFraisReinscription(y.fraisReinscription || 0);
+    setEditFraisCarte(y.fraisCarte || 0);
   };
 
-  useEffect(() => { refreshYears(); }, []);
-
-  const selectedYear = useMemo(() => {
-    return years.find(y => y.id === selectedYearId) || years[0];
-  }, [years, selectedYearId]);
-
-  const handleDeleteYear = async (id: string) => {
-    await LocalDatabaseService.deleteSchoolYear(id);
-    const updated = await LocalDatabaseService.getSchoolYears();
-    setYears(updated);
-    if (selectedYearId === id) setSelectedYearId(updated.find(y => y.id !== id)?.id || '');
-    setDeleteConfirmId(null);
+  const handleSaveEditYear = async () => {
+    if (!editingYear) return;
+    await LocalDatabaseService.updateSchoolYear(editingYear.id, {
+      nom: editNom,
+      debut: editDebut,
+      fin: editFin,
+      statut: editStatut,
+      fraisInscription: editFraisInscription,
+      fraisConnexion: editFraisConnexion,
+      fraisReinscription: editFraisReinscription,
+      fraisCarte: editFraisCarte
+    });
+    setEditingYear(null);
+    refreshYears();
   };
-
-  const handleActivateYear = async (id: string) => {
-    const list = await LocalDatabaseService.getSchoolYears();
-    await Promise.all(list.map(y => {
-      if (y.id === id) return LocalDatabaseService.updateSchoolYear(y.id, { statut: 'EN_COURS' });
-      if (y.statut === 'EN_COURS') return LocalDatabaseService.updateSchoolYear(y.id, { statut: 'CLOTUREE' });
-      return Promise.resolve();
-    }));
-    setYears(await LocalDatabaseService.getSchoolYears());
-  };
-
-  const fmt = (amount: number, devise?: string) =>
-    amount > 0 ? `${amount.toLocaleString('fr-FR')} ${devise || 'USD'}` : null;
-
-  const statutCls = (s: string) => {
-    if (s === 'EN_COURS') return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30';
-    if (s === 'CLOTUREE') return 'bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30';
-    return 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30';
-  };
-
-  const emptyCell = <span className="text-[10px] italic" style={{ color: 'var(--text-muted)' }}>—</span>;
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -1427,9 +1420,9 @@ const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ onOpenCreateYear }) => 
             <span className="col-span-1">Statut</span>
             <span className="col-span-3">Année</span>
             <span className="col-span-3">Période</span>
-            <span className="col-span-2">Elèves</span>
+            <span className="col-span-1">Elèves</span>
             <span className="col-span-1">Cycles</span>
-            <span className="col-span-2 text-right">Actions</span>
+            <span className="col-span-3 text-right">Actions</span>
           </div>
 
           <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
@@ -1458,28 +1451,46 @@ const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ onOpenCreateYear }) => 
                   <div className="col-span-3" style={{ color: 'var(--text-secondary)' }}>
                     {y.debut && y.fin ? `${y.debut} → ${y.fin}` : emptyCell}
                   </div>
-                  <div className="col-span-2" style={{ color: 'var(--text-primary)' }}>
+                  <div className="col-span-1" style={{ color: 'var(--text-primary)' }}>
                     {y.nombreElevesTotal > 0 ? `${y.nombreElevesTotal.toLocaleString('fr-FR')}` : emptyCell}
                   </div>
                   <div className="col-span-1" style={{ color: 'var(--text-secondary)' }}>
                     {y.cycles?.length > 0 ? y.cycles.length : emptyCell}
                   </div>
-                  <div className="col-span-2 flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+                  <div className="col-span-3 flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
                     {!isCurrent && (
                       <button
                         onClick={() => handleActivateYear(y.id)}
-                        className="px-2 py-1 rounded-lg text-[9.5px] font-extrabold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25 transition-all cursor-pointer"
+                        className="px-2 py-1 rounded-lg text-[9.5px] font-extrabold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 transition-all cursor-pointer mr-1"
                       >
                         Activer
                       </button>
                     )}
-                    {isCurrent && (
-                      <span className="text-[9.5px] font-extrabold text-emerald-600 dark:text-emerald-400">✓ En cours</span>
-                    )}
+
+                    {/* BOUTON 1 : IMPRIMER RAPPORT COMPLET */}
+                    <button
+                      onClick={() => setPrintYear(y)}
+                      className="p-1.5 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-indigo-500/15 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+                      title="Imprimer le rapport complet de l'année"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* BOUTON 2 : MODIFIER L'ANNÉE */}
+                    <button
+                      onClick={() => openEditModal(y)}
+                      className="p-1.5 rounded-lg text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/15 border border-indigo-500/20 transition-all cursor-pointer"
+                      title="Modifier l'année scolaire"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* BOUTON 3 : SUPPRIMER L'ANNÉE */}
                     {!isCurrent && (
                       <button
                         onClick={() => setDeleteConfirmId(y.id)}
-                        className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/15 transition-all cursor-pointer"
+                        className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/15 border border-rose-500/20 transition-all cursor-pointer"
+                        title="Supprimer l'année scolaire"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1756,20 +1767,304 @@ const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ onOpenCreateYear }) => 
         </div>
       )}
 
-      {/* CONFIRMATION SUPPRESSION */}
+      {/* MODAL 1 : CONFIRMATION SUPPRESSION */}
       {deleteConfirmId && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md" onClick={() => setDeleteConfirmId(null)}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in" onClick={() => setDeleteConfirmId(null)}>
           <div className="w-full max-w-md rounded-2xl border p-6 space-y-4 text-center" style={{ background: 'var(--sidebar-popover-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} onClick={e => e.stopPropagation()}>
             <div className="w-12 h-12 rounded-2xl bg-rose-500/20 flex items-center justify-center mx-auto border border-rose-500/30">
               <AlertTriangle className="w-6 h-6 text-rose-600 dark:text-rose-400" />
             </div>
             <div>
-              <h3 className="text-base font-bold">Supprimer cette Année Scolaire ?</h3>
-              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Cette action est irréversible.</p>
+              <h3 className="text-base font-bold">Supprimer cette Année Scolaire ?</h3>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Cette action est irréversible et supprimera l'ensemble de sa configuration.</p>
             </div>
             <div className="flex items-center justify-center gap-3 pt-2">
-              <button onClick={() => setDeleteConfirmId(null)} className="px-4 py-2 rounded-xl border font-bold text-xs cursor-pointer" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>Annuler</button>
-              <button onClick={() => handleDeleteYear(deleteConfirmId)} className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs cursor-pointer">Confirmer</button>
+              <button onClick={() => setDeleteConfirmId(null)} className="px-4 py-2 rounded-xl border font-bold text-xs cursor-pointer hover:bg-slate-500/10" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>Annuler</button>
+              <button onClick={() => handleDeleteYear(deleteConfirmId)} className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs cursor-pointer shadow-md">Confirmer la suppression</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL 2 : MODIFIER L'ANNÉE SCOLAIRE */}
+      {editingYear && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in" onClick={() => setEditingYear(null)}>
+          <div className="w-full max-w-xl rounded-2xl border p-6 space-y-5 shadow-2xl" style={{ background: 'var(--sidebar-popover-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-600 text-white"><Edit3 className="w-4 h-4" /></div>
+                <div>
+                  <h3 className="text-base font-extrabold">Modifier l'Année Scolaire {editingYear.nom}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Mise à jour des informations générales et des frais de base</p>
+                </div>
+              </div>
+              <button onClick={() => setEditingYear(null)} className="p-1.5 rounded-lg hover:bg-slate-500/20 text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Nom / Intitulé</label>
+                  <input
+                    type="text"
+                    value={editNom}
+                    onChange={e => setEditNom(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border text-xs font-semibold"
+                    style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Statut de l'Année</label>
+                  <select
+                    value={editStatut}
+                    onChange={e => setEditStatut(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-lg border text-xs font-semibold"
+                    style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                  >
+                    <option value="PLANIFIEE">PLANIFIÉE (À venir)</option>
+                    <option value="EN_COURS">EN COURS (Active)</option>
+                    <option value="CLOTUREE">CLÔTURÉE (Archivée)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Date Début</label>
+                  <input
+                    type="text"
+                    value={editDebut}
+                    onChange={e => setEditDebut(e.target.value)}
+                    placeholder="Ex: 07 Septembre 2026"
+                    className="w-full px-3 py-2 rounded-lg border text-xs font-semibold"
+                    style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Date Fin</label>
+                  <input
+                    type="text"
+                    value={editFin}
+                    onChange={e => setEditFin(e.target.value)}
+                    placeholder="Ex: 03 Juillet 2027"
+                    className="w-full px-3 py-2 rounded-lg border text-xs font-semibold"
+                    style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t space-y-3" style={{ borderColor: 'var(--border)' }}>
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Tarification & Frais Principaux</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10.5px] font-bold text-slate-500 mb-1">Frais d'Inscription</label>
+                    <input
+                      type="number"
+                      value={editFraisInscription}
+                      onChange={e => setEditFraisInscription(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-lg border text-xs font-bold"
+                      style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10.5px] font-bold text-slate-500 mb-1">Frais de Connexion</label>
+                    <input
+                      type="number"
+                      value={editFraisConnexion}
+                      onChange={e => setEditFraisConnexion(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-lg border text-xs font-bold"
+                      style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10.5px] font-bold text-slate-500 mb-1">Frais de Réinscription</label>
+                    <input
+                      type="number"
+                      value={editFraisReinscription}
+                      onChange={e => setEditFraisReinscription(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-lg border text-xs font-bold"
+                      style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10.5px] font-bold text-slate-500 mb-1">Frais Carte Élève</label>
+                    <input
+                      type="number"
+                      value={editFraisCarte}
+                      onChange={e => setEditFraisCarte(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-lg border text-xs font-bold"
+                      style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+              <button
+                onClick={() => setEditingYear(null)}
+                className="px-4 py-2 rounded-xl border font-bold text-xs hover:bg-slate-500/10 cursor-pointer"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleSaveEditYear}
+                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md cursor-pointer flex items-center gap-1.5"
+              >
+                <Check className="w-3.5 h-3.5" /> Enregistrer les modifications
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL 3 : IMPRESSION RAPPORT COMPLET DE L'ANNÉE */}
+      {printYear && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in" onClick={() => setPrintYear(null)}>
+          <div className="w-full max-w-3xl rounded-2xl border p-6 space-y-6 shadow-2xl bg-white text-slate-900 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            {/* BOUTONS D'ACTION EN-TÊTE IMPRESSION */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <Printer className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-base font-extrabold text-slate-900">Aperçu Rapport Complet — Année {printYear.nom}</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-extrabold text-xs shadow-md hover:bg-indigo-700 cursor-pointer flex items-center gap-2"
+                >
+                  <Printer className="w-4 h-4" /> Imprimer / Export PDF
+                </button>
+                <button
+                  onClick={() => setPrintYear(null)}
+                  className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* EN-TÊTE OFFICIEL DE RAPPORT */}
+            <div className="text-center space-y-1 pb-4 border-b border-slate-200">
+              <div className="flex justify-center items-center gap-2 mb-2">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-lg">É</div>
+                <span className="font-extrabold text-xl tracking-tight text-slate-900">ÉCOLISA PRO</span>
+              </div>
+              <h2 className="text-lg font-black uppercase tracking-wide text-indigo-950">
+                RAPPORT SYNTHÈSE ET STRUCTURE D'ANNÉE SCOLAIRE {printYear.nom}
+              </h2>
+              <p className="text-xs text-slate-500 font-medium">
+                République Démocratique du Congo · Ministère de l'Éducation Nationale et Nouvelle Citoyenneté (EPST)
+              </p>
+              <div className="pt-2 flex items-center justify-center gap-4 text-xs font-bold text-slate-700">
+                <span>🗓️ Période : {printYear.debut || 'N/A'} au {printYear.fin || 'N/A'}</span>
+                <span>•</span>
+                <span>📌 Statut : {printYear.statut}</span>
+                <span>•</span>
+                <span>👥 Total Élèves : {printYear.nombreElevesTotal.toLocaleString('fr-FR')}</span>
+              </div>
+            </div>
+
+            {/* SECTION 1 : TARIFICATION & FRAIS */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-indigo-700 border-b border-indigo-100 pb-1">
+                1. Grille Tarifaire & Frais Approvisés
+              </h4>
+              <div className="grid grid-cols-4 gap-3 text-center text-xs">
+                <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase block">Inscription</span>
+                  <span className="font-black text-indigo-700 text-base">{printYear.fraisInscription ? `${printYear.fraisInscription} USD` : 'Non fixé'}</span>
+                </div>
+                <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase block">Connexion</span>
+                  <span className="font-black text-emerald-700 text-base">{printYear.fraisConnexion ? `${printYear.fraisConnexion} USD` : 'Non fixé'}</span>
+                </div>
+                <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase block">Réinscription</span>
+                  <span className="font-black text-indigo-700 text-base">{printYear.fraisReinscription ? `${printYear.fraisReinscription} USD` : 'Non fixé'}</span>
+                </div>
+                <div className="p-3 rounded-xl border border-slate-200 bg-slate-50">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase block">Carte Élève</span>
+                  <span className="font-black text-amber-700 text-base">{printYear.fraisCarte ? `${printYear.fraisCarte} USD` : 'Non fixé'}</span>
+                </div>
+              </div>
+
+              {printYear.fraisAnnexes && printYear.fraisAnnexes.length > 0 && (
+                <div className="mt-2">
+                  <table className="w-full text-xs text-left border border-slate-200 rounded-lg overflow-hidden">
+                    <thead className="bg-slate-100 font-bold text-[10px] uppercase text-slate-600">
+                      <tr>
+                        <th className="p-2 border-b">Libellé Frais Annexe</th>
+                        <th className="p-2 border-b">Type</th>
+                        <th className="p-2 border-b text-right">Montant</th>
+                        <th className="p-2 border-b text-right">Obligation</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {printYear.fraisAnnexes.map(fa => (
+                        <tr key={fa.id}>
+                          <td className="p-2 font-bold text-slate-900">{fa.intitule}</td>
+                          <td className="p-2 text-slate-600">{fa.typeFrais}</td>
+                          <td className="p-2 text-right font-black text-indigo-700">{fa.montant} {fa.devise}</td>
+                          <td className="p-2 text-right font-bold text-slate-700">{fa.obligatoire ? 'Obligatoire' : 'Optionnel'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 2 : CYCLES ET SALLES */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-indigo-700 border-b border-indigo-100 pb-1">
+                2. Cycles Scolaires & Salles Physiques ({printYear.salles?.length || 0} salles)
+              </h4>
+              {printYear.salles && printYear.salles.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  {printYear.salles.map(sal => (
+                    <div key={sal.id} className="p-2 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between">
+                      <div>
+                        <span className="font-mono font-bold text-indigo-700 text-xs block">{sal.codeSalle}</span>
+                        <span className="text-[11px] font-medium text-slate-800">{sal.nomSalle}</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700">{sal.capacite} élèves</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 italic">Aucune salle d'étude physique configurée pour cette année.</p>
+              )}
+            </div>
+
+            {/* SECTION 3 : CALENDRIER DES PÉRIODES */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-indigo-700 border-b border-indigo-100 pb-1">
+                3. Calendrier Pédagogique & Périodes d'Évaluation ({printYear.periodes?.length || 0} périodes)
+              </h4>
+              {printYear.periodes && printYear.periodes.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {printYear.periodes.map(per => (
+                    <div key={per.id} className="p-2.5 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between">
+                      <span className="font-bold text-slate-900">{per.nom}</span>
+                      <span className="text-[10.5px] text-slate-600 font-semibold">{per.debut} → {per.fin}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 italic">Aucune période ou trimestre configuré pour cette année.</p>
+              )}
+            </div>
+
+            {/* FOOTER IMPRESSION */}
+            <div className="pt-6 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+              <span>Rapport généré le {new Date().toLocaleDateString('fr-FR')} via ÉCOLISA PRO</span>
+              <span>Visa Direction / Secrétariat Général EPST</span>
             </div>
           </div>
         </div>,
