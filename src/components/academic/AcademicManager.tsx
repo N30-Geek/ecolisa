@@ -1608,42 +1608,60 @@ const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ onOpenCreateYear }) => 
             {/* ONGLET CYCLES & SALLES */}
             {activeDetailTab === 'cycles_salles' && (
               <div className="space-y-4 animate-fade-in">
-                {selectedYear.cycles && selectedYear.cycles.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {selectedYear.cycles.map(cyc => (
-                      <div key={cyc.id} className="p-3.5 rounded-xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>{cyc.nom}</span>
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">ACTIF</span>
-                        </div>
-                        <div className="flex justify-between text-[10.5px] pt-1 border-t" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
-                          <span>{cyc.classesCount || 0} promotions</span>
-                          <span className="font-bold text-indigo-600 dark:text-indigo-400">{cyc.sallesCount || 0} salles</span>
-                        </div>
-                      </div>
-                    ))}
+                {(!selectedYear.cycles?.length && !selectedYear.salles?.length) ? (
+                  <div className="p-8 text-center rounded-xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <School className="w-8 h-8 mx-auto text-slate-400" />
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>Aucun cycle ni salle physique configuré</p>
+                    <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      Les cycles (Maternelle, Primaire, Secondaire...) et leurs salles d'études physiques seront affichés ici dès leur création.
+                    </p>
                   </div>
                 ) : (
-                  <div className="p-5 text-center rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Aucun cycle configuré.</p>
-                  </div>
-                )}
-                {selectedYear.salles && selectedYear.salles.length > 0 && (
-                  <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-                    <div className="px-4 py-2.5 border-b text-[10.5px] font-bold uppercase tracking-wider" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>Salles Physiques ({selectedYear.salles.length})</div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3">
-                      {selectedYear.salles.map(sal => (
-                        <div key={sal.id} className="p-3 rounded-lg border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                          <div className="flex items-center justify-between">
-                            <span className="font-mono text-xs font-black text-indigo-600 dark:text-indigo-400">{sal.codeSalle}</span>
-                            <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-500 border border-slate-500/20">{sal.cycleCode}</span>
-                          </div>
-                          <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{sal.nomSalle}</p>
-                          <p className="text-[10.5px]" style={{ color: 'var(--text-muted)' }}>Capacité : {sal.capacite} élèves</p>
+                  <>
+                    {/* Cycles */}
+                    {selectedYear.cycles && selectedYear.cycles.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-[10.5px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                          Cycles Scolaires Enregistrés ({selectedYear.cycles.length})
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                          {selectedYear.cycles.map(cyc => (
+                            <div key={cyc.id} className="p-3.5 rounded-xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>{cyc.nom}</span>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">ACTIF</span>
+                              </div>
+                              <div className="flex justify-between text-[10.5px] pt-1 border-t" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+                                <span>{cyc.classesCount || 0} promotions</span>
+                                <span className="font-bold text-indigo-600 dark:text-indigo-400">{cyc.sallesCount || 0} salles</span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
+                      </div>
+                    )}
+
+                    {/* Salles */}
+                    {selectedYear.salles && selectedYear.salles.length > 0 && (
+                      <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+                        <div className="px-4 py-2.5 border-b text-[10.5px] font-bold uppercase tracking-wider" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+                          Salles Physiques ({selectedYear.salles.length})
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3">
+                          {selectedYear.salles.map(sal => (
+                            <div key={sal.id} className="p-3 rounded-lg border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono text-xs font-black text-indigo-600 dark:text-indigo-400">{sal.codeSalle}</span>
+                                <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-500 border border-slate-500/20">{sal.cycleCode}</span>
+                              </div>
+                              <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{sal.nomSalle}</p>
+                              <p className="text-[10.5px]" style={{ color: 'var(--text-muted)' }}>Capacité : {sal.capacite} élèves</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -1666,19 +1684,60 @@ const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ onOpenCreateYear }) => 
                     ))}
                   </div>
                 ) : (
-                  <div className="p-5 text-center rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Aucune période configurée.</p>
+                  <div className="p-8 text-center rounded-xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <Calendar className="w-8 h-8 mx-auto text-slate-400" />
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>Aucune période configurée</p>
+                    <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      Le découpage des semestres, trimestres et périodes d'examens apparaîtra ici une fois configuré.
+                    </p>
                   </div>
                 )}
               </div>
             )}
 
             {/* ONGLET DOCUMENTS */}
-            {activeDetailTab === 'rapports' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-fade-in">
-                {[{ title: 'PV Officiel d\'Ouverture & Grille Tarifaire', code: `PV-EPST-${selectedYear.nom}-TARIF`, desc: 'Décision fixant les frais d\'inscription pour cette année.' },
-                  { title: 'Tableau des Capacités & Salles Physiques', code: `PV-EPST-${selectedYear.nom}-SALLES`, desc: 'Rapport d\'occupation des locaux et quota par classe.' }]
-                  .map((doc, idx) => (
+            {activeDetailTab === 'rapports' && (() => {
+              const docs = [];
+
+              if (selectedYear.fraisInscription > 0 || (selectedYear.fraisAnnexes && selectedYear.fraisAnnexes.length > 0)) {
+                docs.push({
+                  title: 'PV Officiel d\'Ouverture & Grille Tarifaire',
+                  code: `PV-EPST-${selectedYear.nom}-TARIF`,
+                  desc: `Décision du conseil fixant les frais d'inscription et la grille des frais annexes pour l'année ${selectedYear.nom}.`
+                });
+              }
+
+              if (selectedYear.salles && selectedYear.salles.length > 0) {
+                docs.push({
+                  title: 'Tableau des Capacités & Salles Physiques',
+                  code: `PV-EPST-${selectedYear.nom}-SALLES`,
+                  desc: `Rapport officiel d'occupation des ${selectedYear.salles.length} salles d'études physiques.`
+                });
+              }
+
+              if (selectedYear.periodes && selectedYear.periodes.length > 0) {
+                docs.push({
+                  title: 'Calendrier Pédagogique Officiel EPST',
+                  code: `CAL-EPST-${selectedYear.nom}`,
+                  desc: `Découpage officiel en ${selectedYear.periodes.length} périodes et sessions d'examens.`
+                });
+              }
+
+              if (docs.length === 0) {
+                return (
+                  <div className="p-8 text-center rounded-xl border space-y-2 animate-fade-in" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <FileText className="w-8 h-8 mx-auto text-slate-400" />
+                    <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>Aucun document officiel généré</p>
+                    <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      Configurez la tarification, les salles physiques ou le calendrier de cette année scolaire pour générer les PV officiels.
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-fade-in">
+                  {docs.map((doc, idx) => (
                     <div key={idx} className="p-4 rounded-xl border flex items-start justify-between gap-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                       <div className="min-w-0">
                         <h4 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{doc.title}</h4>
@@ -1690,8 +1749,9 @@ const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ onOpenCreateYear }) => 
                       </button>
                     </div>
                   ))}
-              </div>
-            )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
