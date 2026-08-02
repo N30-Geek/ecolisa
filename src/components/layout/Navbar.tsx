@@ -131,7 +131,6 @@ const NAV_CATEGORIES = [
   { id: 'finances', label: 'Finances & Caisse', icon: Wallet, defaultTab: 'invoices', tabs: ['invoices', 'payroll', 'expenses'] },
   { id: 'admin', label: 'Administration & RH', icon: Briefcase, defaultTab: 'teachers', tabs: ['teachers', 'hr', 'leaves', 'documents', 'years'] },
   { id: 'services', label: 'Vie Scolaire & Services', icon: Layers, defaultTab: 'infirmerie', tabs: ['discipline', 'infirmerie', 'cantine', 'transport', 'ressources', 'library', 'messages'] },
-  { id: 'systeme', label: 'Système', icon: Settings, defaultTab: 'settings', tabs: ['settings', 'license'] },
 ];
 
 export const Navbar: React.FC<NavbarProps> = ({
