@@ -1324,9 +1324,7 @@ const SubjectsTab: React.FC<SubjectsTabProps> = ({ onOpenCreateSubject }) => {
   );
 };
 
-// ─── ONGLET 4 : GESTION DE L'ANNÉE SCOLAIRE, STATISTIQUES & RAPPORTS EPST ──
-
-// ─── ONGLET 4 : GESTION DE L'ANNÉE SCOLAIRE, TARIFICATION & STRUCTURE EPST ──
+// ─── ONGLET 4 : GESTION DE L'ANNÉE SCOLAIRE ─────────────────────────────────────
 
 interface SchoolYearsTabProps {
   onOpenCreateYear?: () => void;
@@ -1348,9 +1346,7 @@ const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ onOpenCreateYear }) => 
     return list;
   };
 
-  useEffect(() => {
-    refreshYears();
-  }, []);
+  useEffect(() => { refreshYears(); }, []);
 
   const selectedYear = useMemo(() => {
     return years.find(y => y.id === selectedYearId) || years[0];
@@ -1360,9 +1356,7 @@ const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ onOpenCreateYear }) => 
     await LocalDatabaseService.deleteSchoolYear(id);
     const updated = await LocalDatabaseService.getSchoolYears();
     setYears(updated);
-    if (selectedYearId === id) {
-      setSelectedYearId(updated.find(y => y.id !== id)?.id || '');
-    }
+    if (selectedYearId === id) setSelectedYearId(updated.find(y => y.id !== id)?.id || '');
     setDeleteConfirmId(null);
   };
 
@@ -1373,380 +1367,349 @@ const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ onOpenCreateYear }) => 
       if (y.statut === 'EN_COURS') return LocalDatabaseService.updateSchoolYear(y.id, { statut: 'CLOTUREE' });
       return Promise.resolve();
     }));
-    const updated = await LocalDatabaseService.getSchoolYears();
-    setYears(updated);
+    setYears(await LocalDatabaseService.getSchoolYears());
   };
 
+  const fmt = (amount: number, devise?: string) =>
+    amount > 0 ? `${amount.toLocaleString('fr-FR')} ${devise || 'USD'}` : null;
+
+  const statutCls = (s: string) => {
+    if (s === 'EN_COURS') return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30';
+    if (s === 'CLOTUREE') return 'bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30';
+    return 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30';
+  };
+
+  const emptyCell = <span className="text-[10px] italic" style={{ color: 'var(--text-muted)' }}>—</span>;
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       <SectionHeader
-        title="Gestion de l'Année Scolaire, Tarification & Structuration EPST"
-        subtitle="Configuration des frais d'inscription, frais de connexion, attribution des salles d'études et découpage des périodes"
+        title="Années Scolaires"
+        subtitle="Structure pédagogique, tarification et périodes de chaque année"
         actions={
           <button
             onClick={() => onOpenCreateYear?.()}
-            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-black text-xs shadow-md shadow-indigo-600/30 flex items-center gap-2 transition-all cursor-pointer border border-indigo-400/40"
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs flex items-center gap-2 cursor-pointer border border-indigo-400/40 transition-all"
           >
             <Sparkles className="w-4 h-4 text-amber-300" />
-            <span>Créer une Nouvelle Année (Plein Écran)</span>
+            Nouvelle Année Scolaire
           </button>
         }
       />
 
-      {/* LISTE DES CARTES DES ANNÉES SCOLAIRES (SELECTION & ACTIONS) */}
+      {/* LISTE COMPACTE */}
       {years.length === 0 ? (
-        <div className="p-8 text-center rounded-2xl border shadow-xs space-y-3" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-          <div className="w-12 h-12 rounded-2xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto border border-indigo-500/30">
-            <Calendar className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+        <div className="p-10 text-center rounded-2xl border space-y-4" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+          <div className="w-14 h-14 rounded-2xl bg-indigo-500/15 flex items-center justify-center mx-auto border border-indigo-500/30">
+            <Calendar className="w-7 h-7 text-indigo-600 dark:text-indigo-400" />
           </div>
           <div>
-            <h3 className="text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>Aucune Année Scolaire Enregistrée</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-              Le registre des années scolaires est vierge. Lancez l'assistant pour configurer votre première année et ses frais.
+            <h3 className="text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>Aucune Année Scolaire</h3>
+            <p className="text-xs mt-1 max-w-sm mx-auto" style={{ color: 'var(--text-muted)' }}>
+              Aucune année n'a été configurée. Créez votre première année pour commencer.
             </p>
           </div>
           <button
             onClick={() => onOpenCreateYear?.()}
-            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-xs inline-flex items-center gap-2 cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs inline-flex items-center gap-2 cursor-pointer"
           >
             <Sparkles className="w-4 h-4 text-amber-300" />
-            <span>Lancer la Configuration</span>
+            Créer la première année
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {years.map(y => {
-          const isCurrent = y.statut === 'EN_COURS';
-          const isSelected = selectedYearId === y.id;
-          return (
-            <div
-              key={y.id}
-              onClick={() => setSelectedYearId(y.id)}
-              className={`p-5 rounded-2xl border shadow-xs flex flex-col justify-between space-y-4 transition-all cursor-pointer relative overflow-hidden ${
-                isSelected
-                  ? 'border-indigo-500 ring-2 ring-indigo-500/30 bg-indigo-500/10'
-                  : 'hover:border-indigo-500/40'
-              }`}
-              style={{
-                background: 'var(--bg-surface)',
-                borderColor: isSelected ? '#6366f1' : 'var(--border)'
-              }}
-            >
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
-                      <Calendar className="w-5 h-5" />
+        <div className="rounded-2xl border overflow-hidden" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+          {/* EN-TÊTE TABLE */}
+          <div
+            className="grid grid-cols-12 px-4 py-2.5 border-b text-[10.5px] font-bold uppercase tracking-wider"
+            style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+          >
+            <span className="col-span-1">Statut</span>
+            <span className="col-span-3">Année</span>
+            <span className="col-span-3">Période</span>
+            <span className="col-span-2">Elèves</span>
+            <span className="col-span-1">Cycles</span>
+            <span className="col-span-2 text-right">Actions</span>
+          </div>
+
+          <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+            {years.map(y => {
+              const isCurrent = y.statut === 'EN_COURS';
+              const isSelected = selectedYearId === y.id;
+              return (
+                <div
+                  key={y.id}
+                  onClick={() => setSelectedYearId(y.id)}
+                  className={`grid grid-cols-12 px-4 py-3 items-center cursor-pointer text-xs transition-all ${
+                    isSelected ? 'bg-indigo-500/8 border-l-[3px] border-l-indigo-500' : 'hover:bg-slate-500/5'
+                  }`}
+                >
+                  <div className="col-span-1">
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border ${statutCls(y.statut)}`}>
+                      {isCurrent ? 'Active' : y.statut === 'CLOTUREE' ? 'Clôturée' : 'Prévue'}
+                    </span>
+                  </div>
+                  <div className="col-span-3 flex items-center gap-2">
+                    <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${isCurrent ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                      <Calendar className={`w-3 h-3 ${isCurrent ? 'text-white' : 'text-slate-500'}`} />
                     </div>
-                    <div>
-                      <h3 className="text-lg font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                        Année {y.nom}
-                      </h3>
-                      <span className="text-[10.5px] font-semibold text-slate-500 dark:text-slate-400">
-                        {y.debut} — {y.fin}
-                      </span>
-                    </div>
+                    <span className="font-black" style={{ color: 'var(--text-primary)' }}>{y.nom}</span>
                   </div>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
-                    isCurrent
-                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
-                      : y.statut === 'CLOTUREE'
-                      ? 'bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30'
-                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
-                  }`}>
-                    {isCurrent ? 'EN COURS' : y.statut}
-                  </span>
-                </div>
-
-                {/* Badges Synthèse des Frais Majeurs */}
-                <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t text-center text-[10.5px]" style={{ borderColor: 'var(--border)' }}>
-                  <div className="p-1.5 rounded-lg border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <span className="text-[9.5px] font-bold block text-slate-500 dark:text-slate-400">Inscription</span>
-                    <span className="font-black text-indigo-600 dark:text-indigo-400">${y.fraisInscription}</span>
+                  <div className="col-span-3" style={{ color: 'var(--text-secondary)' }}>
+                    {y.debut && y.fin ? `${y.debut} → ${y.fin}` : emptyCell}
                   </div>
-                  <div className="p-1.5 rounded-lg border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <span className="text-[9.5px] font-bold block text-slate-500 dark:text-slate-400">Connexion</span>
-                    <span className="font-black text-emerald-600 dark:text-emerald-400">${y.fraisConnexion}</span>
+                  <div className="col-span-2" style={{ color: 'var(--text-primary)' }}>
+                    {y.nombreElevesTotal > 0 ? `${y.nombreElevesTotal.toLocaleString('fr-FR')}` : emptyCell}
                   </div>
-                  <div className="p-1.5 rounded-lg border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <span className="text-[9.5px] font-bold block text-slate-500 dark:text-slate-400">Réinscription</span>
-                    <span className="font-black text-indigo-600 dark:text-indigo-400">${y.fraisReinscription}</span>
+                  <div className="col-span-1" style={{ color: 'var(--text-secondary)' }}>
+                    {y.cycles?.length > 0 ? y.cycles.length : emptyCell}
+                  </div>
+                  <div className="col-span-2 flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+                    {!isCurrent && (
+                      <button
+                        onClick={() => handleActivateYear(y.id)}
+                        className="px-2 py-1 rounded-lg text-[9.5px] font-extrabold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25 transition-all cursor-pointer"
+                      >
+                        Activer
+                      </button>
+                    )}
+                    {isCurrent && (
+                      <span className="text-[9.5px] font-extrabold text-emerald-600 dark:text-emerald-400">✓ En cours</span>
+                    )}
+                    {!isCurrent && (
+                      <button
+                        onClick={() => setDeleteConfirmId(y.id)}
+                        className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/15 transition-all cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
-
-                <div className="space-y-1.5 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500 dark:text-slate-400 font-medium">Salles d'études créées:</span>
-                    <span className="font-bold text-indigo-600 dark:text-indigo-400">{y.salles ? y.salles.length : 4} salles</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500 dark:text-slate-400 font-medium">Structure Périodique:</span>
-                    <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{y.semestres.length} Semestres</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
-                <span className="text-xs font-black text-slate-500 dark:text-slate-400">👥 {y.nombreElevesTotal.toLocaleString()} élèves</span>
-
-                <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                  {!isCurrent && (
-                    <button
-                      onClick={() => handleActivateYear(y.id)}
-                      className="px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25 transition-all cursor-pointer"
-                    >
-                      Activer
-                    </button>
-                  )}
-
-                  {!isCurrent && (
-                    <button
-                      onClick={() => setDeleteConfirmId(y.id)}
-                      className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/15 transition-all cursor-pointer"
-                      title="Supprimer l'année scolaire"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
-      {/* SECTION DÉTIAL DE L'ANNÉE SCOLAIRE SÉLECTIONNÉE AVEC 4 SOUS-ONGLETS */}
+      {/* PANNEAU DE DÉTAIL */}
       {selectedYear && (
-        <div className="space-y-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                  Configuration & Structure — Année Scolaire {selectedYear.nom}
-                </h3>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
-                  {selectedYear.statut}
-                </span>
+        <div className="rounded-2xl border overflow-hidden" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+          {/* EN-TÊTE PANNEAU */}
+          <div
+            className="px-5 py-3.5 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shrink-0">
+                <Calendar className="w-4.5 h-4.5 text-white" />
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Consultez et gérez la grille tarifaire, la liste des salles physiques et le calendrier pédagogique.
-              </p>
+              <div>
+                <h3 className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>{selectedYear.nom}</h3>
+                <p className="text-[10.5px]" style={{ color: 'var(--text-muted)' }}>
+                  {selectedYear.debut && selectedYear.fin ? `${selectedYear.debut} — ${selectedYear.fin}` : 'Période non définie'}
+                </p>
+              </div>
             </div>
-
-            {/* Barre des 4 Sous-onglets de Détail */}
-            <div className="flex items-center gap-1.5 p-1 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-              {[
-                { id: 'frais', label: 'Tarification & Frais', icon: CreditCard },
-                { id: 'cycles_salles', label: 'Cycles & Salles', icon: School },
-                { id: 'periodes', label: 'Périodes & Examens', icon: Calendar },
-                { id: 'rapports', label: 'Documents & PV', icon: FileText },
-              ].map(t => {
+            <div className="flex items-center gap-1 p-1 rounded-xl border" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+              {[{ id: 'frais', label: 'Frais & Tarifs', icon: CreditCard }, { id: 'cycles_salles', label: 'Cycles & Salles', icon: School }, { id: 'periodes', label: 'Périodes', icon: Calendar }, { id: 'rapports', label: 'Documents', icon: FileText }].map(t => {
                 const TIcon = t.icon;
-                const isActive = activeDetailTab === t.id;
+                const isActive = activeDetailTab === t.id as any;
                 return (
-                  <button
-                    key={t.id}
-                    onClick={() => setActiveDetailTab(t.id as any)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      isActive ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                    }`}
+                  <button key={t.id} onClick={() => setActiveDetailTab(t.id as any)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-slate-500/10'}`}
+                    style={isActive ? {} : { color: 'var(--text-secondary)' }}
                   >
-                    <TIcon className="w-3.5 h-3.5" />
-                    <span>{t.label}</span>
+                    <TIcon className="w-3.5 h-3.5" />{t.label}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* CONTENU DU SOUS-ONGLET SÉLECTIONNÉ */}
-          {activeDetailTab === 'frais' && (
-            <div className="space-y-4 animate-fade-in">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                  <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais d'Inscription</span>
-                  <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">${selectedYear.fraisInscription || 50}</p>
-                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Payable à la confirmation du dossier</p>
-                </div>
-
-                <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                  <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais de Connexion Système</span>
-                  <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">${selectedYear.fraisConnexion || 15}</p>
-                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Accès ECOLISA PRO & SMS Parents</p>
-                </div>
-
-                <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                  <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais de Réinscription</span>
-                  <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">${selectedYear.fraisReinscription || 30}</p>
-                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Anciens élèves reconduits</p>
-                </div>
-
-                <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                  <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais Carte d'Élève & Badge</span>
-                  <p className="text-2xl font-black text-amber-600 dark:text-amber-400">${selectedYear.fraisCarte || 10}</p>
-                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Carte QR Code sécurisée EPST</p>
-                </div>
-              </div>
-
-              {/* TABLEAU DES FRAIS ANNEXES & OPTIONNELS */}
-              <div className="p-4 rounded-2xl border shadow-xs space-y-3" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Frais Annexes Approuvés par le Comité Gestionnaire ({selectedYear.fraisAnnexes ? selectedYear.fraisAnnexes.length : 0})
-                </h4>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b uppercase tracking-wider text-[10px] font-bold text-slate-500 dark:text-slate-400" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                        <th className="p-3">Intitulé du Frais</th>
-                        <th className="p-3">Type de Frais</th>
-                        <th className="p-3">Montant Fixé</th>
-                        <th className="p-3">Statut Obligation</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
-                      {(selectedYear.fraisAnnexes || []).map(fa => (
-                        <tr key={fa.id} className="hover:bg-slate-500/5 transition-colors">
-                          <td className="p-3 font-bold" style={{ color: 'var(--text-primary)' }}>{fa.intitule}</td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 rounded text-[9.5px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
-                              {fa.typeFrais}
-                            </span>
-                          </td>
-                          <td className="p-3 font-black text-indigo-600 dark:text-indigo-400">${fa.montant} {fa.devise}</td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 rounded text-[9.5px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
-                              {fa.obligatoire ? 'OBLIGATOIRE' : 'OPTIONNEL'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeDetailTab === 'cycles_salles' && (
-            <div className="space-y-4 animate-fade-in">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                {(selectedYear.cycles || []).map(cyc => (
-                  <div key={cyc.id} className="p-4 rounded-xl border space-y-2" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{cyc.nom}</h4>
-                      <span className="px-2 py-0.5 rounded text-[9.5px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
-                        ACTIF
-                      </span>
+          <div className="p-5">
+            {/* ONGLET FRAIS */}
+            {activeDetailTab === 'frais' && (
+              <div className="space-y-4 animate-fade-in">
+                {(selectedYear.fraisInscription > 0 || selectedYear.fraisConnexion > 0 || selectedYear.fraisReinscription > 0 || selectedYear.fraisCarte > 0) ? (
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {selectedYear.fraisInscription > 0 && (
+                      <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Inscription</span>
+                        <p className="text-xl font-black text-indigo-600 dark:text-indigo-400">{fmt(selectedYear.fraisInscription)}</p>
+                        <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Frais principal à l'inscription</p>
+                      </div>
+                    )}
+                    {selectedYear.fraisConnexion > 0 && (
+                      <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Connexion</span>
+                        <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{fmt(selectedYear.fraisConnexion)}</p>
+                        <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Inclus dans l'inscription</p>
+                      </div>
+                    )}
+                    {selectedYear.fraisReinscription > 0 && (
+                      <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Réinscription</span>
+                        <p className="text-xl font-black text-indigo-600 dark:text-indigo-400">{fmt(selectedYear.fraisReinscription)}</p>
+                        <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Anciens élèves reconduits</p>
+                      </div>
+                    )}
+                    {selectedYear.fraisCarte > 0 && (
+                      <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Carte Élève</span>
+                        <p className="text-xl font-black text-amber-600 dark:text-amber-400">{fmt(selectedYear.fraisCarte)}</p>
+                        <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Badge QR Code EPST</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-6 text-center rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Aucun frais configuré. Utilisez l'assistant pour définir la tarification.</p>
+                  </div>
+                )}
+                {selectedYear.fraisAnnexes && selectedYear.fraisAnnexes.length > 0 && (
+                  <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+                    <div className="px-4 py-2.5 border-b text-[10.5px] font-bold uppercase tracking-wider" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+                      Frais Annexes ({selectedYear.fraisAnnexes.length})
                     </div>
-                    <div className="pt-2 border-t flex justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400" style={{ borderColor: 'var(--border)' }}>
-                      <span>{cyc.classesCount} promotions</span>
-                      <span className="font-bold text-indigo-600 dark:text-indigo-400">{cyc.sallesCount || 4} salles physiques</span>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+                          <th className="px-4 py-2.5 text-left font-bold uppercase text-[10px] tracking-wider">Intitulé</th>
+                          <th className="px-4 py-2.5 text-left font-bold uppercase text-[10px] tracking-wider">Type</th>
+                          <th className="px-4 py-2.5 text-right font-bold uppercase text-[10px] tracking-wider">Montant</th>
+                          <th className="px-4 py-2.5 text-right font-bold uppercase text-[10px] tracking-wider">Obligation</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                        {selectedYear.fraisAnnexes.map(fa => (
+                          <tr key={fa.id} className="hover:bg-slate-500/5">
+                            <td className="px-4 py-2.5 font-bold" style={{ color: 'var(--text-primary)' }}>{fa.intitule}</td>
+                            <td className="px-4 py-2.5">
+                              <span className="px-2 py-0.5 rounded text-[9.5px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">{fa.typeFrais}</span>
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-black text-indigo-600 dark:text-indigo-400">
+                              {fa.montant?.toLocaleString('fr-FR')} {fa.devise}
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              <span className={`px-2 py-0.5 rounded text-[9.5px] font-bold border ${
+                                fa.obligatoire ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/25' : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20'
+                              }`}>{fa.obligatoire ? 'Obligatoire' : 'Optionnel'}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ONGLET CYCLES & SALLES */}
+            {activeDetailTab === 'cycles_salles' && (
+              <div className="space-y-4 animate-fade-in">
+                {selectedYear.cycles && selectedYear.cycles.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {selectedYear.cycles.map(cyc => (
+                      <div key={cyc.id} className="p-3.5 rounded-xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>{cyc.nom}</span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">ACTIF</span>
+                        </div>
+                        <div className="flex justify-between text-[10.5px] pt-1 border-t" style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+                          <span>{cyc.classesCount || 0} promotions</span>
+                          <span className="font-bold text-indigo-600 dark:text-indigo-400">{cyc.sallesCount || 0} salles</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-5 text-center rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Aucun cycle configuré.</p>
+                  </div>
+                )}
+                {selectedYear.salles && selectedYear.salles.length > 0 && (
+                  <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+                    <div className="px-4 py-2.5 border-b text-[10.5px] font-bold uppercase tracking-wider" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>Salles Physiques ({selectedYear.salles.length})</div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3">
+                      {selectedYear.salles.map(sal => (
+                        <div key={sal.id} className="p-3 rounded-lg border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-xs font-black text-indigo-600 dark:text-indigo-400">{sal.codeSalle}</span>
+                            <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-500 border border-slate-500/20">{sal.cycleCode}</span>
+                          </div>
+                          <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{sal.nomSalle}</p>
+                          <p className="text-[10.5px]" style={{ color: 'var(--text-muted)' }}>Capacité : {sal.capacite} élèves</p>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
+                )}
               </div>
+            )}
 
-              {/* LISTE DES SALLES D'ÉTUDES PHYSIQUES ATTRIBUÉES */}
-              <div className="p-4 rounded-2xl border shadow-xs space-y-3" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Répertoire des Salles Physiques d'Études ({selectedYear.salles ? selectedYear.salles.length : 0})
-                </h4>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {(selectedYear.salles || []).map(sal => (
-                    <div key={sal.id} className="p-3 rounded-xl border space-y-1.5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs font-black text-indigo-600 dark:text-indigo-400">{sal.codeSalle}</span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20">
-                          {sal.cycleCode}
-                        </span>
+            {/* ONGLET PÉRIODES */}
+            {activeDetailTab === 'periodes' && (
+              <div className="space-y-3 animate-fade-in">
+                {selectedYear.periodes && selectedYear.periodes.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {selectedYear.periodes.map(per => (
+                      <div key={per.id} className="p-4 rounded-xl border flex items-center justify-between" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                        <div>
+                          <h4 className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>{per.nom}</h4>
+                          <p className="text-[10.5px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{per.debut} → {per.fin}</p>
+                        </div>
+                        <span className={`px-2.5 py-0.5 rounded text-[9.5px] font-bold border ${
+                          per.type === 'EXAM' ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30' : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                        }`}>{per.type === 'EXAM' ? 'EXAMENS' : 'PÉRIODE'}</span>
                       </div>
-                      <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{sal.nomSalle}</p>
-                      <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">Capacité max : {sal.capacite} élèves</p>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-5 text-center rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Aucune période configurée.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ONGLET DOCUMENTS */}
+            {activeDetailTab === 'rapports' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-fade-in">
+                {[{ title: 'PV Officiel d\'Ouverture & Grille Tarifaire', code: `PV-EPST-${selectedYear.nom}-TARIF`, desc: 'Décision fixant les frais d\'inscription pour cette année.' },
+                  { title: 'Tableau des Capacités & Salles Physiques', code: `PV-EPST-${selectedYear.nom}-SALLES`, desc: 'Rapport d\'occupation des locaux et quota par classe.' }]
+                  .map((doc, idx) => (
+                    <div key={idx} className="p-4 rounded-xl border flex items-start justify-between gap-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{doc.title}</h4>
+                        <span className="font-mono text-[9.5px] text-indigo-600 dark:text-indigo-400 font-bold block mt-0.5">{doc.code}</span>
+                        <p className="text-[10.5px] mt-1" style={{ color: 'var(--text-muted)' }}>{doc.desc}</p>
+                      </div>
+                      <button className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold text-xs flex items-center gap-1 cursor-pointer shrink-0">
+                        <Download className="w-3.5 h-3.5" /> PDF
+                      </button>
                     </div>
                   ))}
-                </div>
               </div>
-            </div>
-          )}
-
-          {activeDetailTab === 'periodes' && (
-            <div className="space-y-4 animate-fade-in">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {(selectedYear.periodes || []).map(per => (
-                  <div key={per.id} className="p-4 rounded-xl border flex items-center justify-between" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                    <div>
-                      <h4 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{per.nom}</h4>
-                      <p className="text-[11px] mt-0.5 text-slate-500 dark:text-slate-400">Intervalle : {per.debut} au {per.fin}</p>
-                    </div>
-                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold border ${
-                      per.type === 'EXAM' ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30' : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
-                    }`}>
-                      {per.type === 'EXAM' ? 'EXAMENS' : 'PÉRIODE NORMALE'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {activeDetailTab === 'rapports' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-fade-in">
-              {[
-                { title: 'PV Officiel d’Ouverture & Grille Tarifaire', code: 'PV-EPST-2026-TARIF', desc: 'Décision du conseil d’administration fixant les frais d’inscription, connexion et carte élève.' },
-                { title: 'Tableau des Capacités & Salles Physiques', code: 'PV-EPST-2026-SALLES', desc: 'Rapport d’occupation des locaux d’études et quota par classe.' },
-              ].map((doc, idx) => (
-                <div key={idx} className="p-4 rounded-xl border flex items-center justify-between" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                  <div>
-                    <h4 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{doc.title}</h4>
-                    <span className="font-mono text-[9.5px] text-indigo-600 dark:text-indigo-400 font-bold block mt-0.5">{doc.code}</span>
-                    <p className="text-[10.5px] mt-1 text-slate-500 dark:text-slate-400">{doc.desc}</p>
-                  </div>
-                  <button className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-bold text-xs shadow-xs flex items-center gap-1 cursor-pointer">
-                    <Download className="w-3.5 h-3.5" /> PDF
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
-      {/* CONFIRMATION DE SUPPRESSION D'ANNÉE SCOLAIRE */}
+      {/* CONFIRMATION SUPPRESSION */}
       {deleteConfirmId && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in select-none" onClick={() => setDeleteConfirmId(null)}>
-          <div
-            className="w-full max-w-md rounded-2xl shadow-2xl border p-6 space-y-4 text-center"
-            style={{ background: 'var(--sidebar-popover-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto border border-rose-500/30">
-              <AlertTriangle className="w-6 h-6" />
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md" onClick={() => setDeleteConfirmId(null)}>
+          <div className="w-full max-w-md rounded-2xl border p-6 space-y-4 text-center" style={{ background: 'var(--sidebar-popover-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} onClick={e => e.stopPropagation()}>
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 flex items-center justify-center mx-auto border border-rose-500/30">
+              <AlertTriangle className="w-6 h-6 text-rose-600 dark:text-rose-400" />
             </div>
-
             <div>
-              <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Supprimer cette Année Scolaire ?</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Êtes-vous sûr de vouloir supprimer l'année scolaire sélectionnée ? Cette action archivée est irréversible.
-              </p>
+              <h3 className="text-base font-bold">Supprimer cette Année Scolaire ?</h3>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Cette action est irréversible.</p>
             </div>
-
             <div className="flex items-center justify-center gap-3 pt-2">
-              <button
-                onClick={() => setDeleteConfirmId(null)}
-                className="px-4 py-2 rounded-xl border font-bold text-xs hover:bg-slate-500/20 cursor-pointer"
-                style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-              >
-                Annuler
-              </button>
-              <button
-                onClick={() => handleDeleteYear(deleteConfirmId)}
-                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md cursor-pointer"
-              >
-                Confirmer la Suppression
-              </button>
+              <button onClick={() => setDeleteConfirmId(null)} className="px-4 py-2 rounded-xl border font-bold text-xs cursor-pointer" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>Annuler</button>
+              <button onClick={() => handleDeleteYear(deleteConfirmId)} className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs cursor-pointer">Confirmer</button>
             </div>
           </div>
         </div>,
@@ -1755,7 +1718,6 @@ const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ onOpenCreateYear }) => 
     </div>
   );
 };
-
 // ─── TEACHERS TAB ─────────────────────────────────────────────────────────
 
 const TeachersTab: React.FC = () => (
