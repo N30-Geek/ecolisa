@@ -2081,12 +2081,7 @@ const CreateYearPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   // Étape 4 : Découpage Evaluation par Cycle
   const [selectedCycleDecoupage, setSelectedCycleDecoupage] = useState<'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES'>('PRIMAIRE');
   const [decoupageType, setDecoupageType] = useState<'TRIMESTRES_SIMPLE' | 'TRIMESTRES_DECOUPES' | 'SEMESTRES_DECOUPES'>('TRIMESTRES_SIMPLE');
-  const [configuredDecoupages, setConfiguredDecoupages] = useState<Record<string, 'TRIMESTRES_SIMPLE' | 'TRIMESTRES_DECOUPES' | 'SEMESTRES_DECOUPES'>>({
-    MATERNELLE: 'TRIMESTRES_SIMPLE',
-    PRIMAIRE: 'TRIMESTRES_SIMPLE',
-    SECONDAIRE_CTEB: 'TRIMESTRES_DECOUPES',
-    HUMANITES: 'TRIMESTRES_DECOUPES',
-  });
+  const [configuredDecoupages, setConfiguredDecoupages] = useState<Record<string, 'TRIMESTRES_SIMPLE' | 'TRIMESTRES_DECOUPES' | 'SEMESTRES_DECOUPES'>>({});
 
   // Devise du système
   const systemCurrency = useMemo(() => {
@@ -2178,7 +2173,12 @@ const CreateYearPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     });
 
     // 3. Transformer configuredClassesAndRooms en cycles et salles configs
-    const cycles: CycleConfig[] = Object.keys(configuredDecoupages).map(c => {
+    const activeCycleCodes = Array.from(new Set([
+      ...Object.keys(configuredDecoupages),
+      ...configuredClassesAndRooms.map(cr => cr.cycleCode)
+    ]));
+
+    const cycles: CycleConfig[] = activeCycleCodes.map(c => {
       const classesForCycle = configuredClassesAndRooms.filter(cr => cr.cycleCode === c);
       return {
         id: `cy-${c}`,
@@ -2239,10 +2239,10 @@ const CreateYearPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       debut,
       fin,
       nombreElevesTotal: 0,
-      fraisInscription: getFraisAmount('inscription') || getFraisAmount('minerval') || 50,
-      fraisConnexion: getFraisAmount('connexion') || getFraisAmount('système') || 15,
-      fraisReinscription: getFraisAmount('réinscription') || 30,
-      fraisCarte: getFraisAmount('carte') || getFraisAmount('badge') || 10,
+      fraisInscription: getFraisAmount('inscription') || getFraisAmount('minerval') || 0,
+      fraisConnexion: getFraisAmount('connexion') || getFraisAmount('système') || 0,
+      fraisReinscription: getFraisAmount('réinscription') || 0,
+      fraisCarte: getFraisAmount('carte') || getFraisAmount('badge') || 0,
       fraisAnnexes,
       cycles,
       salles,
