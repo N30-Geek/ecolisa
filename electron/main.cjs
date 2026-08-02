@@ -205,6 +205,13 @@ const initDatabase = () => {
 
     console.log('[ECOLISA] Comptes de test prets : admin@ecolisa.cd (mdp: admin123, pin: 992001)');
 
+    // Migration : supprimer l'année scolaire de démonstration auto-injectée par les anciennes versions
+    try {
+      const delYear = db.prepare("DELETE FROM school_years WHERE id = 'ay-default'").run();
+      if (delYear.changes > 0) {
+        console.log('[ECOLISA Migration] Annee scolaire de demonstration supprimee (ay-default).');
+      }
+    } catch (e) {}
 
     console.log('✅ [ECOLISA] SQLite relationnel pret :', dbPath);
     return true;
