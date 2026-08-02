@@ -1346,6 +1346,54 @@ const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ onOpenCreateYear }) => 
   const [editFraisReinscription, setEditFraisReinscription] = useState(0);
   const [editFraisCarte, setEditFraisCarte] = useState(0);
 
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [activeDetailTab, setActiveDetailTab] = useState<'frais' | 'cycles_salles' | 'periodes' | 'rapports'>('frais');
+
+  const refreshYears = async () => {
+    const list = await LocalDatabaseService.getSchoolYears();
+    setYears(list);
+    if (!selectedYearId && list.length > 0) {
+      const active = list.find(y => y.statut === 'EN_COURS');
+      setSelectedYearId(active?.id || list[0]?.id || '');
+    }
+    return list;
+  };
+
+  useEffect(() => { refreshYears(); }, []);
+
+  const selectedYear = useMemo(() => {
+    return years.find(y => y.id === selectedYearId) || years[0];
+  }, [years, selectedYearId]);
+
+  const handleDeleteYear = async (id: string) => {
+    await LocalDatabaseService.deleteSchoolYear(id);
+    const updated = await LocalDatabaseService.getSchoolYears();
+    setYears(updated);
+    if (selectedYearId === id) setSelectedYearId(updated.find(y => y.id !== id)?.id || '');
+    setDeleteConfirmId(null);
+  };
+
+  const handleActivateYear = async (id: string) => {
+    const list = await LocalDatabaseService.getSchoolYears();
+    await Promise.all(list.map(y => {
+      if (y.id === id) return LocalDatabaseService.updateSchoolYear(y.id, { statut: 'EN_COURS' });
+      if (y.statut === 'EN_COURS') return LocalDatabaseService.updateSchoolYear(y.id, { statut: 'CLOTUREE' });
+      return Promise.resolve();
+    }));
+    setYears(await LocalDatabaseService.getSchoolYears());
+  };
+
+  const fmt = (amount: number, devise?: string) =>
+    amount > 0 ? `${amount.toLocaleString('fr-FR')} ${devise || 'USD'}` : null;
+
+  const statutCls = (s: string) => {
+    if (s === 'EN_COURS') return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30';
+    if (s === 'CLOTUREE') return 'bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30';
+    return 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30';
+  };
+
+  const emptyCell = <span className="text-[10px] italic" style={{ color: 'var(--text-muted)' }}>—</span>;
+
   const openEditModal = (y: AnneeScolaireConfig) => {
     setEditingYear(y);
     setEditNom(y.nom || '');
