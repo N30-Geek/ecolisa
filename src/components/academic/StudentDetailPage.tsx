@@ -36,6 +36,7 @@ import { Eleve, ClasseScolaire } from '../../types';
 import { IdCardRenderer } from './IdCardRenderer';
 import { StudentIdCardModal } from './StudentIdCardModal';
 import { StudentFullFileModal } from './StudentFullFileModal';
+import { StudentDocumentsModal } from './StudentDocumentsModal';
 import { formatCurrency } from '../../utils/currency';
 
 interface StudentDetailPageProps {
@@ -53,6 +54,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
   const [cardFace, setCardFace] = useState<'front' | 'back'>('front');
   const [showCardModal, setShowCardModal] = useState(false);
   const [showFullFileModal, setShowFullFileModal] = useState(false);
+  const [showDocsModal, setShowDocsModal] = useState(false);
 
   // Exemple de données financières pour la démo
   const financialSummary = useMemo(() => {
@@ -130,6 +132,14 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
           >
             <QrCode className="w-4 h-4 text-indigo-500 icon-animated" />
             <span>Carte QR</span>
+          </button>
+
+          <button
+            onClick={() => setShowDocsModal(true)}
+            className="px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs hover:shadow-md active:scale-[0.97] transition-all duration-200 cursor-pointer bg-indigo-500/15 text-indigo-700 dark:text-indigo-300"
+          >
+            <FileCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 icon-animated" />
+            <span>Gestion du Dossier & Scans</span>
           </button>
 
           <button
@@ -565,6 +575,14 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                 </div>
               ))}
             </div>
+
+            <button
+              onClick={() => setShowDocsModal(true)}
+              className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white font-bold text-xs shadow-md shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer mt-3"
+            >
+              <FileCheck className="w-4 h-4 text-white" />
+              <span>Gérer & Numériser les Pièces (Camera / PDF)</span>
+            </button>
           </div>
 
           {/* 👨‍👩‍👧 SECTION 3 BAS DROITE : TUTEURS LÉGAUX & CONTACTS PARENTS */}
@@ -632,7 +650,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
 
       </div>
 
-      {/* MODALES CARTE & DOSSIER COMPLET */}
+      {/* MODALES CARTE & DOSSIER COMPLET & NUMÉRISATION */}
       <StudentIdCardModal
         isOpen={showCardModal}
         onClose={() => setShowCardModal(false)}
@@ -643,6 +661,13 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
         isOpen={showFullFileModal}
         onClose={() => setShowFullFileModal(false)}
         student={student}
+      />
+
+      <StudentDocumentsModal
+        isOpen={showDocsModal}
+        onClose={() => setShowDocsModal(false)}
+        student={student}
+        mode="student"
       />
     </div>
   );
