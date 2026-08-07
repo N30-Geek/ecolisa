@@ -57,8 +57,8 @@ interface AcademicManagerProps {
   activeSubTab?: string;
 }
 
-// â”€â”€â”€ ModÃ¨le AnnÃ©e Scolaire â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// â”€â”€â”€ ModÃ¨le AnnÃ©e Scolaire & Tarification Complexe â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€ Modèle Année Scolaire â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€ Modèle Année Scolaire & Tarification Complexe â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface FraisAnnexeConfig {
   id: string;
   intitule: string;
@@ -106,7 +106,7 @@ interface AnneeScolaireConfig {
 const mockSchoolYears: AnneeScolaireConfig[] = [
   {
     id: 'ay-1',
-    nom: '2025â€“2026',
+    nom: '2025–2026',
     statut: 'EN_COURS',
     debut: '01 Septembre 2025',
     fin: '02 Juillet 2026',
@@ -117,36 +117,36 @@ const mockSchoolYears: AnneeScolaireConfig[] = [
     fraisCarte: 10,
     fraisAnnexes: [
       { id: 'fa-1', intitule: 'Kit Scolaire & Uniforme Officiel', montant: 25, devise: 'USD', obligatoire: true, typeFrais: 'KIT' },
-      { id: 'fa-2', intitule: 'Frais de Plateforme SystÃ¨me & SMS', montant: 15, devise: 'USD', obligatoire: true, typeFrais: 'CONNEXION' },
+      { id: 'fa-2', intitule: 'Frais de Plateforme Système & SMS', montant: 15, devise: 'USD', obligatoire: true, typeFrais: 'CONNEXION' },
       { id: 'fa-3', intitule: 'Assurance Scolaire & Infirmerie', montant: 10, devise: 'USD', obligatoire: true, typeFrais: 'AUTRE' },
     ],
     cycles: [
-      { id: 'cyc-1', code: 'MATERNELLE', nom: 'Cycle Maternelle (3â€“5 ans)', actif: true, classesCount: 6, sallesCount: 6 },
-      { id: 'cyc-2', code: 'PRIMAIRE', nom: 'Cycle Primaire (1Ã¨reâ€“6Ã¨me)', actif: true, classesCount: 18, sallesCount: 18 },
-      { id: 'cyc-3', code: 'SECONDAIRE_CTEB', nom: 'Cycle Terminal dâ€™Ã‰ducation de Base (7Ã¨meâ€“8Ã¨me CTEB)', actif: true, classesCount: 8, sallesCount: 8 },
-      { id: 'cyc-4', code: 'HUMANITES', nom: 'HumanitÃ©s GÃ©nÃ©rales & Techniques (1Ã¨reâ€“4Ã¨me H)', actif: true, classesCount: 16, sallesCount: 16 },
+      { id: 'cyc-1', code: 'MATERNELLE', nom: 'Cycle Maternelle (3–5 ans)', actif: true, classesCount: 6, sallesCount: 6 },
+      { id: 'cyc-2', code: 'PRIMAIRE', nom: 'Cycle Primaire (1ère–6ème)', actif: true, classesCount: 18, sallesCount: 18 },
+      { id: 'cyc-3', code: 'SECONDAIRE_CTEB', nom: 'Cycle Terminal d’Éducation de Base (7ème–8ème CTEB)', actif: true, classesCount: 8, sallesCount: 8 },
+      { id: 'cyc-4', code: 'HUMANITES', nom: 'Humanités Générales & Techniques (1ère–4ème H)', actif: true, classesCount: 16, sallesCount: 16 },
     ],
     salles: [
-      { id: 'sal-1', codeSalle: 'M-101', nomSalle: 'Pavillon Maternelle A â€” Petite Section', capacite: 35, cycleCode: 'MATERNELLE' },
-      { id: 'sal-2', codeSalle: 'P-201', nomSalle: 'BÃ¢timent Principal â€” Salle 1Ã¨re Primaire A', capacite: 45, cycleCode: 'PRIMAIRE' },
-      { id: 'sal-3', codeSalle: 'C-301', nomSalle: 'Aile Scientifique â€” Salle 7Ã¨me CTEB A', capacite: 40, cycleCode: 'SECONDAIRE_CTEB' },
-      { id: 'sal-4', codeSalle: 'H-401', nomSalle: 'BÃ¢timent HumanitÃ©s â€” Labo Math-Physique A', capacite: 40, cycleCode: 'HUMANITES' },
-      { id: 'sal-5', codeSalle: 'H-402', nomSalle: 'BÃ¢timent HumanitÃ©s â€” Salle Biologie-Chimie B', capacite: 40, cycleCode: 'HUMANITES' },
+      { id: 'sal-1', codeSalle: 'M-101', nomSalle: 'Pavillon Maternelle A — Petite Section', capacite: 35, cycleCode: 'MATERNELLE' },
+      { id: 'sal-2', codeSalle: 'P-201', nomSalle: 'Bâtiment Principal — Salle 1ère Primaire A', capacite: 45, cycleCode: 'PRIMAIRE' },
+      { id: 'sal-3', codeSalle: 'C-301', nomSalle: 'Aile Scientifique — Salle 7ème CTEB A', capacite: 40, cycleCode: 'SECONDAIRE_CTEB' },
+      { id: 'sal-4', codeSalle: 'H-401', nomSalle: 'Bâtiment Humanités — Labo Math-Physique A', capacite: 40, cycleCode: 'HUMANITES' },
+      { id: 'sal-5', codeSalle: 'H-402', nomSalle: 'Bâtiment Humanités — Salle Biologie-Chimie B', capacite: 40, cycleCode: 'HUMANITES' },
     ],
     semestres: [
-      { id: 's1', nom: '1er Semestre (S1)', statut: 'EN_COURS', fin: '17 FÃ©vrier 2026' },
-      { id: 's2', nom: '2Ã¨me Semestre (S2)', statut: 'PLANIFIE', fin: '02 Juillet 2026' },
+      { id: 's1', nom: '1er Semestre (S1)', statut: 'EN_COURS', fin: '17 Février 2026' },
+      { id: 's2', nom: '2ème Semestre (S2)', statut: 'PLANIFIE', fin: '02 Juillet 2026' },
     ],
     periodes: [
-      { id: 'p1', nom: '1Ã¨re PÃ©riode', debut: '01 Sept', fin: '04 Nov 2025', type: 'PERIOD' },
-      { id: 'p2', nom: '2Ã¨me PÃ©riode & Examens S1', debut: '09 Nov', fin: '17 FÃ©v 2026', type: 'EXAM' },
-      { id: 'p3', nom: '3Ã¨me PÃ©riode', debut: '22 FÃ©v', fin: '24 Avr 2026', type: 'PERIOD' },
-      { id: 'p4', nom: '4Ã¨me PÃ©riode & EXETAT', debut: '26 Avr', fin: '02 Jul 2026', type: 'EXAM' },
+      { id: 'p1', nom: '1ère Période', debut: '01 Sept', fin: '04 Nov 2025', type: 'PERIOD' },
+      { id: 'p2', nom: '2ème Période & Examens S1', debut: '09 Nov', fin: '17 Fév 2026', type: 'EXAM' },
+      { id: 'p3', nom: '3ème Période', debut: '22 Fév', fin: '24 Avr 2026', type: 'PERIOD' },
+      { id: 'p4', nom: '4ème Période & EXETAT', debut: '26 Avr', fin: '02 Jul 2026', type: 'EXAM' },
     ],
   },
   {
     id: 'ay-0',
-    nom: '2024â€“2025',
+    nom: '2024–2025',
     statut: 'CLOTUREE',
     debut: '02 Septembre 2024',
     fin: '04 Juillet 2025',
@@ -162,25 +162,25 @@ const mockSchoolYears: AnneeScolaireConfig[] = [
       { id: 'cyc-01', code: 'MATERNELLE', nom: 'Cycle Maternelle', actif: true, classesCount: 6, sallesCount: 6 },
       { id: 'cyc-02', code: 'PRIMAIRE', nom: 'Cycle Primaire', actif: true, classesCount: 18, sallesCount: 18 },
       { id: 'cyc-03', code: 'SECONDAIRE_CTEB', nom: 'CTEB 7-8', actif: true, classesCount: 8, sallesCount: 8 },
-      { id: 'cyc-04', code: 'HUMANITES', nom: 'HumanitÃ©s', actif: true, classesCount: 16, sallesCount: 16 },
+      { id: 'cyc-04', code: 'HUMANITES', nom: 'Humanités', actif: true, classesCount: 16, sallesCount: 16 },
     ],
     salles: [
       { id: 'sal-01', codeSalle: 'M-101', nomSalle: 'Salle Maternelle 2024', capacite: 35, cycleCode: 'MATERNELLE' },
     ],
     semestres: [
       { id: 's1-24', nom: '1er Semestre (S1)', statut: 'CLOTURE', fin: '31 Jan 2025' },
-      { id: 's2-24', nom: '2Ã¨me Semestre (S2)', statut: 'CLOTURE', fin: '04 Jul 2025' },
+      { id: 's2-24', nom: '2ème Semestre (S2)', statut: 'CLOTURE', fin: '04 Jul 2025' },
     ],
     periodes: [
-      { id: 'p1-24', nom: '1Ã¨re PÃ©riode', debut: '02 Sept', fin: '04 Nov 2024', type: 'PERIOD' },
-      { id: 'p2-24', nom: '2Ã¨me PÃ©riode', debut: '09 Nov', fin: '31 Jan 2025', type: 'PERIOD' },
-      { id: 'p3-24', nom: '3Ã¨me PÃ©riode', debut: '15 FÃ©v', fin: '20 Avr 2025', type: 'PERIOD' },
-      { id: 'p4-24', nom: '4Ã¨me PÃ©riode', debut: '25 Avr', fin: '04 Jul 2025', type: 'EXAM' },
+      { id: 'p1-24', nom: '1ère Période', debut: '02 Sept', fin: '04 Nov 2024', type: 'PERIOD' },
+      { id: 'p2-24', nom: '2ème Période', debut: '09 Nov', fin: '31 Jan 2025', type: 'PERIOD' },
+      { id: 'p3-24', nom: '3ème Période', debut: '15 Fév', fin: '20 Avr 2025', type: 'PERIOD' },
+      { id: 'p4-24', nom: '4ème Période', debut: '25 Avr', fin: '04 Jul 2025', type: 'EXAM' },
     ],
   },
 ];
 
-// â”€â”€â”€ Composant de Pagination RÃ©utilisable Haute LisibilitÃ© â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€ Composant de Pagination Réutilisable Haute Lisibilité â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface PaginationBarProps {
   totalItems: number;
   currentPage: number;
@@ -224,7 +224,7 @@ const PaginationBar: React.FC<PaginationBarProps> = ({
           className="w-32"
         />
         <span className="font-semibold text-slate-500 dark:text-slate-400">
-          {startItem} â€“ {endItem} sur {totalItems} Ã©lÃ©ments
+          {startItem} – {endItem} sur {totalItems} éléments
         </span>
       </div>
 
@@ -235,7 +235,7 @@ const PaginationBar: React.FC<PaginationBarProps> = ({
           className="px-3 py-1.5 rounded-xl border font-black transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-500/15 cursor-pointer"
           style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
         >
-          â€¹ PrÃ©cÃ©dent
+          ¹ Précédent
         </button>
 
         <span className="px-3 py-1.5 font-black text-indigo-500">
@@ -248,7 +248,7 @@ const PaginationBar: React.FC<PaginationBarProps> = ({
           className="px-3 py-1.5 rounded-xl border font-black transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-500/15 cursor-pointer"
           style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
         >
-          Suivant â€º
+          Suivant º
         </button>
       </div>
     </div>
@@ -274,7 +274,7 @@ const SectionHeader: React.FC<{
 const statusBadge = (statut: string) => {
   const map: Record<string, { label: string; cls: string }> = {
     ACTIF:     { label: 'Actif',     cls: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' },
-    TRANSFERE: { label: 'TransfÃ©rÃ©', cls: 'bg-amber-500/15 text-amber-400 border border-amber-500/30' },
+    TRANSFERE: { label: 'Transféré', cls: 'bg-amber-500/15 text-amber-400 border border-amber-500/30' },
     FINALISTE: { label: 'Finaliste', cls: 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30' },
     EXCLU:     { label: 'Exclu',     cls: 'bg-red-500/15 text-red-400 border border-red-500/30' },
   };
@@ -282,7 +282,7 @@ const statusBadge = (statut: string) => {
   return <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${s.cls}`}>{s.label}</span>;
 };
 
-// â”€â”€â”€ PAGE DÃ‰DIÃ‰E DE CONSULTATION COMPLÃˆTE DE L'Ã‰LÃˆVE (AVEC BOUTON RETOUR) â”€â”€
+// â”€â”€â”€ PAGE DÉDIÉE DE CONSULTATION COMPLÈTE DE L'ÉLÈVE (AVEC BOUTON RETOUR) â”€â”€
 
 const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ student, onBack }) => {
   const [tab, setTab] = useState<'identity' | 'parents' | 'grades' | 'attendance' | 'finance' | 'card'>('identity');
@@ -291,7 +291,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* BARRE SUPÃ‰RIEURE AVEC BOUTON RETOUR & ACTIONS */}
+      {/* BARRE SUPÉRIEURE AVEC BOUTON RETOUR & ACTIONS */}
       <div
         className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl border shadow-xs transition-colors"
         style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
@@ -302,11 +302,11 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
             className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-indigo-500/40"
           >
             <ArrowLeft className="w-4 h-4 text-white" />
-            <span>Retour Ã  la Liste</span>
+            <span>Retour à la Liste</span>
           </button>
           <div className="h-5 w-px hidden sm:block" style={{ background: 'var(--border)' }} />
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            Dossier AcadÃ©mique Officiel Â· EPST RDC
+            Dossier Académique Officiel · EPST RDC
           </span>
         </div>
 
@@ -327,12 +327,12 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
             onClick={() => setShowCardModal(true)}
             className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500/40 text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
           >
-            <Eye className="w-3.5 h-3.5 text-white" /> AperÃ§u Carte Recto/Verso
+            <Eye className="w-3.5 h-3.5 text-white" /> Aperçu Carte Recto/Verso
           </button>
         </div>
       </div>
 
-      {/* CARTE D'ENTÃŠTE PROFIL Ã‰LÃˆVE */}
+      {/* CARTE D'ENTÊTE PROFIL ÉLÈVE */}
       <div
         className="p-5 rounded-2xl border shadow-xs relative overflow-hidden transition-colors"
         style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
@@ -357,41 +357,41 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                 {statusBadge(student.statut)}
               </div>
               <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Classe: <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{student.nomClasse}</span> Â· Sexe: <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{student.sexe === 'M' ? 'Masculin' : 'FÃ©minin'}</span>
+                Classe: <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{student.nomClasse}</span> · Sexe: <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{student.sexe === 'M' ? 'Masculin' : 'Féminin'}</span>
               </p>
               <div className="flex items-center gap-2 pt-0.5 flex-wrap">
                 <span className="font-mono text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
-                  ðŸ“‹ Matricule EPST: {student.registrationNumber}
+                  📋 Matricule EPST: {student.registrationNumber}
                 </span>
                 <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-md border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-                  ðŸ—“ï¸ NÃ©(e) le {student.dateNaissance} ({student.lieuNaissance})
+                  ðŸ—“ï¸ Né(e) le {student.dateNaissance} ({student.lieuNaissance})
                 </span>
               </div>
             </div>
           </div>
 
-          {/* BADGES CÃ”TÃ‰ DROIT : SITUATION FINANCIÃˆRE & MOYENNE GÃ‰NÃ‰RALE */}
+          {/* BADGES CÔTÉ DROIT : SITUATION FINANCIÈRE & MOYENNE GÉNÉRALE */}
           <div className="flex items-stretch gap-3 flex-wrap sm:flex-nowrap shrink-0 w-full lg:w-auto">
-            {/* BADGE SITUATION FINANCIÃˆRE */}
+            {/* BADGE SITUATION FINANCIÈRE */}
             <div className="flex-1 lg:flex-none flex items-center gap-3 px-3.5 py-2.5 rounded-xl border bg-emerald-500/10 border-emerald-500/20">
               <div className="p-2 rounded-lg bg-emerald-600 text-white shrink-0 flex items-center justify-center">
                 <CreditCard className="w-4.5 h-4.5 text-white" />
               </div>
               <div className="space-y-0.5">
-                <p className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300 tracking-wider">Situation FinanciÃ¨re</p>
+                <p className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300 tracking-wider">Situation Financière</p>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-emerald-900 dark:text-emerald-100">$280 / $280</span>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white">100% SOLDÃ‰</span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white">100% SOLDÉ</span>
                 </div>
               </div>
             </div>
 
-            {/* BADGE MOYENNE GÃ‰NÃ‰RALE */}
+            {/* BADGE MOYENNE GÉNÉRALE */}
             <div className="flex-1 lg:flex-none flex items-center gap-3 px-3.5 py-2.5 rounded-xl border bg-indigo-500/10 border-indigo-500/20">
               <div className="text-right space-y-0.5">
-                <p className="text-[10px] font-bold uppercase text-indigo-700 dark:text-indigo-300 tracking-wider">Moyenne GÃ©nÃ©rale S1</p>
+                <p className="text-[10px] font-bold uppercase text-indigo-700 dark:text-indigo-300 tracking-wider">Moyenne Générale S1</p>
                 <p className="text-lg font-bold text-indigo-900 dark:text-indigo-100">81.4 %</p>
-                <p className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400">Rang : 3Ã¨me / 32 Ã©lÃ¨ves</p>
+                <p className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400">Rang : 3ème / 32 élèves</p>
               </div>
               <div className="p-2 rounded-lg bg-amber-500 text-white shrink-0 flex items-center justify-center">
                 <Award className="w-4.5 h-4.5 text-white" />
@@ -401,7 +401,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
         </div>
       </div>
 
-      {/* GRILLE PRINCIPALE SPLITTÃ‰E EN DEUX PARTIES */}
+      {/* GRILLE PRINCIPALE SPLITTÉE EN DEUX PARTIES */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 select-none">
 
         {/* ========================================================================= */}
@@ -409,12 +409,12 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
         {/* ========================================================================= */}
         <div className="lg:col-span-7 xl:col-span-8 space-y-6">
 
-          {/* BARRE D'ONGLETS DU DOSSIER Ã‰LÃˆVE */}
+          {/* BARRE D'ONGLETS DU DOSSIER ÉLÈVE */}
           <div className="flex items-center gap-2 p-1.5 rounded-2xl border shadow-sm overflow-x-auto sidebar-scroll" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
             {[
-              { id: 'identity', label: 'IdentitÃ© & Origine RDC', icon: User },
+              { id: 'identity', label: 'Identité & Origine RDC', icon: User },
               { id: 'grades', label: 'Cotes & Performance', icon: ClipboardList },
-              { id: 'attendance', label: 'AssiduitÃ© & PrÃ©sences', icon: Clock },
+              { id: 'attendance', label: 'Assiduité & Présences', icon: Clock },
             ].map(t => {
               const TabIcon = t.icon;
               const isActive = tab === t.id;
@@ -438,10 +438,10 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
           {/* CONTENU VARIABLE DE LA COLONNE GAUCHE SELON L'ONGLET */}
           <div className="p-6 rounded-3xl border shadow-md" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
 
-            {/* 1. IDENTITÃ‰, ORIGINE RDC & SANTÃ‰ */}
+            {/* 1. IDENTITÉ, ORIGINE RDC & SANTÉ */}
             {tab === 'identity' && (
               <div className="space-y-8 animate-fade-in">
-                {/* FICHE HAUTE VISIBILITÃ‰ MÃ‰DICALE */}
+                {/* FICHE HAUTE VISIBILITÉ MÉDICALE */}
                 <div
                   className="p-6 rounded-3xl border shadow-lg space-y-4 relative overflow-hidden"
                   style={{
@@ -456,16 +456,16 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                       </div>
                       <div>
                         <h3 className="text-sm font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-2">
-                          Fiche d'Urgence MÃ©dicale & SantÃ© Infirmerie
+                          Fiche d'Urgence Médicale & Santé Infirmerie
                         </h3>
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">
-                          Informations vitales accessibles aux secouristes et Ã  la direction scolaire
+                          Informations vitales accessibles aux secouristes et à la direction scolaire
                         </p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs font-black uppercase text-slate-500 dark:text-slate-400">RhÃ©sus :</span>
+                      <span className="text-xs font-black uppercase text-slate-500 dark:text-slate-400">Rhésus :</span>
                       <span className="px-3 py-1 rounded-full text-xs font-black bg-rose-600 text-white shadow-md">
                         ðŸ©¸ Groupe {student.groupeSanguin || 'O+'}
                       </span>
@@ -478,22 +478,22 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                         <BadgeAlert className="w-4 h-4" /> Allergies Connues
                       </div>
                       <p className="text-sm font-black text-rose-700 dark:text-rose-300">
-                        {student.allergies || 'Aucune allergie majeure signalÃ©e'}
+                        {student.allergies || 'Aucune allergie majeure signalée'}
                       </p>
                     </div>
 
                     <div className="p-4 rounded-2xl border bg-amber-500/10 border-amber-500/30 space-y-1.5">
                       <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-black text-xs uppercase tracking-wider">
-                        <ShieldCheck className="w-4 h-4" /> AntÃ©cÃ©dents & Aptitude
+                        <ShieldCheck className="w-4 h-4" /> Antécédents & Aptitude
                       </div>
                       <p className="text-sm font-extrabold text-amber-800 dark:text-amber-200">
-                        {student.informationsMedicales || 'Aptitude physique excellente (Vaccins Ã  jour)'}
+                        {student.informationsMedicales || 'Aptitude physique excellente (Vaccins à jour)'}
                       </p>
                     </div>
 
                     <div className="p-4 rounded-2xl border bg-indigo-500/10 border-indigo-500/30 space-y-1.5">
                       <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-black text-xs uppercase tracking-wider">
-                        <Phone className="w-4 h-4" /> TÃ©lÃ©phone Urgence
+                        <Phone className="w-4 h-4" /> Téléphone Urgence
                       </div>
                       <p className="text-sm font-mono font-black text-indigo-700 dark:text-indigo-300">
                         {student.telephoneParent || '+243 81 555 0192'}
@@ -502,14 +502,14 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                   </div>
                 </div>
 
-                {/* TABLEAU SPÃ‰CIFIQUE DE L'Ã‰TAT CIVIL */}
+                {/* TABLEAU SPÉCIFIQUE DE L'ÉTAT CIVIL */}
                 <div className="p-6 rounded-3xl border space-y-6" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
                   <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: 'var(--border)' }}>
                     <h3 className="text-sm font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                      <User className="w-4.5 h-4.5" /> Fiche Officielle d'Ã‰tat Civil & Naissance
+                      <User className="w-4.5 h-4.5" /> Fiche Officielle d'État Civil & Naissance
                     </h3>
                     <span className="text-xs font-black px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-500 border border-indigo-500/30">
-                      Dossier Ã‰tablissement CertifiÃ©
+                      Dossier Établissement Certifié
                     </span>
                   </div>
 
@@ -520,15 +520,15 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                     </div>
                     <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
                       <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Postnom :</span>
-                      <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.postnom || 'â€”'}</span>
+                      <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.postnom || '—'}</span>
                     </div>
                     <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">PrÃ©nom :</span>
+                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Prénom :</span>
                       <span className="font-black text-sm text-indigo-500">{student.prenom}</span>
                     </div>
                     <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
                       <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Sexe & Genre :</span>
-                      <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.sexe === 'M' ? 'Masculin (M)' : 'FÃ©minin (F)'}</span>
+                      <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.sexe === 'M' ? 'Masculin (M)' : 'Féminin (F)'}</span>
                     </div>
                     <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
                       <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date de Naissance :</span>
@@ -539,7 +539,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                       <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.lieuNaissance}</span>
                     </div>
                     <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">NationalitÃ© :</span>
+                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nationalité :</span>
                       <span className="font-black text-sm text-emerald-600 dark:text-emerald-400">{student.nationalite || 'Congolaise (RDC)'}</span>
                     </div>
                     <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
@@ -549,11 +549,11 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                   </div>
                 </div>
 
-                {/* TABLEAU D'ORIGINE GÃ‰OGRAPHIQUE & DÃ‰COUPAGE RDC */}
+                {/* TABLEAU D'ORIGINE GÉOGRAPHIQUE & DÉCOUPAGE RDC */}
                 <div className="p-6 rounded-3xl border space-y-6" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
                   <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: 'var(--border)' }}>
                     <h3 className="text-sm font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                      <MapPin className="w-4.5 h-4.5" /> Origine GÃ©ographique & DÃ©coupage Territorial EPST RDC
+                      <MapPin className="w-4.5 h-4.5" /> Origine Géographique & Découpage Territorial EPST RDC
                     </h3>
                     <span className="text-xs font-black px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-500 border border-indigo-500/30">
                       26 Provinces RDC
@@ -562,12 +562,12 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8 text-xs">
                     <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Province Actuelle (RÃ©sidence) :</span>
+                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Province Actuelle (Résidence) :</span>
                       <span className="font-black text-sm text-indigo-500">{student.province || 'Kinshasa'}</span>
                     </div>
                     <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
                       <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Province d'Origine :</span>
-                      <span className="font-black text-sm text-indigo-500">{student.provinceOrigine || 'KasaÃ¯-Central'}</span>
+                      <span className="font-black text-sm text-indigo-500">{student.provinceOrigine || 'Kasaï-Central'}</span>
                     </div>
                     <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
                       <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Territoire / Commune :</span>
@@ -588,15 +588,15 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                   </div>
 
                   <div className="p-4 rounded-2xl border bg-slate-500/5 space-y-1" style={{ borderColor: 'var(--border)' }}>
-                    <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Adresse Physique de RÃ©sidence Exacte</p>
-                    <p className="text-sm font-black text-indigo-500">{student.adressePhysique || 'NÂ° 45, Av. des Huileries, Q. Golf, C. Gombe, Kinshasa'}</p>
+                    <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Adresse Physique de Résidence Exacte</p>
+                    <p className="text-sm font-black text-indigo-500">{student.adressePhysique || 'N° 45, Av. des Huileries, Q. Golf, C. Gombe, Kinshasa'}</p>
                   </div>
                 </div>
 
                 {student.notesPsychopedagogiques && (
                   <div className="p-5 rounded-3xl border bg-indigo-500/10 border-indigo-500/20 space-y-2">
                     <p className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                      ðŸ“‹ Observations & Diagnostic PsychopÃ©dagogique
+                      📋 Observations & Diagnostic Psychopédagogique
                     </p>
                     <p className="text-xs leading-relaxed font-bold" style={{ color: 'var(--text-primary)' }}>
                       {student.notesPsychopedagogiques}
@@ -611,9 +611,9 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
               <div className="space-y-4 animate-fade-in">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-black uppercase tracking-wider text-indigo-400 flex items-center gap-2">
-                    <ClipboardList className="w-4 h-4" /> RelevÃ© des Cotes & Notes du 1er Semestre (S1)
+                    <ClipboardList className="w-4 h-4" /> Relevé des Cotes & Notes du 1er Semestre (S1)
                   </h3>
-                  <span className="text-xs font-black text-emerald-400">Total : 81.4% (TrÃ¨s Bien)</span>
+                  <span className="text-xs font-black text-emerald-400">Total : 81.4% (Très Bien)</span>
                 </div>
 
                 <div className="overflow-x-auto rounded-2xl border" style={{ borderColor: 'var(--border)' }}>
@@ -643,24 +643,24 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
               </div>
             )}
 
-            {/* 3. ASSIDUITÃ‰ & PRÃ‰SENCES */}
+            {/* 3. ASSIDUITÉ & PRÉSENCES */}
             {tab === 'attendance' && (
               <div className="space-y-4 animate-fade-in">
                 <h3 className="text-sm font-black uppercase tracking-wider text-indigo-400 flex items-center gap-2">
-                  <Clock className="w-4 h-4" /> Registre de PrÃ©sences & Bilan Disciplinaire
+                  <Clock className="w-4 h-4" /> Registre de Présences & Bilan Disciplinaire
                 </h3>
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div className="p-4 rounded-2xl border bg-emerald-500/10 border-emerald-500/20">
                     <p className="text-3xl font-black text-emerald-400">142</p>
-                    <p className="text-xs font-bold text-slate-300 mt-1">Jours de PrÃ©sence</p>
+                    <p className="text-xs font-bold text-slate-300 mt-1">Jours de Présence</p>
                   </div>
                   <div className="p-4 rounded-2xl border bg-amber-500/10 border-amber-500/20">
                     <p className="text-3xl font-black text-amber-400">3</p>
-                    <p className="text-xs font-bold text-slate-300 mt-1">Absences JustifiÃ©es</p>
+                    <p className="text-xs font-bold text-slate-300 mt-1">Absences Justifiées</p>
                   </div>
                   <div className="p-4 rounded-2xl border bg-red-500/10 border-red-500/20">
                     <p className="text-3xl font-black text-red-400">1</p>
-                    <p className="text-xs font-bold text-slate-300 mt-1">Absence InjustifiÃ©e</p>
+                    <p className="text-xs font-bold text-slate-300 mt-1">Absence Injustifiée</p>
                   </div>
                 </div>
               </div>
@@ -673,18 +673,18 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
         {/* ========================================================================= */}
         <div className="lg:col-span-5 xl:col-span-4 space-y-6">
 
-          {/* 1. APERÃ‡U DE LA CARTE D'Ã‰LÃˆVE QR CODE OFFICIELLE */}
+          {/* 1. APERÇU DE LA CARTE D'ÉLÈVE QR CODE OFFICIELLE */}
           <div className="p-5 rounded-3xl border shadow-lg space-y-4 relative overflow-hidden" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
             <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
               <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                <QrCode className="w-4 h-4 text-indigo-500" /> Carte d'Ã‰lÃ¨ve Officielle (QR Code)
+                <QrCode className="w-4 h-4 text-indigo-500" /> Carte d'Élève Officielle (QR Code)
               </h3>
               <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
-                Active 2025â€“2026
+                Active 2025–2026
               </span>
             </div>
 
-            {/* DESIGN BADGE Ã‰LÃˆVE VIP HAUTE DÃ‰FINITION */}
+            {/* DESIGN BADGE ÉLÈVE VIP HAUTE DÉFINITION */}
             <div
               onClick={() => setShowCardModal(true)}
               className="p-5 rounded-3xl border shadow-xl relative overflow-hidden text-left bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white border-indigo-500/40 space-y-4 cursor-pointer hover:border-indigo-400 transition-all group"
@@ -694,7 +694,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                   <School className="w-5 h-5 text-indigo-400" />
                   <div>
                     <h4 className="text-[11px] font-black uppercase tracking-tight text-indigo-200">CS SAINT-MICHEL EPST RDC</h4>
-                    <p className="text-[9px] text-slate-400">Carte IdentitÃ© Scolaire CertifiÃ©e</p>
+                    <p className="text-[9px] text-slate-400">Carte Identité Scolaire Certifiée</p>
                   </div>
                 </div>
                 <Award className="w-5 h-5 text-amber-400 shrink-0" />
@@ -713,7 +713,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                     {student.prenom} {student.nom}
                   </p>
                   <p className="text-xs font-bold text-indigo-300">{student.nomClasse}</p>
-                  <p className="text-[10px] text-slate-300 font-mono">NÃ©(e): {student.dateNaissance}</p>
+                  <p className="text-[10px] text-slate-300 font-mono">Né(e): {student.dateNaissance}</p>
                 </div>
               </div>
 
@@ -732,15 +732,15 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
               onClick={() => setShowCardModal(true)}
               className="w-full py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer border border-indigo-400/40"
             >
-              <Eye className="w-4 h-4 text-white" /> AperÃ§u HD Recto / Verso & Impression EPST
+              <Eye className="w-4 h-4 text-white" /> Aperçu HD Recto / Verso & Impression EPST
             </button>
           </div>
 
-          {/* 2. DOSSIER DES DOCUMENTS SCOLAIRES NUMÃ‰RISÃ‰S (COPIE DE SES DOCUMENTS) */}
+          {/* 2. DOSSIER DES DOCUMENTS SCOLAIRES NUMÉRISÉS (COPIE DE SES DOCUMENTS) */}
           <div className="p-5 rounded-3xl border shadow-lg space-y-4" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
             <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
               <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-indigo-500" /> Dossier Documents Scolaires (PiÃ¨ces Jointes)
+                <FileText className="w-4 h-4 text-indigo-500" /> Dossier Documents Scolaires (Pièces Jointes)
               </h3>
               <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-500 border border-indigo-500/30">
                 5 Fichiers
@@ -749,11 +749,11 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
 
             <div className="space-y-2.5">
               {[
-                { title: "Copie Acte de Naissance LÃ©galisÃ©", size: "1.4 Mo", format: "PDF", status: "ValidÃ© EPST", date: "12 Sept 2025" },
-                { title: "Certificat d'Ã‰tudes Primaires (TENAFEP)", size: "850 Ko", format: "PDF", status: "CertifiÃ©", date: "10 Sept 2025" },
-                { title: "Bulletin Officiel de la 6Ã¨me AnnÃ©e", size: "2.1 Mo", format: "PDF", status: "ScellÃ©", date: "05 Sept 2025" },
-                { title: "Fiche MÃ©dicale d'Infirmerie SignÃ©e", size: "620 Ko", format: "PDF", status: "Conforme", date: "02 Sept 2025" },
-                { title: "Attestation de FrÃ©quentation & ReÃ§u", size: "410 Ko", format: "PDF", status: "ArchivÃ©", date: "01 Sept 2025" },
+                { title: "Copie Acte de Naissance Légalisé", size: "1.4 Mo", format: "PDF", status: "Validé EPST", date: "12 Sept 2025" },
+                { title: "Certificat d'Études Primaires (TENAFEP)", size: "850 Ko", format: "PDF", status: "Certifié", date: "10 Sept 2025" },
+                { title: "Bulletin Officiel de la 6ème Année", size: "2.1 Mo", format: "PDF", status: "Scellé", date: "05 Sept 2025" },
+                { title: "Fiche Médicale d'Infirmerie Signée", size: "620 Ko", format: "PDF", status: "Conforme", date: "02 Sept 2025" },
+                { title: "Attestation de Fréquentation & Reçu", size: "410 Ko", format: "PDF", status: "Archivé", date: "01 Sept 2025" },
               ].map((doc, idx) => (
                 <div
                   key={idx}
@@ -770,7 +770,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                       </p>
                       <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
                         <span className="font-mono">{doc.size}</span>
-                        <span>â€¢</span>
+                        <span>¢</span>
                         <span>{doc.date}</span>
                       </div>
                     </div>
@@ -780,7 +780,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                     <span className="text-[9.5px] font-black px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
                       {doc.status}
                     </span>
-                    <button className="p-1.5 rounded-lg bg-slate-500/10 hover:bg-indigo-500 hover:text-white transition-colors cursor-pointer" title="TÃ©lÃ©charger la copie">
+                    <button className="p-1.5 rounded-lg bg-slate-500/10 hover:bg-indigo-500 hover:text-white transition-colors cursor-pointer" title="Télécharger la copie">
                       <Download className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -793,11 +793,11 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
             </button>
           </div>
 
-          {/* 3. INFORMATIONS DES PARENTS & TUTEURS LÃ‰GAUX */}
+          {/* 3. INFORMATIONS DES PARENTS & TUTEURS LÉGAUX */}
           <div className="p-6 rounded-3xl border shadow-lg space-y-5" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
             <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
               <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                <Users className="w-4.5 h-4.5 text-indigo-500" /> Tuteurs LÃ©gaux & Contacts Famille
+                <Users className="w-4.5 h-4.5 text-indigo-500" /> Tuteurs Légaux & Contacts Famille
               </h3>
               <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
                 Communication Directe
@@ -805,7 +805,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
             </div>
 
             <div className="space-y-5 divide-y divide-slate-200/50 dark:divide-slate-800">
-              {/* PÃˆRE */}
+              {/* PÈRE */}
               <div className="space-y-3 pt-1">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -816,18 +816,18 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                       <h4 className="text-sm font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
                         {student.nomPere || student.nomParent || 'M. Jean-Baptiste Mukendi'}
                       </h4>
-                      <p className="text-xs font-extrabold text-indigo-500">PÃ¨re / Tuteur Principal LÃ©gal</p>
+                      <p className="text-xs font-extrabold text-indigo-500">Père / Tuteur Principal Légal</p>
                     </div>
                   </div>
                   <span className="text-[10px] font-black px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-500 border border-indigo-500/30">
-                    {student.professionPere || 'IngÃ©nieur BTP'}
+                    {student.professionPere || 'Ingénieur BTP'}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 gap-2 pt-1">
                   <div className="flex items-center justify-between py-1.5 px-3 rounded-xl hover:bg-slate-500/5 transition-all">
                     <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                      <Phone className="w-3.5 h-3.5 text-indigo-500" /> WhatsApp / TÃ©l :
+                      <Phone className="w-3.5 h-3.5 text-indigo-500" /> WhatsApp / Tél :
                     </span>
                     <a href={`tel:${student.telephonePere || student.telephoneParent}`} className="font-mono font-black text-indigo-500 hover:underline text-xs">
                       {student.telephonePere || student.telephoneParent || '+243 81 555 0192'}
@@ -844,7 +844,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                 </div>
               </div>
 
-              {/* MÃˆRE */}
+              {/* MÈRE */}
               <div className="space-y-3 pt-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -855,18 +855,18 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                       <h4 className="text-sm font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
                         {student.nomMere || 'Mme Chantal Bakamba'}
                       </h4>
-                      <p className="text-xs font-extrabold text-pink-500">MÃ¨re / Tuteur Secondaire</p>
+                      <p className="text-xs font-extrabold text-pink-500">Mère / Tuteur Secondaire</p>
                     </div>
                   </div>
                   <span className="text-[10px] font-black px-3 py-1 rounded-full bg-pink-500/15 text-pink-500 border border-pink-500/30">
-                    {student.professionMere || 'MÃ©decin GÃ©nÃ©raliste'}
+                    {student.professionMere || 'Médecin Généraliste'}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 gap-2 pt-1">
                   <div className="flex items-center justify-between py-1.5 px-3 rounded-xl hover:bg-slate-500/5 transition-all">
                     <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                      <Phone className="w-3.5 h-3.5 text-pink-500" /> WhatsApp / TÃ©l :
+                      <Phone className="w-3.5 h-3.5 text-pink-500" /> WhatsApp / Tél :
                     </span>
                     <a href={`tel:${student.telephoneMere}`} className="font-mono font-black text-pink-500 hover:underline text-xs">
                       {student.telephoneMere || '+243 99 444 8812'}
@@ -889,7 +889,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                   <MapPin className="w-4 h-4 text-indigo-500" /> Domicile Familial Officiel
                 </div>
                 <p className="text-xs font-extrabold leading-relaxed pl-6" style={{ color: 'var(--text-primary)' }}>
-                  {student.adressePhysique || 'NÂ° 45, Av. des Huileries, Q. Golf, C. Gombe, Kinshasa'}
+                  {student.adressePhysique || 'N° 45, Av. des Huileries, Q. Golf, C. Gombe, Kinshasa'}
                 </p>
               </div>
             </div>
@@ -914,7 +914,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
   );
 };
 
-// â”€â”€â”€ ONGLET 1 : Ã‰LÃˆVES & INSCRIPTIONS AVEC PAGINATION & FICHE COMPLÃˆTE DÃ‰DIÃ‰E â”€â”€
+// â”€â”€â”€ ONGLET 1 : ÉLÈVES & INSCRIPTIONS AVEC PAGINATION & FICHE COMPLÈTE DÉDIÉE â”€â”€
 
 const StudentsTab: React.FC = () => {
   const [students, setStudents] = useState<Eleve[]>(mockStudents);
@@ -954,7 +954,7 @@ const StudentsTab: React.FC = () => {
     setShowRegisterModal(false);
   };
 
-  // Si un Ã©lÃ¨ve est sÃ©lectionnÃ©, on affiche la PAGE DÃ‰DIÃ‰E DE L'Ã‰LÃˆVE
+  // Si un élève est sélectionné, on affiche la PAGE DÉDIÉE DE L'ÉLÈVE
   if (selectedStudent) {
     return (
       <StudentDetailPage
@@ -966,10 +966,10 @@ const StudentsTab: React.FC = () => {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* En-tÃªte de section */}
+      {/* En-tête de section */}
       <SectionHeader
-        title="Ã‰lÃ¨ves & Inscriptions Scolaires"
-        subtitle={`${students.length} Ã©lÃ¨ves inscrits Â· AnnÃ©e Scolaire 2025â€“2026`}
+        title="Élèves & Inscriptions Scolaires"
+        subtitle={`${students.length} élèves inscrits · Année Scolaire 2025–2026`}
         actions={
           <>
             <button
@@ -984,18 +984,18 @@ const StudentsTab: React.FC = () => {
               className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer border border-indigo-500/40"
             >
               <Plus className="w-4 h-4 text-white" />
-              <span>Nouveau Dossier Ã‰lÃ¨ve (Wizard)</span>
+              <span>Nouveau Dossier Élève (Wizard)</span>
             </button>
           </>
         }
       />
 
-      {/* Cartes KPI Ã‰lÃ¨ves */}
+      {/* Cartes KPI Élèves */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {[
-          { label: 'Total Ã‰lÃ¨ves Inscrits', val: `${students.length}`, color: '#6366f1', icon: GraduationCap },
+          { label: 'Total Élèves Inscrits', val: `${students.length}`, color: '#6366f1', icon: GraduationCap },
           { label: 'Statut Actif', val: `${students.filter(s => s.statut === 'ACTIF').length}`, color: '#10b981', icon: Check },
-          { label: 'Filles (ParitÃ© EPST)', val: `${students.filter(s => s.sexe === 'F').length}`, color: '#ec4899', icon: Users },
+          { label: 'Filles (Parité EPST)', val: `${students.filter(s => s.sexe === 'F').length}`, color: '#ec4899', icon: Users },
           { label: 'Finalistes Exetat', val: '136', color: '#8b5cf6', icon: Star },
         ].map((s, i) => (
           <div
@@ -1042,7 +1042,7 @@ const StudentsTab: React.FC = () => {
         />
       </div>
 
-      {/* Table PaginÃ©e des Ã‰lÃ¨ves RedessinÃ©e Haute VisibilitÃ© */}
+      {/* Table Paginée des Élèves Redessinée Haute Visibilité */}
       <div
         className="rounded-2xl border shadow-xs overflow-hidden transition-colors"
         style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
@@ -1054,7 +1054,7 @@ const StudentsTab: React.FC = () => {
                 className="border-b uppercase tracking-wider text-[10.5px] font-bold transition-colors"
                 style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}
               >
-                <th className="py-3.5 px-4">Ã‰lÃ¨ve & Photo</th>
+                <th className="py-3.5 px-4">Élève & Photo</th>
                 <th className="py-3.5 px-4">Matricule EPST</th>
                 <th className="py-3.5 px-4">Classe</th>
                 <th className="py-3.5 px-4">Sexe</th>
@@ -1091,7 +1091,7 @@ const StudentsTab: React.FC = () => {
                           {s.prenom} {s.nom}
                         </p>
                         <p className="text-[10.5px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
-                          {s.postnom || 'â€”'}
+                          {s.postnom || '—'}
                         </p>
                       </div>
                     </div>
@@ -1120,7 +1120,7 @@ const StudentsTab: React.FC = () => {
                           : 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20'
                       }`}
                     >
-                      {s.sexe === 'M' ? 'Masculin' : 'FÃ©minin'}
+                      {s.sexe === 'M' ? 'Masculin' : 'Féminin'}
                     </span>
                   </td>
 
@@ -1158,7 +1158,7 @@ const StudentsTab: React.FC = () => {
                           onClick={() => setOpenActionMenuId(openActionMenuId === s.id ? null : s.id)}
                           className="p-1.5 rounded-lg border text-slate-600 dark:text-slate-300 hover:bg-slate-500/10 transition-colors cursor-pointer"
                           style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
-                          title="Options de l'Ã©lÃ¨ve"
+                          title="Options de l'élève"
                         >
                           <MoreVertical className="w-4 h-4" />
                         </button>
@@ -1177,7 +1177,7 @@ const StudentsTab: React.FC = () => {
                               className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 transition-colors cursor-pointer"
                             >
                               <Eye className="w-3.5 h-3.5" />
-                              <span>Voir la Fiche Ã‰lÃ¨ve</span>
+                              <span>Voir la Fiche Élève</span>
                             </button>
                             <button
                               onClick={() => { setSelectedStudent(s); setOpenActionMenuId(null); }}
@@ -1202,7 +1202,7 @@ const StudentsTab: React.FC = () => {
                               className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/15 transition-colors cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
-                              <span>Supprimer l'Ã‰lÃ¨ve</span>
+                              <span>Supprimer l'Élève</span>
                             </button>
                           </div>
                         )}
@@ -1218,11 +1218,11 @@ const StudentsTab: React.FC = () => {
         {filtered.length === 0 && (
           <div className="p-12 text-center">
             <GraduationCap className="w-10 h-10 text-slate-400 mx-auto mb-3" />
-            <p className="text-slate-400 font-bold text-sm">Aucun Ã©lÃ¨ve ne correspond Ã  votre recherche.</p>
+            <p className="text-slate-400 font-bold text-sm">Aucun élève ne correspond à votre recherche.</p>
           </div>
         )}
 
-        {/* ContrÃ´les de Pagination PaginÃ©e */}
+        {/* Contrôles de Pagination Paginée */}
         <PaginationBar
           totalItems={filtered.length}
           currentPage={currentPage}
@@ -1232,7 +1232,7 @@ const StudentsTab: React.FC = () => {
         />
       </div>
 
-      {/* Onboarding Wizard Inscription Ã‰lÃ¨ve */}
+      {/* Onboarding Wizard Inscription Élève */}
       {showRegisterModal && (
         <StudentRegistrationModal
           onBack={() => setShowRegisterModal(false)}
@@ -1264,10 +1264,10 @@ const ClassesTab: React.FC = () => {
     <div className="space-y-4">
       <SectionHeader
         title="Classes, Promotions & Structures EPST"
-        subtitle="RÃ©pertoire officiel des salles de classe et affectations des titulaires"
+        subtitle="Répertoire officiel des salles de classe et affectations des titulaires"
         actions={
           <button className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-indigo-500/40">
-            <Plus className="w-4 h-4" /> CrÃ©er une Nouvelle Classe
+            <Plus className="w-4 h-4" /> Créer une Nouvelle Classe
           </button>
         }
       />
@@ -1310,7 +1310,7 @@ const ClassesTab: React.FC = () => {
                   <td className="py-3 px-4 font-medium text-slate-900 dark:text-slate-100">{c.professeurTitulaire}</td>
                   <td className="py-3 px-4 font-medium">
                     <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-900 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800/60">
-                      {c.nombreEleves} Ã©lÃ¨ves
+                      {c.nombreEleves} élèves
                     </span>
                   </td>
                   <td className="py-3 px-4 text-right">
@@ -1336,7 +1336,7 @@ const ClassesTab: React.FC = () => {
   );
 };
 
-// â”€â”€â”€ ONGLET 3 : MATIÃˆRES, DISCIPLINES & COEFFICIENTS EPST â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€ ONGLET 3 : MATIÈRES, DISCIPLINES & COEFFICIENTS EPST â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const SubjectsTab: React.FC = () => {
   const [subjectsList, setSubjectsList] = useState<Discipline[]>(mockSubjects);
@@ -1356,11 +1356,11 @@ const SubjectsTab: React.FC = () => {
   return (
     <div className="space-y-4">
       <SectionHeader
-        title="MatiÃ¨res, Disciplines & Coefficients EPST"
-        subtitle="PondÃ©rations et maxima officiels du programme national de l'EPST RDC"
+        title="Matières, Disciplines & Coefficients EPST"
+        subtitle="Pondérations et maxima officiels du programme national de l'EPST RDC"
         actions={
           <button className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-black text-xs shadow-md shadow-indigo-600/30 flex items-center gap-1.5 hover:bg-indigo-700 transition-all cursor-pointer">
-            <Plus className="w-4 h-4" /> Ajouter une MatiÃ¨re
+            <Plus className="w-4 h-4" /> Ajouter une Matière
           </button>
         }
       />
@@ -1370,7 +1370,7 @@ const SubjectsTab: React.FC = () => {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           <input
             type="text"
-            placeholder="Rechercher une discipline (ex: MathÃ©matiques, Physique, FranÃ§ais)..."
+            placeholder="Rechercher une discipline (ex: Mathématiques, Physique, Français)..."
             value={search}
             onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
             className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border font-bold focus:outline-none focus:border-indigo-500"
@@ -1384,9 +1384,9 @@ const SubjectsTab: React.FC = () => {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b uppercase tracking-wider text-[10px] font-black text-slate-400" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                <th className="p-3.5">Discipline / MatiÃ¨re</th>
+                <th className="p-3.5">Discipline / Matière</th>
                 <th className="p-3.5">Code EPST</th>
-                <th className="p-3.5">CatÃ©gorie</th>
+                <th className="p-3.5">Catégorie</th>
                 <th className="p-3.5">Coefficient EPST</th>
                 <th className="p-3.5">Maximum Notes</th>
                 <th className="p-3.5 text-right">Actions</th>
@@ -1427,9 +1427,9 @@ const SubjectsTab: React.FC = () => {
   );
 };
 
-// â”€â”€â”€ ONGLET 4 : GESTION DE L'ANNÃ‰E SCOLAIRE, STATISTIQUES & RAPPORTS EPST â”€â”€
+// â”€â”€â”€ ONGLET 4 : GESTION DE L'ANNÉE SCOLAIRE, STATISTIQUES & RAPPORTS EPST â”€â”€
 
-// â”€â”€â”€ ONGLET 4 : GESTION DE L'ANNÃ‰E SCOLAIRE, TARIFICATION & STRUCTURE EPST â”€â”€
+// â”€â”€â”€ ONGLET 4 : GESTION DE L'ANNÉE SCOLAIRE, TARIFICATION & STRUCTURE EPST â”€â”€
 
 const SchoolYearsTab: React.FC = () => {
   const [years, setYears] = useState<AnneeScolaireConfig[]>(mockSchoolYears);
@@ -1438,9 +1438,9 @@ const SchoolYearsTab: React.FC = () => {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<'frais' | 'cycles_salles' | 'periodes' | 'rapports'>('frais');
 
-  // â”€â”€ Ã‰TATS DU FORMULAIRE ONBOARDING MULTI-Ã‰TAPES (CREATION ANNÃ‰E SCOLAIRE) â”€â”€
+  // â”€â”€ ÉTATS DU FORMULAIRE ONBOARDING MULTI-ÉTAPES (CREATION ANNÉE SCOLAIRE) â”€â”€
   const [wizardStep, setWizardStep] = useState<number>(1);
-  const [newNom, setNewNom] = useState('2026â€“2027');
+  const [newNom, setNewNom] = useState('2026–2027');
   const [newDebut, setNewDebut] = useState('07 Septembre 2026');
   const [newFin, setNewFin] = useState('03 Juillet 2027');
   const [newStatut, setNewStatut] = useState<'PLANIFIEE' | 'EN_COURS'>('PLANIFIEE');
@@ -1471,9 +1471,9 @@ const SchoolYearsTab: React.FC = () => {
 
   const [newSalles, setNewSalles] = useState<SalleConfig[]>([
     { id: 'sal-new-1', codeSalle: 'M-101', nomSalle: 'Salle Petite Section Maternelle', capacite: 35, cycleCode: 'MATERNELLE' },
-    { id: 'sal-new-2', codeSalle: 'P-201', nomSalle: 'Salle 1Ã¨re Primaire A', capacite: 45, cycleCode: 'PRIMAIRE' },
-    { id: 'sal-new-3', codeSalle: 'C-301', nomSalle: 'Salle 7Ã¨me CTEB A', capacite: 40, cycleCode: 'SECONDAIRE_CTEB' },
-    { id: 'sal-new-4', codeSalle: 'H-401', nomSalle: 'Labo Math-Physique 1Ã¨re H', capacite: 40, cycleCode: 'HUMANITES' },
+    { id: 'sal-new-2', codeSalle: 'P-201', nomSalle: 'Salle 1ère Primaire A', capacite: 45, cycleCode: 'PRIMAIRE' },
+    { id: 'sal-new-3', codeSalle: 'C-301', nomSalle: 'Salle 7ème CTEB A', capacite: 40, cycleCode: 'SECONDAIRE_CTEB' },
+    { id: 'sal-new-4', codeSalle: 'H-401', nomSalle: 'Labo Math-Physique 1ère H', capacite: 40, cycleCode: 'HUMANITES' },
   ]);
 
   // Champs temporaires pour ajout d'une salle
@@ -1482,7 +1482,7 @@ const SchoolYearsTab: React.FC = () => {
   const [tempCapaciteSalle, setTempCapaciteSalle] = useState<number>(40);
   const [tempCycleSalle, setTempCycleSalle] = useState<'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES'>('HUMANITES');
 
-  // DÃ©coupage PÃ©dagogique
+  // Découpage Pédagogique
   const [newStructure, setNewStructure] = useState<'SEMESTRES' | 'TRIMESTRES'>('SEMESTRES');
 
   const selectedYear = useMemo(() => {
@@ -1533,10 +1533,10 @@ const SchoolYearsTab: React.FC = () => {
   const handleCompleteWizard = (e: React.FormEvent) => {
     e.preventDefault();
     const createdCycles: CycleConfig[] = [
-      { id: `c-1-${Date.now()}`, code: 'MATERNELLE', nom: 'Cycle Maternelle (3â€“5 ans)', actif: newActiveCycles.MATERNELLE, classesCount: 6, sallesCount: newSalles.filter(s => s.cycleCode === 'MATERNELLE').length },
-      { id: `c-2-${Date.now()}`, code: 'PRIMAIRE', nom: 'Cycle Primaire (1Ã¨reâ€“6Ã¨me)', actif: newActiveCycles.PRIMAIRE, classesCount: 18, sallesCount: newSalles.filter(s => s.cycleCode === 'PRIMAIRE').length },
-      { id: `c-3-${Date.now()}`, code: 'SECONDAIRE_CTEB', nom: 'Cycle Terminal dâ€™Ã‰ducation de Base (7Ã¨meâ€“8Ã¨me CTEB)', actif: newActiveCycles.SECONDAIRE_CTEB, classesCount: 8, sallesCount: newSalles.filter(s => s.cycleCode === 'SECONDAIRE_CTEB').length },
-      { id: `c-4-${Date.now()}`, code: 'HUMANITES', nom: 'HumanitÃ©s GÃ©nÃ©rales & Techniques (1Ã¨reâ€“4Ã¨me H)', actif: newActiveCycles.HUMANITES, classesCount: 16, sallesCount: newSalles.filter(s => s.cycleCode === 'HUMANITES').length },
+      { id: `c-1-${Date.now()}`, code: 'MATERNELLE', nom: 'Cycle Maternelle (3–5 ans)', actif: newActiveCycles.MATERNELLE, classesCount: 6, sallesCount: newSalles.filter(s => s.cycleCode === 'MATERNELLE').length },
+      { id: `c-2-${Date.now()}`, code: 'PRIMAIRE', nom: 'Cycle Primaire (1ère–6ème)', actif: newActiveCycles.PRIMAIRE, classesCount: 18, sallesCount: newSalles.filter(s => s.cycleCode === 'PRIMAIRE').length },
+      { id: `c-3-${Date.now()}`, code: 'SECONDAIRE_CTEB', nom: 'Cycle Terminal d’Éducation de Base (7ème–8ème CTEB)', actif: newActiveCycles.SECONDAIRE_CTEB, classesCount: 8, sallesCount: newSalles.filter(s => s.cycleCode === 'SECONDAIRE_CTEB').length },
+      { id: `c-4-${Date.now()}`, code: 'HUMANITES', nom: 'Humanités Générales & Techniques (1ère–4ème H)', actif: newActiveCycles.HUMANITES, classesCount: 16, sallesCount: newSalles.filter(s => s.cycleCode === 'HUMANITES').length },
     ];
 
     const newYear: AnneeScolaireConfig = {
@@ -1554,18 +1554,18 @@ const SchoolYearsTab: React.FC = () => {
       cycles: createdCycles,
       salles: newSalles,
       semestres: newStructure === 'SEMESTRES' ? [
-        { id: `s1-${Date.now()}`, nom: '1er Semestre (S1)', statut: 'PLANIFIE', fin: '17 FÃ©vrier' },
-        { id: `s2-${Date.now()}`, nom: '2Ã¨me Semestre (S2)', statut: 'PLANIFIE', fin: '03 Juillet' },
+        { id: `s1-${Date.now()}`, nom: '1er Semestre (S1)', statut: 'PLANIFIE', fin: '17 Février' },
+        { id: `s2-${Date.now()}`, nom: '2ème Semestre (S2)', statut: 'PLANIFIE', fin: '03 Juillet' },
       ] : [
         { id: `t1-${Date.now()}`, nom: '1er Trimestre (T1)', statut: 'PLANIFIE', fin: '30 Novembre' },
-        { id: `t2-${Date.now()}`, nom: '2Ã¨me Trimestre (T2)', statut: 'PLANIFIE', fin: '28 FÃ©vrier' },
-        { id: `t3-${Date.now()}`, nom: '3Ã¨me Trimestre (T3)', statut: 'PLANIFIE', fin: '03 Juillet' },
+        { id: `t2-${Date.now()}`, nom: '2ème Trimestre (T2)', statut: 'PLANIFIE', fin: '28 Février' },
+        { id: `t3-${Date.now()}`, nom: '3ème Trimestre (T3)', statut: 'PLANIFIE', fin: '03 Juillet' },
       ],
       periodes: [
-        { id: `p1-${Date.now()}`, nom: '1Ã¨re PÃ©riode', debut: newDebut.split(' ')[0] + ' Sept', fin: '04 Nov', type: 'PERIOD' },
-        { id: `p2-${Date.now()}`, nom: '2Ã¨me PÃ©riode & Examens S1', debut: '09 Nov', fin: '17 FÃ©v', type: 'EXAM' },
-        { id: `p3-${Date.now()}`, nom: '3Ã¨me PÃ©riode', debut: '22 FÃ©v', fin: '24 Avr', type: 'PERIOD' },
-        { id: `p4-${Date.now()}`, nom: '4Ã¨me PÃ©riode & EXETAT', debut: '26 Avr', fin: newFin.split(' ')[0] + ' Jul', type: 'EXAM' },
+        { id: `p1-${Date.now()}`, nom: '1ère Période', debut: newDebut.split(' ')[0] + ' Sept', fin: '04 Nov', type: 'PERIOD' },
+        { id: `p2-${Date.now()}`, nom: '2ème Période & Examens S1', debut: '09 Nov', fin: '17 Fév', type: 'EXAM' },
+        { id: `p3-${Date.now()}`, nom: '3ème Période', debut: '22 Fév', fin: '24 Avr', type: 'PERIOD' },
+        { id: `p4-${Date.now()}`, nom: '4ème Période & EXETAT', debut: '26 Avr', fin: newFin.split(' ')[0] + ' Jul', type: 'EXAM' },
       ],
     };
 
@@ -1593,20 +1593,20 @@ const SchoolYearsTab: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <SectionHeader
-        title="Gestion de l'AnnÃ©e Scolaire, Tarification & Structuration EPST"
-        subtitle="Configuration des frais d'inscription, frais de connexion, attribution des salles d'Ã©tudes et dÃ©coupage des pÃ©riodes"
+        title="Gestion de l'Année Scolaire, Tarification & Structuration EPST"
+        subtitle="Configuration des frais d'inscription, frais de connexion, attribution des salles d'études et découpage des périodes"
         actions={
           <button
             onClick={() => { setWizardStep(1); setShowCreateModal(true); }}
             className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-black text-xs shadow-md shadow-indigo-600/30 flex items-center gap-2 transition-all cursor-pointer border border-indigo-400/40"
           >
             <Sparkles className="w-4 h-4 text-amber-300" />
-            <span>Onboarding : CrÃ©er une Nouvelle AnnÃ©e</span>
+            <span>Onboarding : Créer une Nouvelle Année</span>
           </button>
         }
       />
 
-      {/* LISTE DES CARTES DES ANNÃ‰ES SCOLAIRES (SELECTION & ACTIONS) */}
+      {/* LISTE DES CARTES DES ANNÉES SCOLAIRES (SELECTION & ACTIONS) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {years.map(y => {
           const isCurrent = y.statut === 'EN_COURS';
@@ -1633,10 +1633,10 @@ const SchoolYearsTab: React.FC = () => {
                     </div>
                     <div>
                       <h3 className="text-lg font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                        AnnÃ©e {y.nom}
+                        Année {y.nom}
                       </h3>
                       <span className="text-[10.5px] font-semibold text-slate-500 dark:text-slate-400">
-                        {y.debut} â€” {y.fin}
+                        {y.debut} — {y.fin}
                       </span>
                     </div>
                   </div>
@@ -1651,7 +1651,7 @@ const SchoolYearsTab: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Badges SynthÃ¨se des Frais Majeurs */}
+                {/* Badges Synthèse des Frais Majeurs */}
                 <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t text-center text-[10.5px]" style={{ borderColor: 'var(--border)' }}>
                   <div className="p-1.5 rounded-lg border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <span className="text-[9.5px] font-bold block text-slate-500 dark:text-slate-400">Inscription</span>
@@ -1662,25 +1662,25 @@ const SchoolYearsTab: React.FC = () => {
                     <span className="font-black text-emerald-600 dark:text-emerald-400">${y.fraisConnexion}</span>
                   </div>
                   <div className="p-1.5 rounded-lg border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <span className="text-[9.5px] font-bold block text-slate-500 dark:text-slate-400">RÃ©inscription</span>
+                    <span className="text-[9.5px] font-bold block text-slate-500 dark:text-slate-400">Réinscription</span>
                     <span className="font-black text-indigo-600 dark:text-indigo-400">${y.fraisReinscription}</span>
                   </div>
                 </div>
 
                 <div className="space-y-1.5 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500 dark:text-slate-400 font-medium">Salles d'Ã©tudes crÃ©Ã©es:</span>
+                    <span className="text-slate-500 dark:text-slate-400 font-medium">Salles d'études créées:</span>
                     <span className="font-bold text-indigo-600 dark:text-indigo-400">{y.salles ? y.salles.length : 4} salles</span>
                   </div>
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500 dark:text-slate-400 font-medium">Structure PÃ©riodique:</span>
+                    <span className="text-slate-500 dark:text-slate-400 font-medium">Structure Périodique:</span>
                     <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{y.semestres.length} Semestres</span>
                   </div>
                 </div>
               </div>
 
               <div className="pt-3 border-t flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
-                <span className="text-xs font-black text-slate-500 dark:text-slate-400">ðŸ‘¥ {y.nombreElevesTotal.toLocaleString()} Ã©lÃ¨ves</span>
+                <span className="text-xs font-black text-slate-500 dark:text-slate-400">ðŸ‘¥ {y.nombreElevesTotal.toLocaleString()} élèves</span>
 
                 <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                   {!isCurrent && (
@@ -1696,7 +1696,7 @@ const SchoolYearsTab: React.FC = () => {
                     <button
                       onClick={() => setDeleteConfirmId(y.id)}
                       className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/15 transition-all cursor-pointer"
-                      title="Supprimer l'annÃ©e scolaire"
+                      title="Supprimer l'année scolaire"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -1708,30 +1708,30 @@ const SchoolYearsTab: React.FC = () => {
         })}
       </div>
 
-      {/* SECTION DÃ‰TIAL DE L'ANNÃ‰E SCOLAIRE SÃ‰LECTIONNÃ‰E AVEC 4 SOUS-ONGLETS */}
+      {/* SECTION DÉTIAL DE L'ANNÉE SCOLAIRE SÉLECTIONNÉE AVEC 4 SOUS-ONGLETS */}
       {selectedYear && (
         <div className="space-y-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                  Configuration & Structure â€” AnnÃ©e Scolaire {selectedYear.nom}
+                  Configuration & Structure — Année Scolaire {selectedYear.nom}
                 </h3>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
                   {selectedYear.statut}
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Consultez et gÃ©rez la grille tarifaire, la liste des salles physiques et le calendrier pÃ©dagogique.
+                Consultez et gérez la grille tarifaire, la liste des salles physiques et le calendrier pédagogique.
               </p>
             </div>
 
-            {/* Barre des 4 Sous-onglets de DÃ©tail */}
+            {/* Barre des 4 Sous-onglets de Détail */}
             <div className="flex items-center gap-1.5 p-1 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
               {[
                 { id: 'frais', label: 'Tarification & Frais', icon: CreditCard },
                 { id: 'cycles_salles', label: 'Cycles & Salles', icon: School },
-                { id: 'periodes', label: 'PÃ©riodes & Examens', icon: Calendar },
+                { id: 'periodes', label: 'Périodes & Examens', icon: Calendar },
                 { id: 'rapports', label: 'Documents & PV', icon: FileText },
               ].map(t => {
                 const TIcon = t.icon;
@@ -1752,48 +1752,48 @@ const SchoolYearsTab: React.FC = () => {
             </div>
           </div>
 
-          {/* CONTENU DU SOUS-ONGLET SÃ‰LECTIONNÃ‰ */}
+          {/* CONTENU DU SOUS-ONGLET SÉLECTIONNÉ */}
           {activeDetailTab === 'frais' && (
             <div className="space-y-4 animate-fade-in">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
                   <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais d'Inscription</span>
                   <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">${selectedYear.fraisInscription || 50}</p>
-                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Payable Ã  la confirmation du dossier</p>
+                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Payable à la confirmation du dossier</p>
                 </div>
 
                 <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                  <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais de Connexion SystÃ¨me</span>
+                  <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais de Connexion Système</span>
                   <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">${selectedYear.fraisConnexion || 15}</p>
-                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">AccÃ¨s ECOLISA PRO & SMS Parents</p>
+                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Accès ECOLISA PRO & SMS Parents</p>
                 </div>
 
                 <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                  <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais de RÃ©inscription</span>
+                  <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais de Réinscription</span>
                   <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">${selectedYear.fraisReinscription || 30}</p>
-                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Anciens Ã©lÃ¨ves reconduits</p>
+                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Anciens élèves reconduits</p>
                 </div>
 
                 <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                  <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais Carte d'Ã‰lÃ¨ve & Badge</span>
+                  <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais Carte d'Élève & Badge</span>
                   <p className="text-2xl font-black text-amber-600 dark:text-amber-400">${selectedYear.fraisCarte || 10}</p>
-                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Carte QR Code sÃ©curisÃ©e EPST</p>
+                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Carte QR Code sécurisée EPST</p>
                 </div>
               </div>
 
               {/* TABLEAU DES FRAIS ANNEXES & OPTIONNELS */}
               <div className="p-4 rounded-2xl border shadow-xs space-y-3" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Frais Annexes ApprouvÃ©s par le ComitÃ© Gestionnaire ({selectedYear.fraisAnnexes ? selectedYear.fraisAnnexes.length : 0})
+                  Frais Annexes Approuvés par le Comité Gestionnaire ({selectedYear.fraisAnnexes ? selectedYear.fraisAnnexes.length : 0})
                 </h4>
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="border-b uppercase tracking-wider text-[10px] font-bold text-slate-500 dark:text-slate-400" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                        <th className="p-3">IntitulÃ© du Frais</th>
+                        <th className="p-3">Intitulé du Frais</th>
                         <th className="p-3">Type de Frais</th>
-                        <th className="p-3">Montant FixÃ©</th>
+                        <th className="p-3">Montant Fixé</th>
                         <th className="p-3">Statut Obligation</th>
                       </tr>
                     </thead>
@@ -1840,10 +1840,10 @@ const SchoolYearsTab: React.FC = () => {
                 ))}
               </div>
 
-              {/* LISTE DES SALLES D'Ã‰TUDES PHYSIQUES ATTRIBUÃ‰ES */}
+              {/* LISTE DES SALLES D'ÉTUDES PHYSIQUES ATTRIBUÉES */}
               <div className="p-4 rounded-2xl border shadow-xs space-y-3" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  RÃ©pertoire des Salles Physiques d'Ã‰tudes ({selectedYear.salles ? selectedYear.salles.length : 0})
+                  Répertoire des Salles Physiques d'Études ({selectedYear.salles ? selectedYear.salles.length : 0})
                 </h4>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1856,7 +1856,7 @@ const SchoolYearsTab: React.FC = () => {
                         </span>
                       </div>
                       <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{sal.nomSalle}</p>
-                      <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">CapacitÃ© max : {sal.capacite} Ã©lÃ¨ves</p>
+                      <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">Capacité max : {sal.capacite} élèves</p>
                     </div>
                   ))}
                 </div>
@@ -1876,7 +1876,7 @@ const SchoolYearsTab: React.FC = () => {
                     <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold border ${
                       per.type === 'EXAM' ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30' : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
                     }`}>
-                      {per.type === 'EXAM' ? 'EXAMENS' : 'PÃ‰RIODE NORMALE'}
+                      {per.type === 'EXAM' ? 'EXAMENS' : 'PÉRIODE NORMALE'}
                     </span>
                   </div>
                 ))}
@@ -1887,8 +1887,8 @@ const SchoolYearsTab: React.FC = () => {
           {activeDetailTab === 'rapports' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-fade-in">
               {[
-                { title: 'PV Officiel dâ€™Ouverture & Grille Tarifaire', code: 'PV-EPST-2026-TARIF', desc: 'DÃ©cision du conseil dâ€™administration fixant les frais dâ€™inscription, connexion et carte Ã©lÃ¨ve.' },
-                { title: 'Tableau des CapacitÃ©s & Salles Physiques', code: 'PV-EPST-2026-SALLES', desc: 'Rapport dâ€™occupation des locaux dâ€™Ã©tudes et quota par classe.' },
+                { title: 'PV Officiel d’Ouverture & Grille Tarifaire', code: 'PV-EPST-2026-TARIF', desc: 'Décision du conseil d’administration fixant les frais d’inscription, connexion et carte élève.' },
+                { title: 'Tableau des Capacités & Salles Physiques', code: 'PV-EPST-2026-SALLES', desc: 'Rapport d’occupation des locaux d’études et quota par classe.' },
               ].map((doc, idx) => (
                 <div key={idx} className="p-4 rounded-xl border flex items-center justify-between" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
                   <div>
@@ -1906,7 +1906,7 @@ const SchoolYearsTab: React.FC = () => {
         </div>
       )}
 
-      {/* â”€â”€ MODAL ONBOARDING MULTI-Ã‰TAPES (AGRANDI MAX-W-5XL) POUR CRÃ‰ER UNE ANNÃ‰E â”€â”€ */}
+      {/* â”€â”€ MODAL ONBOARDING MULTI-ÉTAPES (AGRANDI MAX-W-5XL) POUR CRÉER UNE ANNÉE â”€â”€ */}
       {showCreateModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in select-none" onClick={() => setShowCreateModal(false)}>
           <div
@@ -1914,7 +1914,7 @@ const SchoolYearsTab: React.FC = () => {
             style={{ background: 'var(--sidebar-popover-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
             onClick={e => e.stopPropagation()}
           >
-            {/* EN-TÃŠTE DU WIZARD */}
+            {/* EN-TÊTE DU WIZARD */}
             <div className="p-5 border-b flex items-center justify-between shrink-0" style={{ background: 'var(--header-bg)', borderColor: 'var(--border)' }}>
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
@@ -1922,13 +1922,13 @@ const SchoolYearsTab: React.FC = () => {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="font-extrabold text-base" style={{ color: 'var(--text-primary)' }}>Assistant d'Onboarding â€” AnnÃ©e Scolaire</h3>
+                    <h3 className="font-extrabold text-base" style={{ color: 'var(--text-primary)' }}>Assistant d'Onboarding — Année Scolaire</h3>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
-                      Ã‰tape {wizardStep} sur 5
+                      Étape {wizardStep} sur 5
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Configuration intÃ©grale : GÃ©nÃ©ral, Tarification Inscription/Connexion, Cycles & Salles physiques.
+                    Configuration intégrale : Général, Tarification Inscription/Connexion, Cycles & Salles physiques.
                   </p>
                 </div>
               </div>
@@ -1941,10 +1941,10 @@ const SchoolYearsTab: React.FC = () => {
             <div className="px-6 py-3 border-b overflow-x-auto sidebar-scroll shrink-0" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
               <div className="flex items-center justify-between min-w-[650px] gap-2">
                 {[
-                  { step: 1, label: '1. GÃ©nÃ©ral & Dates', icon: Calendar },
+                  { step: 1, label: '1. Général & Dates', icon: Calendar },
                   { step: 2, label: '2. Tarification & Frais', icon: CreditCard },
                   { step: 3, label: '3. Cycles & Salles', icon: School },
-                  { step: 4, label: '4. PÃ©riodes EPST', icon: Layers },
+                  { step: 4, label: '4. Périodes EPST', icon: Layers },
                   { step: 5, label: '5. Validation', icon: CheckCircle2 },
                 ].map(s => {
                   const SIcon = s.icon;
@@ -1973,23 +1973,23 @@ const SchoolYearsTab: React.FC = () => {
             {/* CORPS DU FORMULAIRE WIZARD (CONTENU DYNAMIQUE SELON STEP) */}
             <div className="p-6 overflow-y-auto space-y-5 flex-1">
 
-              {/* Ã‰TAPE 1 : INFORMATIONS GÃ‰NÃ‰RALES */}
+              {/* ÉTAPE 1 : INFORMATIONS GÉNÉRALES */}
               {wizardStep === 1 && (
                 <div className="space-y-4 animate-fade-in">
                   <div className="p-3.5 rounded-xl border bg-indigo-500/10 border-indigo-500/25 flex items-center gap-3">
                     <Calendar className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
                     <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      DÃ©finissez l'intitulÃ© officiel de l'annÃ©e scolaire et le calendrier de rentrÃ©e/clÃ´ture publiÃ© par le MinistÃ¨re EPST RDC.
+                      Définissez l'intitulé officiel de l'année scolaire et le calendrier de rentrée/clôture publié par le Ministère EPST RDC.
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>IntitulÃ© de l'AnnÃ©e Scolaire *</label>
+                      <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Intitulé de l'Année Scolaire *</label>
                       <input
                         type="text"
                         required
-                        placeholder="ex: 2026â€“2027"
+                        placeholder="ex: 2026–2027"
                         value={newNom}
                         onChange={e => setNewNom(e.target.value)}
                         className="w-full px-3.5 py-2 text-xs rounded-lg border font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -1998,7 +1998,7 @@ const SchoolYearsTab: React.FC = () => {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Objectif PrÃ©visionnel d'Ã‰lÃ¨ves</label>
+                      <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Objectif Prévisionnel d'Élèves</label>
                       <input
                         type="number"
                         value={newTargetEleves}
@@ -2009,7 +2009,7 @@ const SchoolYearsTab: React.FC = () => {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Date de DÃ©but (RentrÃ©e Scolaire) *</label>
+                      <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Date de Début (Rentrée Scolaire) *</label>
                       <input
                         type="text"
                         required
@@ -2022,7 +2022,7 @@ const SchoolYearsTab: React.FC = () => {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Date de ClÃ´ture Officielle *</label>
+                      <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Date de Clôture Officielle *</label>
                       <input
                         type="text"
                         required
@@ -2036,11 +2036,11 @@ const SchoolYearsTab: React.FC = () => {
                   </div>
 
                   <div className="space-y-1.5 pt-2">
-                    <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Statut Initial de l'AnnÃ©e *</label>
+                    <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Statut Initial de l'Année *</label>
                     <CustomSelect
                       options={[
-                        { value: 'PLANIFIEE', label: 'PLANIFIÃ‰E â€” PrÃ©paration administrative (Prochaine annÃ©e)' },
-                        { value: 'EN_COURS', label: 'EN COURS â€” Basculer immÃ©diatement comme annÃ©e active' },
+                        { value: 'PLANIFIEE', label: 'PLANIFIÉE — Préparation administrative (Prochaine année)' },
+                        { value: 'EN_COURS', label: 'EN COURS — Basculer immédiatement comme année active' },
                       ]}
                       value={newStatut}
                       onChange={val => setNewStatut(val as any)}
@@ -2050,13 +2050,13 @@ const SchoolYearsTab: React.FC = () => {
                 </div>
               )}
 
-              {/* Ã‰TAPE 2 : TARIFICATION & FRAIS D'INSCRIPTION / CONNEXION */}
+              {/* ÉTAPE 2 : TARIFICATION & FRAIS D'INSCRIPTION / CONNEXION */}
               {wizardStep === 2 && (
                 <div className="space-y-4 animate-fade-in">
                   <div className="p-3.5 rounded-xl border bg-emerald-500/10 border-emerald-500/25 flex items-center gap-3">
                     <CreditCard className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      Fixez les frais d'inscription obligatoire, les frais de connexion/plateforme systÃ¨me et ajoutez d'autres frais annexes (frais de carte, kit scolaire, etc.).
+                      Fixez les frais d'inscription obligatoire, les frais de connexion/plateforme système et ajoutez d'autres frais annexes (frais de carte, kit scolaire, etc.).
                     </p>
                   </div>
 
@@ -2085,7 +2085,7 @@ const SchoolYearsTab: React.FC = () => {
                     </div>
 
                     <div className="p-3 rounded-xl border space-y-1.5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <label className="font-bold text-xs text-indigo-600 dark:text-indigo-400 block">Frais de RÃ©inscription ($)</label>
+                      <label className="font-bold text-xs text-indigo-600 dark:text-indigo-400 block">Frais de Réinscription ($)</label>
                       <input
                         type="number"
                         value={newFraisReinscription}
@@ -2096,7 +2096,7 @@ const SchoolYearsTab: React.FC = () => {
                     </div>
 
                     <div className="p-3 rounded-xl border space-y-1.5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <label className="font-bold text-xs text-amber-600 dark:text-amber-400 block">Frais Carte d'Ã‰lÃ¨ve ($)</label>
+                      <label className="font-bold text-xs text-amber-600 dark:text-amber-400 block">Frais Carte d'Élève ($)</label>
                       <input
                         type="number"
                         value={newFraisCarte}
@@ -2107,13 +2107,13 @@ const SchoolYearsTab: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* FORMULAIRE D'AJOUT D'UN FRAIS ANNEXE PERSONNALISÃ‰ */}
+                  {/* FORMULAIRE D'AJOUT D'UN FRAIS ANNEXE PERSONNALISÉ */}
                   <div className="p-4 rounded-xl border space-y-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ajouter un Frais Annexe / Optionnel</h4>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                       <input
                         type="text"
-                        placeholder="IntitulÃ© (ex: Kit Uniforme)"
+                        placeholder="Intitulé (ex: Kit Uniforme)"
                         value={tempIntituleFrais}
                         onChange={e => setTempIntituleFrais(e.target.value)}
                         className="px-3 py-1.5 text-xs rounded-lg border font-medium"
@@ -2145,7 +2145,7 @@ const SchoolYearsTab: React.FC = () => {
                       </button>
                     </div>
 
-                    {/* LISTE DES FRAIS ANNEXES AJOUTÃ‰S */}
+                    {/* LISTE DES FRAIS ANNEXES AJOUTÉS */}
                     <div className="space-y-1.5 pt-2">
                       {newFraisAnnexes.map(fa => (
                         <div key={fa.id} className="p-2.5 rounded-lg border flex items-center justify-between text-xs font-medium" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
@@ -2170,23 +2170,23 @@ const SchoolYearsTab: React.FC = () => {
                 </div>
               )}
 
-              {/* Ã‰TAPE 3 : CYCLES SCOLAIRES & CONFIGURATION DES SALLES PHYSIQUES */}
+              {/* ÉTAPE 3 : CYCLES SCOLAIRES & CONFIGURATION DES SALLES PHYSIQUES */}
               {wizardStep === 3 && (
                 <div className="space-y-4 animate-fade-in">
                   <div className="p-3.5 rounded-xl border bg-indigo-500/10 border-indigo-500/25 flex items-center gap-3">
                     <School className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
                     <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      SÃ©lectionnez les cycles scolaires actifs pour cette annÃ©e et crÃ©ez les salles physiques d'Ã©tudes nÃ©cessaires Ã  l'attribution des classes.
+                      Sélectionnez les cycles scolaires actifs pour cette année et créez les salles physiques d'études nécessaires à l'attribution des classes.
                     </p>
                   </div>
 
-                  {/* SÃ‰LECTION DES CYCLES ACTIFS */}
+                  {/* SÉLECTION DES CYCLES ACTIFS */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     {[
-                      { code: 'MATERNELLE', label: 'Cycle Maternelle (3â€“5 ans)' },
-                      { code: 'PRIMAIRE', label: 'Cycle Primaire (1Ã¨reâ€“6Ã¨me)' },
-                      { code: 'SECONDAIRE_CTEB', label: 'CTEB (7Ã¨meâ€“8Ã¨me Base)' },
-                      { code: 'HUMANITES', label: 'HumanitÃ©s & Techniques' },
+                      { code: 'MATERNELLE', label: 'Cycle Maternelle (3–5 ans)' },
+                      { code: 'PRIMAIRE', label: 'Cycle Primaire (1ère–6ème)' },
+                      { code: 'SECONDAIRE_CTEB', label: 'CTEB (7ème–8ème Base)' },
+                      { code: 'HUMANITES', label: 'Humanités & Techniques' },
                     ].map(cyc => (
                       <label
                         key={cyc.code}
@@ -2210,7 +2210,7 @@ const SchoolYearsTab: React.FC = () => {
 
                   {/* FORMULAIRE D'AJOUT D'UNE SALLE PHYSIQUE */}
                   <div className="p-4 rounded-xl border space-y-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">CrÃ©er une Salle Physique d'Ã‰tudes dans un Cycle</h4>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Créer une Salle Physique d'Études dans un Cycle</h4>
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
                       <input
                         type="text"
@@ -2230,7 +2230,7 @@ const SchoolYearsTab: React.FC = () => {
                       />
                       <input
                         type="number"
-                        placeholder="CapacitÃ© max"
+                        placeholder="Capacité max"
                         value={tempCapaciteSalle}
                         onChange={e => setTempCapaciteSalle(Number(e.target.value))}
                         className="px-3 py-1.5 text-xs rounded-lg border font-bold"
@@ -2241,7 +2241,7 @@ const SchoolYearsTab: React.FC = () => {
                           { value: 'MATERNELLE', label: 'Maternelle' },
                           { value: 'PRIMAIRE', label: 'Primaire' },
                           { value: 'SECONDAIRE_CTEB', label: '7-8 CTEB' },
-                          { value: 'HUMANITES', label: 'HumanitÃ©s' },
+                          { value: 'HUMANITES', label: 'Humanités' },
                         ]}
                         value={tempCycleSalle}
                         onChange={val => setTempCycleSalle(val as any)}
@@ -2251,18 +2251,18 @@ const SchoolYearsTab: React.FC = () => {
                         onClick={handleAddSalle}
                         className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1 cursor-pointer shadow-xs"
                       >
-                        <Plus className="w-4 h-4" /> CrÃ©er Salle
+                        <Plus className="w-4 h-4" /> Créer Salle
                       </button>
                     </div>
 
-                    {/* LISTE DES SALLES CRÃ‰Ã‰ES */}
+                    {/* LISTE DES SALLES CRÉÉES */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2">
                       {newSalles.map(s => (
                         <div key={s.id} className="p-2.5 rounded-lg border flex items-center justify-between text-xs" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
                           <div>
                             <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold mr-2">{s.codeSalle}</span>
                             <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{s.nomSalle}</span>
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">{s.cycleCode} Â· CapacitÃ©: {s.capacite} Ã©lÃ¨ves</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">{s.cycleCode} · Capacité: {s.capacite} élèves</span>
                           </div>
                           <button
                             type="button"
@@ -2278,13 +2278,13 @@ const SchoolYearsTab: React.FC = () => {
                 </div>
               )}
 
-              {/* Ã‰TAPE 4 : DÃ‰COUPAGE PÃ‰DAGOGIQUE & PÃ‰RIODES */}
+              {/* ÉTAPE 4 : DÉCOUPAGE PÉDAGOGIQUE & PÉRIODES */}
               {wizardStep === 4 && (
                 <div className="space-y-4 animate-fade-in">
                   <div className="p-3.5 rounded-xl border bg-amber-500/10 border-amber-500/25 flex items-center gap-3">
                     <Layers className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
                     <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      Configurez la structure pÃ©riodique (Semestres S1 & S2 ou Trimestres T1, T2 & T3) et validez le calendrier des examens.
+                      Configurez la structure périodique (Semestres S1 & S2 ou Trimestres T1, T2 & T3) et validez le calendrier des examens.
                     </p>
                   </div>
 
@@ -2292,7 +2292,7 @@ const SchoolYearsTab: React.FC = () => {
                     <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Structure Globale du Calendrier *</label>
                     <CustomSelect
                       options={[
-                        { value: 'SEMESTRES', label: '2 Semestres (S1 & S2) â€” Standard EPST RDC' },
+                        { value: 'SEMESTRES', label: '2 Semestres (S1 & S2) — Standard EPST RDC' },
                         { value: 'TRIMESTRES', label: '3 Trimestres (T1, T2 & T3)' },
                       ]}
                       value={newStructure}
@@ -2302,60 +2302,60 @@ const SchoolYearsTab: React.FC = () => {
                   </div>
 
                   <div className="p-4 rounded-xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">DÃ©coupage RÃ©capitulatif des 4 PÃ©riodes EPST</h4>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Découpage Récapitulatif des 4 Périodes EPST</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-semibold">
                       <div className="p-2.5 rounded-lg border bg-slate-500/5 flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
-                        <span>1Ã¨re PÃ©riode : Septembre â€“ Novembre</span>
+                        <span>1ère Période : Septembre – Novembre</span>
                         <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Cours & Interros</span>
                       </div>
                       <div className="p-2.5 rounded-lg border bg-slate-500/5 flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
-                        <span>2Ã¨me PÃ©riode & Examens S1 : Novembre â€“ FÃ©vrier</span>
+                        <span>2ème Période & Examens S1 : Novembre – Février</span>
                         <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">Examens S1</span>
                       </div>
                       <div className="p-2.5 rounded-lg border bg-slate-500/5 flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
-                        <span>3Ã¨me PÃ©riode : FÃ©vrier â€“ Avril</span>
+                        <span>3ème Période : Février – Avril</span>
                         <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Cours & Interros</span>
                       </div>
                       <div className="p-2.5 rounded-lg border bg-slate-500/5 flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
-                        <span>4Ã¨me PÃ©riode & EXETAT : Avril â€“ Juillet</span>
-                        <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400">EXETAT & ClÃ´ture</span>
+                        <span>4ème Période & EXETAT : Avril – Juillet</span>
+                        <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400">EXETAT & Clôture</span>
                       </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Ã‰TAPE 5 : RÃ‰CAPITULATIF & VALIDATION */}
+              {/* ÉTAPE 5 : RÉCAPITULATIF & VALIDATION */}
               {wizardStep === 5 && (
                 <div className="space-y-4 animate-fade-in">
                   <div className="p-3.5 rounded-xl border bg-emerald-500/10 border-emerald-500/25 flex items-center gap-3">
                     <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      VÃ©rifiez les paramÃ¨tres de la nouvelle annÃ©e scolaire avant confirmation et enregistrement final.
+                      Vérifiez les paramètres de la nouvelle année scolaire avant confirmation et enregistrement final.
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="p-4 rounded-xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">AnnÃ©e & Dates</h4>
-                      <p className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>AnnÃ©e Scolaire {newNom}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">PÃ©riode : {newDebut} â€” {newFin}</p>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Année & Dates</h4>
+                      <p className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>Année Scolaire {newNom}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Période : {newDebut} — {newFin}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">Statut initial : <span className="font-bold text-indigo-600 dark:text-indigo-400">{newStatut}</span></p>
                     </div>
 
                     <div className="p-4 rounded-xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Tarification FixÃ©e</h4>
-                      <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Inscription : ${newFraisInscription} Â· Connexion : ${newFraisConnexion}</p>
-                      <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>RÃ©inscription : ${newFraisReinscription} Â· Carte : ${newFraisCarte}</p>
-                      <p className="text-[10.5px] text-slate-500 dark:text-slate-400">{newFraisAnnexes.length} frais annexes configurÃ©s</p>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Tarification Fixée</h4>
+                      <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Inscription : ${newFraisInscription} · Connexion : ${newFraisConnexion}</p>
+                      <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Réinscription : ${newFraisReinscription} · Carte : ${newFraisCarte}</p>
+                      <p className="text-[10.5px] text-slate-500 dark:text-slate-400">{newFraisAnnexes.length} frais annexes configurés</p>
                     </div>
 
                     <div className="p-4 rounded-xl border space-y-2 md:col-span-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Salles Physiques d'Ã‰tudes ({newSalles.length})</h4>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Salles Physiques d'Études ({newSalles.length})</h4>
                       <div className="flex flex-wrap gap-2 pt-1">
                         {newSalles.map(s => (
                           <span key={s.id} className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
-                            {s.codeSalle} â€” {s.nomSalle} ({s.capacite} pl)
+                            {s.codeSalle} — {s.nomSalle} ({s.capacite} pl)
                           </span>
                         ))}
                       </div>
@@ -2375,7 +2375,7 @@ const SchoolYearsTab: React.FC = () => {
                 className="px-4 py-2 rounded-lg border text-xs font-bold flex items-center gap-1 hover:bg-slate-500/10 disabled:opacity-40 transition-all cursor-pointer"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               >
-                <ChevronLeft className="w-4 h-4" /> PrÃ©cÃ©dent
+                <ChevronLeft className="w-4 h-4" /> Précédent
               </button>
 
               <div className="flex items-center gap-2">
@@ -2404,7 +2404,7 @@ const SchoolYearsTab: React.FC = () => {
                     className="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
                   >
                     <Sparkles className="w-4 h-4 text-amber-300" />
-                    <span>CrÃ©er l'AnnÃ©e Scolaire</span>
+                    <span>Créer l'Année Scolaire</span>
                   </button>
                 )}
               </div>
@@ -2415,7 +2415,7 @@ const SchoolYearsTab: React.FC = () => {
         document.body
       )}
 
-      {/* CONFIRMATION DE SUPPRESSION D'ANNÃ‰E SCOLAIRE */}
+      {/* CONFIRMATION DE SUPPRESSION D'ANNÉE SCOLAIRE */}
       {deleteConfirmId && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in select-none" onClick={() => setDeleteConfirmId(null)}>
           <div
@@ -2428,9 +2428,9 @@ const SchoolYearsTab: React.FC = () => {
             </div>
 
             <div>
-              <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Supprimer cette AnnÃ©e Scolaire ?</h3>
+              <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Supprimer cette Année Scolaire ?</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                ÃŠtes-vous sÃ»r de vouloir supprimer l'annÃ©e scolaire sÃ©lectionnÃ©e ? Cette action archivÃ©e est irrÃ©versible.
+                Êtes-vous sûr de vouloir supprimer l'année scolaire sélectionnée ? Cette action archivée est irréversible.
               </p>
             </div>
 
@@ -2463,7 +2463,7 @@ const TeachersTab: React.FC = () => (
   <div>
     <SectionHeader
       title="Corps Enseignant & Personnel"
-      subtitle={`${mockStaff.length} membres du personnel Â· AnnÃ©e 2025-2026`}
+      subtitle={`${mockStaff.length} membres du personnel · Année 2025-2026`}
       actions={
         <button className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-black text-xs shadow-md shadow-indigo-600/30 flex items-center gap-1.5 hover:bg-indigo-700 transition-all cursor-pointer">
           <Plus className="w-4 h-4" /> Nouveau Dossier RH
@@ -2529,7 +2529,7 @@ const GradesTab: React.FC = () => (
     <ClipboardList className="w-12 h-12 text-indigo-500 mx-auto mb-3" />
     <h3 className="text-base font-black" style={{ color: 'var(--text-primary)' }}>Cotes & PV d'Examens EPST RDC</h3>
     <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-      Saisie des cotes d'interrogations, compositions et gÃ©nÃ©ration des bulletins scolaires trimestriels.
+      Saisie des cotes d'interrogations, compositions et génération des bulletins scolaires trimestriels.
     </p>
   </div>
 );
@@ -2538,10 +2538,10 @@ const GradesTab: React.FC = () => (
 
 export const AcademicManager: React.FC<AcademicManagerProps> = ({ activeSubTab = 'students' }) => {
   const tabs = [
-    { id: 'students', label: 'Ã‰lÃ¨ves & Inscriptions', icon: GraduationCap },
+    { id: 'students', label: 'Élèves & Inscriptions', icon: GraduationCap },
     { id: 'classes', label: 'Classes & Local', icon: BookOpen },
-    { id: 'subjects', label: 'MatiÃ¨res & Coefficients', icon: Layers },
-    { id: 'years', label: 'AnnÃ©e Scolaire & PÃ©riodes', icon: Calendar },
+    { id: 'subjects', label: 'Matières & Coefficients', icon: Layers },
+    { id: 'years', label: 'Année Scolaire & Périodes', icon: Calendar },
     { id: 'teachers', label: 'Enseignants & Personnel', icon: Users },
     { id: 'schedule', label: 'Emploi du Temps', icon: Calendar },
     { id: 'grades', label: 'Cotes & Bulletins', icon: ClipboardList },

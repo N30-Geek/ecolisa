@@ -701,7 +701,7 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
                 <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
                   Cycle Maternelle
                 </span>
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Âge : 3 à 5 ans</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">ge : 3 à 5 ans</span>
               </div>
               <h3 className="text-base font-black" style={{ color: 'var(--text-primary)' }}>Éveil & Socialisation Maternelle</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
