@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { CustomSelect } from '../common/CustomSelect';
 import { StudentIdCardModal } from './StudentIdCardModal';
@@ -51,6 +51,7 @@ import {
 import { mockStudents, mockClasses, mockCycles, mockSubjects, mockStaff } from '../../data/mockData';
 import { Eleve, Discipline, ClasseScolaire, CycleScolaire } from '../../types';
 import { StudentRegistrationModal } from './StudentRegistrationModal';
+import { ClassesPromotionsManager } from './ClassesPromotionsManager';
 
 interface AcademicManagerProps {
   activeSubTab?: string;
@@ -2555,7 +2556,7 @@ export const AcademicManager: React.FC<AcademicManagerProps> = ({ activeSubTab =
   const renderTab = () => {
     switch (localTab) {
       case 'students': return <StudentsTab />;
-      case 'classes':  return <ClassesTab />;
+      case 'classes':  return <ClassesPromotionsManager onNavigateToStudents={(clsId) => setLocalTab('students')} />;
       case 'subjects': return <SubjectsTab />;
       case 'years':    return <SchoolYearsTab />;
       case 'teachers': return <TeachersTab />;
