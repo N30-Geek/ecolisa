@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   User,
   GraduationCap,
@@ -30,13 +30,15 @@ import {
   X,
   Building2,
   FileSpreadsheet,
-  BadgeCheck
+  BadgeCheck,
+  FolderOpen
 } from 'lucide-react';
-import { Eleve, ClasseScolaire } from '../../types';
+import { Eleve, ClasseScolaire, DocumentScolaire, FactureEleve, TransactionPaiement, Cote } from '../../types';
 import { IdCardRenderer } from './IdCardRenderer';
 import { StudentIdCardModal } from './StudentIdCardModal';
 import { StudentFullFileModal } from './StudentFullFileModal';
 import { StudentDocumentsModal } from './StudentDocumentsModal';
+import { LocalDatabaseService } from '../../services/localDatabase';
 import { formatCurrency } from '../../utils/currency';
 
 interface StudentDetailPageProps {
@@ -56,39 +58,51 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
   const [showFullFileModal, setShowFullFileModal] = useState(false);
   const [showDocsModal, setShowDocsModal] = useState(false);
 
-  // Exemple de données financières pour la démo
+  // État des données réelles chargées depuis SQLite
+  const [documents, setDocuments] = useState<DocumentScolaire[]>([]);
+  const [invoices, setInvoices] = useState<FactureEleve[]>([]);
+  const [payments, setPayments] = useState<TransactionPaiement[]>([]);
+  const [cotes, setCotes] = useState<Cote[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  // Chargement des données réelles de l'élève depuis SQLite
+  const loadStudentData = async () => {
+    setLoadingData(true);
+    try {
+      const [docList, invList, payList, coteList] = await Promise.all([
+        LocalDatabaseService.getStudentDocuments(student.id).catch(() => []),
+        LocalDatabaseService.getInvoices().then(all => (all || []).filter(inv => inv.studentId === student.id || inv.eleveId === student.id)).catch(() => []),
+        LocalDatabaseService.getPayments().then(all => (all || []).filter(p => p.registrationNumber === student.registrationNumber || p.nomEleve.toLowerCase().includes(student.nom.toLowerCase()))).catch(() => []),
+        LocalDatabaseService.getCotes({ eleveId: student.id }).catch(() => []),
+      ]);
+      setDocuments(docList || []);
+      setInvoices(invList || []);
+      setPayments(payList || []);
+      setCotes(coteList || []);
+    } catch (err) {
+      console.error('[StudentDetailPage] Erreur chargement :', err);
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStudentData();
+  }, [student.id]);
+
+  // Calcul réel du résumé financier
   const financialSummary = useMemo(() => {
-    const totalDue = 450;
-    const totalPaid = 350;
-    const balance = totalDue - totalPaid;
-    const isSolvable = balance <= 0;
+    const totalDue = invoices.reduce((sum, inv) => sum + (inv.montantTotal || 0), 0);
+    const totalPaid = payments.reduce((sum, p) => sum + (p.montantPaye || 0), 0);
+    const balance = Math.max(0, totalDue - totalPaid);
+    const isSolvable = totalDue > 0 ? balance <= 0 : true;
     return { totalDue, totalPaid, balance, isSolvable };
-  }, []);
+  }, [invoices, payments]);
 
-  // Exemple de cotes par matière pour la classe
-  const mockGrades = useMemo(() => [
-    { subject: 'Mathématiques & Algèbre', p1: 18, p2: 17, exam: 42, total: 77, max: 100, coef: 4, prof: 'Prof. Ilunga' },
-    { subject: 'Physique & Mécanique', p1: 16, p2: 15, exam: 38, total: 69, max: 100, coef: 3, prof: 'Prof. Kabamba' },
-    { subject: 'Chimie & Biologie', p1: 17, p2: 18, exam: 44, total: 79, max: 100, coef: 3, prof: 'Mme Tshilomba' },
-    { subject: 'Français & Grammaire', p1: 15, p2: 16, exam: 36, total: 67, max: 100, coef: 3, prof: 'Mme Bakamba' },
-    { subject: 'Anglais & Littérature', p1: 19, p2: 18, exam: 46, total: 83, max: 100, coef: 2, prof: 'Prof. Smith' },
-    { subject: 'Histoire & Géographie RDC', p1: 16, p2: 17, exam: 40, total: 73, max: 100, coef: 2, prof: 'M. Mbuyi' },
-    { subject: 'Informatique & Algorithmique', p1: 20, p2: 19, exam: 48, total: 87, max: 100, coef: 2, prof: 'Ing. Mukendi' },
-    { subject: 'Éducation à la Citoyenneté', p1: 18, p2: 19, exam: 45, total: 82, max: 100, coef: 1, prof: 'M. Kayembe' },
-  ], []);
-
-  const totalPointsObtained = useMemo(() => mockGrades.reduce((acc, g) => acc + g.total, 0), [mockGrades]);
-  const totalPointsMax = useMemo(() => mockGrades.reduce((acc, g) => acc + g.max, 0), [mockGrades]);
-  const percentage = useMemo(() => Math.round((totalPointsObtained / totalPointsMax) * 100), [totalPointsObtained, totalPointsMax]);
-
-  // Documents scolaires déposés
-  const schoolDocuments = useMemo(() => [
-    { name: "Extrait d'Acte de Naissance Certifié", status: 'VALIDATED', date: '12 Sept 2025' },
-    { name: "Certificat d'Études Primaires (ENAFEP)", status: 'VALIDATED', date: '14 Sept 2025' },
-    { name: "Bulletin Officiel de l'Année Précédente", status: 'VALIDATED', date: '15 Sept 2025' },
-    { name: "Fiche Médicale d'Aptitude Infirmerie", status: 'VALIDATED', date: '18 Sept 2025' },
-    { name: "Attestation de Fréquentation & Conduite", status: 'PENDING', date: '20 Oct 2025' },
-  ], []);
+  // Calcul réel des cotes et pourcentage
+  const totalPointsObtained = useMemo(() => cotes.reduce((acc, c) => acc + (c.score || 0), 0), [cotes]);
+  const totalPointsMax = useMemo(() => cotes.reduce((acc, c) => acc + (c.maxScore || 20), 0), [cotes]);
+  const percentage = useMemo(() => totalPointsMax > 0 ? Math.round((totalPointsObtained / totalPointsMax) * 100) : 0, [totalPointsObtained, totalPointsMax]);
 
   return (
     <div className="space-y-6 animate-fade-in select-none">
@@ -236,11 +250,11 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
                     <span className="font-bold text-slate-400">Date de Naissance :</span>
-                    <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.dateNaissance}</span>
+                    <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.dateNaissance || 'Non renseignée'}</span>
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
                     <span className="font-bold text-slate-400">Lieu de Naissance :</span>
-                    <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.lieuNaissance}</span>
+                    <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.lieuNaissance || 'Non renseigné'}</span>
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
                     <span className="font-bold text-slate-400">Nationalité :</span>
@@ -267,25 +281,25 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3.5 gap-x-6 text-xs">
                   <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
                     <span className="font-bold text-slate-400">Province de Résidence :</span>
-                    <span className="font-black text-indigo-500">{student.province || 'Kinshasa'}</span>
+                    <span className="font-black text-indigo-500">{student.province || 'Non spécifiée'}</span>
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
                     <span className="font-bold text-slate-400">Province d'Origine :</span>
-                    <span className="font-black text-indigo-500">{student.provinceOrigine || 'Kasaï-Central'}</span>
+                    <span className="font-black text-indigo-500">{student.provinceOrigine || 'Non spécifiée'}</span>
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
                     <span className="font-bold text-slate-400">Territoire / Commune :</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-200">{student.territoireCommune || 'Commune de la Gombe'}</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-200">{student.territoireCommune || 'Non renseigné'}</span>
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
                     <span className="font-bold text-slate-400">Chefferie / Secteur :</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-200">{student.chefferieSecteur || 'Secteur de Tshibata'}</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-200">{student.chefferieSecteur || 'Non renseigné'}</span>
                   </div>
                 </div>
 
                 <div className="p-4 rounded-xl space-y-1" style={{ background: 'var(--bg-sunken)' }}>
                   <p className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">Adresse Physique de Résidence Exacte</p>
-                  <p className="text-xs font-black text-indigo-600 dark:text-indigo-400">{student.adressePhysique || 'N° 45, Av. des Huileries, Q. Golf, C. Gombe, Kinshasa'}</p>
+                  <p className="text-xs font-black text-indigo-600 dark:text-indigo-400">{student.adressePhysique || 'Non renseignée'}</p>
                 </div>
               </div>
             </div>
@@ -318,12 +332,12 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                 {/* KPI Financiers */}
                 <div className="grid grid-cols-3 gap-4 pt-2">
                   <div className="p-4 rounded-xl space-y-1" style={{ background: 'var(--bg-sunken)' }}>
-                    <span className="text-[10px] font-bold uppercase text-slate-400">Total Minerval Dû</span>
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Total Dû</span>
                     <p className="text-lg font-black text-slate-800 dark:text-slate-100">{financialSummary.totalDue} $</p>
                   </div>
 
                   <div className="p-4 rounded-xl space-y-1" style={{ background: 'var(--bg-sunken)' }}>
-                    <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">Total Payé (Reçus)</span>
+                    <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">Total Payé</span>
                     <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">{financialSummary.totalPaid} $</p>
                   </div>
 
@@ -335,22 +349,25 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
 
                 {/* Historique des Reçus de Paiement */}
                 <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800/40">
-                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">Historique des Reçus de Paiements Récents</h4>
-                  <div className="space-y-2">
-                    {[
-                      { num: 'REC-2025-0891', date: '05 Oct 2025', desc: 'Acompte Minerval Trimestre 1', amount: '200 $', mode: 'Mobile Money (M-Pesa)' },
-                      { num: 'REC-2025-1102', date: '12 Nov 2025', desc: 'Frais d\'Examens & Uniforme', amount: '150 $', mode: 'Espèces (Caisse Centrale)' },
-                    ].map((r, i) => (
-                      <div key={i} className="p-3 rounded-xl flex items-center justify-between text-xs" style={{ background: 'var(--bg-sunken)' }}>
-                        <div className="space-y-0.5">
-                          <p className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{r.num} · <span className="font-sans text-slate-500 dark:text-slate-400">{r.date}</span></p>
-                          <p className="font-bold" style={{ color: 'var(--text-primary)' }}>{r.desc}</p>
-                          <p className="text-[10.5px] text-slate-400">Mode : {r.mode}</p>
+                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">Historique des Reçus de Paiements</h4>
+                  {payments.length === 0 ? (
+                    <p className="p-4 text-xs text-center text-slate-400 rounded-xl" style={{ background: 'var(--bg-sunken)' }}>
+                      Aucun reçu de paiement enregistré pour le moment.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {payments.map((r, i) => (
+                        <div key={r.id || i} className="p-3 rounded-xl flex items-center justify-between text-xs" style={{ background: 'var(--bg-sunken)' }}>
+                          <div className="space-y-0.5">
+                            <p className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{r.numeroRecu || r.reference || `REC-${i + 1}`} · <span className="font-sans text-slate-500 dark:text-slate-400">{r.dateCreation}</span></p>
+                            <p className="font-bold" style={{ color: 'var(--text-primary)' }}>Règlement Frais Scolaires</p>
+                            <p className="text-[10.5px] text-slate-400">Mode : {r.moyenPaiement || 'CASH'}</p>
+                          </div>
+                          <span className="font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">{r.montantPaye} {r.devise || '$'}</span>
                         </div>
-                        <span className="font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">{r.amount}</span>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -377,41 +394,41 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                 </div>
 
                 {/* Tableau des Cotes */}
-                <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800/40">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b uppercase text-[10px] font-bold text-slate-400" style={{ background: 'var(--bg-sunken)' }}>
-                        <th className="p-3">Matière / Discipline</th>
-                        <th className="p-3 text-center">P1 (/20)</th>
-                        <th className="p-3 text-center">P2 (/20)</th>
-                        <th className="p-3 text-center">Examen (/50)</th>
-                        <th className="p-3 text-center">Total (/100)</th>
-                        <th className="p-3 text-right">Appréciation</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
-                      {mockGrades.map((g, i) => (
-                        <tr key={i} className="hover:bg-slate-500/5 transition-colors">
-                          <td className="p-3">
-                            <p className="font-bold" style={{ color: 'var(--text-primary)' }}>{g.subject}</p>
-                            <p className="text-[10.5px] text-slate-400 font-medium">{g.prof} · Coef {g.coef}</p>
-                          </td>
-                          <td className="p-3 text-center font-mono font-bold text-slate-700 dark:text-slate-200">{g.p1}</td>
-                          <td className="p-3 text-center font-mono font-bold text-slate-700 dark:text-slate-200">{g.p2}</td>
-                          <td className="p-3 text-center font-mono font-bold text-indigo-600 dark:text-indigo-400">{g.exam}</td>
-                          <td className="p-3 text-center font-mono font-black text-sm text-indigo-600 dark:text-indigo-400">{g.total}</td>
-                          <td className="p-3 text-right">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              g.total >= 80 ? 'bg-emerald-500/15 text-emerald-600' : 'bg-indigo-500/15 text-indigo-600'
-                            }`}>
-                              {g.total >= 80 ? 'Excellent' : g.total >= 70 ? 'Très Bien' : 'Satisfaisant'}
-                            </span>
-                          </td>
+                {cotes.length === 0 ? (
+                  <div className="p-8 text-center rounded-xl" style={{ background: 'var(--bg-sunken)' }}>
+                    <Award className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-slate-400">Aucune cote ou note saisie pour l'élève pour le moment.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800/40">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b uppercase text-[10px] font-bold text-slate-400" style={{ background: 'var(--bg-sunken)' }}>
+                          <th className="p-3">Matière / Discipline</th>
+                          <th className="p-3 text-center">Note / Maxima</th>
+                          <th className="p-3 text-center">Période</th>
+                          <th className="p-3 text-right">Appréciation</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
+                        {cotes.map((c, i) => (
+                          <tr key={c.id || i} className="hover:bg-slate-500/5 transition-colors">
+                            <td className="p-3">
+                              <p className="font-bold" style={{ color: 'var(--text-primary)' }}>{c.titre || c.matiereId}</p>
+                            </td>
+                            <td className="p-3 text-center font-mono font-bold text-indigo-600 dark:text-indigo-400">{c.score} / {c.maxScore || 20}</td>
+                            <td className="p-3 text-center font-mono text-slate-500">{c.periode || 'P1'}</td>
+                            <td className="p-3 text-right">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600">
+                                {c.score >= (c.maxScore * 0.7) ? 'Satisfaisant' : 'À améliorer'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -425,7 +442,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                     <Heart className="w-4.5 h-4.5" /> Fiche d'Urgence Médicale Infirmerie
                   </h3>
                   <span className="text-xs font-black px-3 py-1 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400">
-                    Groupe Sanguin : {student.groupeSanguin || 'O+'}
+                    Groupe Sanguin : {student.groupeSanguin || 'Non renseigné'}
                   </span>
                 </div>
 
@@ -444,7 +461,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                       <ShieldCheck className="w-4 h-4" /> Antécédents Médicaux
                     </div>
                     <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
-                      {student.informationsMedicales || 'Aptitude physique excellente (Vaccins à jour)'}
+                      {student.informationsMedicales || 'Aucun antécédent médical signalé'}
                     </p>
                   </div>
                 </div>
@@ -463,17 +480,17 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div className="p-4 rounded-xl space-y-1" style={{ background: 'var(--bg-sunken)' }}>
                     <span className="text-[10px] font-bold text-slate-400 uppercase">Taux de Présence</span>
-                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">98.5 %</p>
+                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">100 %</p>
                   </div>
 
                   <div className="p-4 rounded-xl space-y-1" style={{ background: 'var(--bg-sunken)' }}>
                     <span className="text-[10px] font-bold text-slate-400 uppercase">Absences Justifiées</span>
-                    <p className="text-xl font-black text-indigo-500">2 Jours</p>
+                    <p className="text-xl font-black text-indigo-500">0 Jour</p>
                   </div>
 
                   <div className="p-4 rounded-xl space-y-1" style={{ background: 'var(--bg-sunken)' }}>
                     <span className="text-[10px] font-bold text-slate-400 uppercase">Retards</span>
-                    <p className="text-xl font-black text-amber-500">1 Retard</p>
+                    <p className="text-xl font-black text-amber-500">0 Retard</p>
                   </div>
                 </div>
               </div>
@@ -551,30 +568,33 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                 </h3>
               </div>
               <span className="text-[10.5px] font-bold text-indigo-600 dark:text-indigo-400">
-                4 / 5 Validés
+                {documents.length} Document(s)
               </span>
             </div>
 
-            <div className="space-y-2.5">
-              {schoolDocuments.map((doc, idx) => (
-                <div key={idx} className="p-3 rounded-xl flex items-center justify-between text-xs" style={{ background: 'var(--bg-sunken)' }}>
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <FileText className="w-4 h-4 text-indigo-500 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-bold truncate" style={{ color: 'var(--text-primary)' }}>{doc.name}</p>
-                      <p className="text-[10px] text-slate-400 font-medium">Déposé le {doc.date}</p>
+            {documents.length === 0 ? (
+              <div className="p-6 text-center rounded-xl space-y-2" style={{ background: 'var(--bg-sunken)' }}>
+                <FolderOpen className="w-8 h-8 text-slate-400 mx-auto" />
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Aucun document scanné ou déposé pour cet élève.</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {documents.map((doc) => (
+                  <div key={doc.id} className="p-3 rounded-xl flex items-center justify-between text-xs" style={{ background: 'var(--bg-sunken)' }}>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <FileText className="w-4 h-4 text-indigo-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-bold truncate" style={{ color: 'var(--text-primary)' }}>{doc.originalName || doc.fileName}</p>
+                        <p className="text-[10px] text-slate-400 font-medium">{doc.createdAt ? new Date(doc.createdAt).toLocaleDateString('fr-FR') : '—'}</p>
+                      </div>
                     </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-black shrink-0 bg-emerald-500/15 text-emerald-600">
+                      Déposé
+                    </span>
                   </div>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-black shrink-0 ${
-                    doc.status === 'VALIDATED'
-                      ? 'bg-emerald-500/15 text-emerald-600'
-                      : 'bg-amber-500/15 text-amber-600'
-                  }`}>
-                    {doc.status === 'VALIDATED' ? 'Validé' : 'En Attente'}
-                  </span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
 
             <button
               onClick={() => setShowDocsModal(true)}
@@ -605,19 +625,23 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>
-                      {student.nomPere || student.nomParent || 'M. Jean-Baptiste Mukendi'}
+                      {student.nomPere || student.nomParent || 'Non renseigné'}
                     </h4>
                     <p className="text-[10.5px] font-bold text-indigo-500">Père / Tuteur Principal</p>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-600">
-                    {student.professionPere || 'Ingénieur BTP'}
+                    {student.professionPere || 'Profession N/A'}
                   </span>
                 </div>
 
                 <div className="pt-1 space-y-1 font-mono text-xs">
                   <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold">
                     <Phone className="w-3.5 h-3.5" />
-                    <a href={`tel:${student.telephonePere || student.telephoneParent}`}>{student.telephonePere || student.telephoneParent || '+243 81 555 0192'}</a>
+                    {student.telephonePere || student.telephoneParent ? (
+                      <a href={`tel:${student.telephonePere || student.telephoneParent}`}>{student.telephonePere || student.telephoneParent}</a>
+                    ) : (
+                      <span>Non renseigné</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -627,19 +651,23 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>
-                      {student.nomMere || 'Mme Chantal Bakamba'}
+                      {student.nomMere || 'Non renseignée'}
                     </h4>
                     <p className="text-[10.5px] font-bold text-pink-500">Mère / Tuteur Secondaire</p>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-pink-500/15 text-pink-600">
-                    {student.professionMere || 'Médecin Généraliste'}
+                    {student.professionMere || 'Profession N/A'}
                   </span>
                 </div>
 
                 <div className="pt-1 space-y-1 font-mono text-xs">
                   <div className="flex items-center gap-2 text-pink-600 dark:text-pink-400 font-bold">
                     <Phone className="w-3.5 h-3.5" />
-                    <a href={`tel:${student.telephoneMere || '+243 99 444 8812'}`}>{student.telephoneMere || '+243 99 444 8812'}</a>
+                    {student.telephoneMere ? (
+                      <a href={`tel:${student.telephoneMere}`}>{student.telephoneMere}</a>
+                    ) : (
+                      <span>Non renseigné</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -665,7 +693,10 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
 
       <StudentDocumentsModal
         isOpen={showDocsModal}
-        onClose={() => setShowDocsModal(false)}
+        onClose={() => {
+          setShowDocsModal(false);
+          loadStudentData(); // Recharger les documents en direct si modifiés
+        }}
         student={student}
         mode="student"
       />
