@@ -105,17 +105,17 @@ export const RoomFormModal: React.FC<RoomFormModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl border shadow-xs overflow-hidden flex flex-col max-h-[90vh] transition-all"
-        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+        className="w-full max-w-lg rounded-2xl border-0 shadow-2xl shadow-slate-950/60 overflow-hidden flex flex-col max-h-[90vh] transition-all duration-300"
+        style={{ background: 'var(--bg-surface)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div
-          className="p-5 border-b flex items-center justify-between gap-3 shrink-0"
-          style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
+          className="p-5 border-0 shadow-xs flex items-center justify-between gap-3 shrink-0"
+          style={{ background: 'var(--bg-sunken)' }}
         >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
+            <div className="p-3 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 shadow-xs">
               <School className="w-5 h-5" />
             </div>
             <div>
@@ -234,15 +234,12 @@ export const RoomFormModal: React.FC<RoomFormModalProps> = ({
           </div>
 
           {/* Footer Actions */}
-          <div
-            className="pt-4 mt-4 border-t flex items-center justify-end gap-3"
-            style={{ borderColor: 'var(--border)' }}
-          >
+          <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800/40 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg border font-bold text-xs hover:bg-slate-500/10 cursor-pointer transition-colors"
-              style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+              className="px-4 py-2.5 rounded-xl font-bold text-xs hover:bg-slate-500/10 active:scale-[0.97] cursor-pointer transition-all duration-200 shadow-xs"
+              style={{ color: 'var(--text-primary)' }}
             >
               Annuler
             </button>
@@ -250,9 +247,9 @@ export const RoomFormModal: React.FC<RoomFormModalProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer border border-indigo-500/40 disabled:opacity-50"
+              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white font-bold text-xs shadow-md shadow-indigo-500/25 hover:shadow-lg hover:shadow-indigo-500/35 flex items-center gap-2 transition-all duration-200 cursor-pointer disabled:opacity-50"
             >
-              <Sparkles className="w-4 h-4 text-amber-300" />
+              <Sparkles className="w-4 h-4 text-amber-300 icon-animated" />
               <span>{loading ? 'Sauvegarde...' : initialData ? 'Enregistrer les Modifications' : 'Ajouter le Local'}</span>
             </button>
           </div>

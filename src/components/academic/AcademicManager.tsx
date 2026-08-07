@@ -293,41 +293,41 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
     <div className="space-y-5 animate-fade-in">
       {/* BARRE SUPÉRIEURE AVEC BOUTON RETOUR & ACTIONS */}
       <div
-        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl border shadow-xs transition-colors"
-        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border-0 shadow-md shadow-indigo-500/5 transition-all duration-300"
+        style={{ background: 'var(--bg-surface)' }}
       >
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-indigo-500/40"
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white text-xs font-bold shadow-md shadow-indigo-500/25 flex items-center gap-2 transition-all duration-200 cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4 text-white" />
             <span>Retour à la Liste</span>
           </button>
-          <div className="h-5 w-px hidden sm:block" style={{ background: 'var(--border)' }} />
+          <div className="h-5 w-px hidden sm:block bg-slate-200 dark:bg-slate-800" />
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
             Dossier Académique Officiel · EPST RDC
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => setShowFullFileModal(true)}
-            className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-indigo-500/40"
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white font-bold text-xs shadow-md shadow-indigo-500/25 hover:shadow-lg flex items-center gap-2 transition-all duration-200 cursor-pointer"
           >
-            <FileText className="w-4 h-4 text-white" /> Exporter Dossier Complet (PDF / Word)
+            <FileText className="w-4 h-4 text-white" /> Exporter Dossier Complet
           </button>
           <button
-            className="px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 hover:bg-slate-500/10 transition-colors cursor-pointer"
-            style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+            className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-slate-500/10 active:scale-[0.97] transition-all duration-200 cursor-pointer shadow-xs"
+            style={{ background: 'var(--bg-sunken)', color: 'var(--text-primary)' }}
           >
-            <Printer className="w-3.5 h-3.5" /> Bulletin PDF
+            <Printer className="w-4 h-4 text-indigo-500" /> Bulletin PDF
           </button>
           <button
             onClick={() => setShowCardModal(true)}
-            className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500/40 text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.97] text-white text-xs font-bold shadow-md shadow-emerald-500/25 flex items-center gap-2 transition-all duration-200 cursor-pointer"
           >
-            <Eye className="w-3.5 h-3.5 text-white" /> Aperçu Carte Recto/Verso
+            <Eye className="w-4 h-4 text-white" /> Aperçu Carte Recto/Verso
           </button>
         </div>
       </div>

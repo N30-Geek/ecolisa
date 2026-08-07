@@ -286,20 +286,20 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
     <div className="space-y-6 animate-fade-in select-none">
       {/* ── EN-TÊTE PRINCIPAL & STATISTIQUES GLOBALES ── */}
       <div
-        className="p-5 sm:p-6 rounded-2xl border shadow-xs transition-colors"
-        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+        className="p-6 rounded-2xl border-0 shadow-lg shadow-indigo-500/5 dark:shadow-slate-950/40 transition-all duration-300"
+        style={{ background: 'var(--bg-surface)' }}
       >
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <div className="p-2.5 rounded-xl bg-indigo-600 text-white shrink-0 shadow-xs">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="p-3 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white shrink-0 shadow-md shadow-indigo-500/30">
                 <School className="w-6 h-6 text-white" />
               </div>
               <div>
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
                   Gestion des Classes, Cycles & Promotions
                 </h1>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
                   Architecture académique EPST RDC · Affectation des titulaires & gestion des capacités de locaux
                 </p>
               </div>
@@ -307,13 +307,13 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
           </div>
 
           {/* Boutons d'Action Haut de Page */}
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={() => {
                 setEditingClass(null);
                 setIsClassModalOpen(true);
               }}
-              className="px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs flex items-center gap-2 transition-all cursor-pointer border border-indigo-500/40"
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white text-xs font-bold shadow-md shadow-indigo-500/25 hover:shadow-lg hover:shadow-indigo-500/35 flex items-center gap-2 transition-all duration-200 cursor-pointer"
             >
               <Plus className="w-4 h-4 text-white" />
               <span>Créer une Promotion / Classe</span>
@@ -321,8 +321,8 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
 
             <button
               onClick={() => setActiveTab('passage')}
-              className="px-3.5 py-2.5 rounded-lg border text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer hover:bg-slate-500/10"
-              style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all duration-200 cursor-pointer shadow-xs hover:shadow-md active:scale-[0.97]"
+              style={{ background: 'var(--bg-sunken)', color: 'var(--text-primary)' }}
             >
               <RefreshCw className="w-4 h-4 text-indigo-500" />
               <span>Passage de Promotion</span>
@@ -330,49 +330,49 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
           </div>
         </div>
 
-        {/* BANDEAU DES KPI KPI CARDS */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 pt-5 mt-5 border-t" style={{ borderColor: 'var(--border)' }}>
+        {/* BANDEAU DES KPI CARDS */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-6 mt-6 border-t border-slate-100 dark:border-slate-800/40">
           {/* Card 1: Total Classes */}
-          <div className="p-3.5 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+          <div className="p-4 rounded-xl border-0 shadow-sm hover:shadow-md transition-all duration-200 space-y-1.5" style={{ background: 'var(--bg-sunken)' }}>
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Classes</span>
             <div className="flex items-center justify-between">
-              <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">{classes.length}</span>
-              <BookOpen className="w-4 h-4 text-indigo-500/60" />
+              <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{classes.length}</span>
+              <BookOpen className="w-4.5 h-4.5 text-indigo-500/60" />
             </div>
             <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">Réparties sur 4 cycles</p>
           </div>
 
           {/* Card 2: Effectif Global */}
-          <div className="p-3.5 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+          <div className="p-4 rounded-xl border-0 shadow-sm hover:shadow-md transition-all duration-200 space-y-1.5" style={{ background: 'var(--bg-sunken)' }}>
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Élèves Inscrits</span>
             <div className="flex items-center justify-between">
-              <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">{totalEnrolled}</span>
-              <Users className="w-4 h-4 text-emerald-500/60" />
+              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{totalEnrolled}</span>
+              <Users className="w-4.5 h-4.5 text-emerald-500/60" />
             </div>
             <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">Capacité totale : {totalCapacity}</p>
           </div>
 
           {/* Card 3: Taux d'occupation */}
-          <div className="p-3.5 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+          <div className="p-4 rounded-xl border-0 shadow-sm hover:shadow-md transition-all duration-200 space-y-1.5" style={{ background: 'var(--bg-sunken)' }}>
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Occupation Salles</span>
             <div className="flex items-center justify-between">
-              <span className="text-xl font-black text-sky-600 dark:text-sky-400">{occupancyRate}%</span>
-              <Building className="w-4 h-4 text-sky-500/60" />
+              <span className="text-2xl font-black text-sky-600 dark:text-sky-400">{occupancyRate}%</span>
+              <Building className="w-4.5 h-4.5 text-sky-500/60" />
             </div>
             <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mt-1">
               <div
-                className={`h-full rounded-full transition-all ${occupancyRate > 90 ? 'bg-amber-500' : 'bg-sky-500'}`}
+                className={`h-full rounded-full transition-all duration-500 ${occupancyRate > 90 ? 'bg-amber-500' : 'bg-sky-500'}`}
                 style={{ width: `${Math.min(100, occupancyRate)}%` }}
               />
             </div>
           </div>
 
           {/* Card 4: Titulaires en Attente */}
-          <div className="p-3.5 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+          <div className="p-4 rounded-xl border-0 shadow-sm hover:shadow-md transition-all duration-200 space-y-1.5" style={{ background: 'var(--bg-sunken)' }}>
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Titulaires Désignés</span>
             <div className="flex items-center justify-between">
-              <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">{classes.length - unassignedTitulairesCount} / {classes.length}</span>
-              <UserCheck className="w-4 h-4 text-indigo-500/60" />
+              <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{classes.length - unassignedTitulairesCount} / {classes.length}</span>
+              <UserCheck className="w-4.5 h-4.5 text-indigo-500/60" />
             </div>
             <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">
               {unassignedTitulairesCount > 0 ? (
@@ -522,17 +522,17 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
                 return (
                   <div
                     key={c.id}
-                    className="p-5 rounded-2xl border shadow-xs space-y-4 hover:border-indigo-500/40 transition-all flex flex-col justify-between"
-                    style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+                    className="p-5 rounded-2xl border-0 shadow-md hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 ease-out flex flex-col justify-between group"
+                    style={{ background: 'var(--bg-surface)' }}
                   >
-                    <div className="space-y-3">
+                    <div className="space-y-3.5">
                       {/* Badge Cycle & Options */}
                       <div className="flex items-center justify-between gap-2">
-                        <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase border ${badge.bg}`}>
+                        <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase border-0 shadow-xs ${badge.bg}`}>
                           {badge.label}
                         </span>
                         {c.optionCode && c.optionCode !== 'TRONC_COMMUN' && (
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-300">
                             {c.optionCode}
                           </span>
                         )}
@@ -540,11 +540,11 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
 
                       {/* Intitulé & Prof Titulaire */}
                       <div>
-                        <h3 className="text-base font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                        <h3 className="text-base font-black tracking-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" style={{ color: 'var(--text-primary)' }}>
                           {c.nom}
                         </h3>
                         <div className="flex items-center gap-2 mt-1.5">
-                          <UserCheck className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                          <UserCheck className="w-4 h-4 text-indigo-500 shrink-0 icon-animated" />
                           <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate">
                             {c.professeurTitulaire || 'Non Attribué'}
                           </span>
@@ -552,10 +552,10 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
                       </div>
 
                       {/* Local & Capacité */}
-                      <div className="p-3 rounded-xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                      <div className="p-3.5 rounded-xl border-0 shadow-xs space-y-2.5" style={{ background: 'var(--bg-sunken)' }}>
                         <div className="flex items-center justify-between text-xs font-bold">
                           <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
-                            <Building className="w-3.5 h-3.5 text-slate-400" />
+                            <Building className="w-4 h-4 text-slate-400" />
                             <span>Local : <strong style={{ color: 'var(--text-primary)' }}>{c.salle}</strong></span>
                           </div>
                           <span className="text-indigo-600 dark:text-indigo-400 font-extrabold">
@@ -566,7 +566,7 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
                         {/* Jauge d'occupation */}
                         <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all ${ratio >= 100 ? 'bg-rose-500' : ratio >= 85 ? 'bg-amber-500' : 'bg-indigo-600'}`}
+                            className={`h-full rounded-full transition-all duration-500 ${ratio >= 100 ? 'bg-rose-500' : ratio >= 85 ? 'bg-amber-500' : 'bg-indigo-600'}`}
                             style={{ width: `${Math.min(100, ratio)}%` }}
                           />
                         </div>
@@ -574,29 +574,29 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
                     </div>
 
                     {/* Actions de Carte */}
-                    <div className="pt-3 border-t flex items-center justify-between gap-2" style={{ borderColor: 'var(--border)' }}>
+                    <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800/40 flex items-center justify-between gap-2">
                       <button
                         onClick={() => setSelectedClassDetail(c)}
-                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                        className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white font-bold text-xs shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30 flex items-center gap-1.5 transition-all duration-200 cursor-pointer"
                       >
-                        <Eye className="w-3.5 h-3.5" />
+                        <Eye className="w-4 h-4" />
                         <span>Voir Élèves ({countEnrolled})</span>
                       </button>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => {
                             setEditingClass(c);
                             setIsClassModalOpen(true);
                           }}
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-500/10 transition-colors cursor-pointer"
+                          className="p-2 rounded-xl text-slate-600 dark:text-slate-300 shadow-xs hover:shadow-md hover:bg-slate-500/10 active:scale-[0.95] transition-all duration-200 cursor-pointer"
                           title="Modifier la classe"
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => setDeleteClassId(c.id)}
-                          className="p-1.5 rounded-lg border border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                          className="p-2 rounded-xl text-rose-600 dark:text-rose-400 shadow-xs hover:shadow-md hover:bg-rose-500/10 active:scale-[0.95] transition-all duration-200 cursor-pointer"
                           title="Supprimer la classe"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -694,29 +694,29 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
       {/* ── CONTENU DE L'ONGLET 2 : STRUCTURE DES CYCLES & OPTIONS EPST ── */}
       {activeTab === 'cycles' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* Cycle Maternelle */}
-            <div className="p-5 rounded-2xl border shadow-xs space-y-3" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+            <div className="p-6 rounded-2xl border-0 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 space-y-3.5" style={{ background: 'var(--bg-surface)' }}>
               <div className="flex items-center justify-between">
-                <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-rose-500/15 text-rose-600 dark:text-rose-400">
                   Cycle Maternelle
                 </span>
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">ge : 3 à 5 ans</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Âge : 3 à 5 ans</span>
               </div>
               <h3 className="text-base font-black" style={{ color: 'var(--text-primary)' }}>Éveil & Socialisation Maternelle</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                 Subdivisé en 3 niveaux : Petite Section (PS), Moyenne Section (MS) et Grande Section (GS). Axé sur le développement psychomoteur et la préparation au Primaire.
               </p>
-              <div className="pt-3 border-t flex justify-between text-xs font-bold text-slate-600 dark:text-slate-300" style={{ borderColor: 'var(--border)' }}>
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800/40 flex justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
                 <span>Classes actives : 3 promotions</span>
                 <span className="text-indigo-600 dark:text-indigo-400">Option : Tronc Commun</span>
               </div>
             </div>
 
             {/* Cycle Primaire */}
-            <div className="p-5 rounded-2xl border shadow-xs space-y-3" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+            <div className="p-6 rounded-2xl border-0 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 space-y-3.5" style={{ background: 'var(--bg-surface)' }}>
               <div className="flex items-center justify-between">
-                <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30">
+                <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-sky-500/15 text-sky-600 dark:text-sky-400">
                   Cycle Primaire
                 </span>
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">1ère à 6ème Année</span>
@@ -725,16 +725,16 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                 Niveaux 1 à 6 sanctionnés par le Certificat d'Études Primaires (TENAFEP/ENAFEP). Apprentissage fondamental de la lecture, écriture et calcul.
               </p>
-              <div className="pt-3 border-t flex justify-between text-xs font-bold text-slate-600 dark:text-slate-300" style={{ borderColor: 'var(--border)' }}>
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800/40 flex justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
                 <span>Classes actives : 6 promotions</span>
                 <span className="text-indigo-600 dark:text-indigo-400">Option : Tronc Commun</span>
               </div>
             </div>
 
             {/* Cycle Terminal d'Éducation de Base (CTEB) */}
-            <div className="p-5 rounded-2xl border shadow-xs space-y-3" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+            <div className="p-6 rounded-2xl border-0 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 space-y-3.5" style={{ background: 'var(--bg-surface)' }}>
               <div className="flex items-center justify-between">
-                <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
+                <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
                   Cycle CTEB (7e & 8e)
                 </span>
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Nouveaux Réf. EPST</span>
@@ -743,16 +743,16 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                 7ème et 8ème Année CTEB (anciennes 1ère et 2ème Secondaire). Tronc commun obligatoire avant l'orientation vers les Humanités Générales ou Techniques.
               </p>
-              <div className="pt-3 border-t flex justify-between text-xs font-bold text-slate-600 dark:text-slate-300" style={{ borderColor: 'var(--border)' }}>
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800/40 flex justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
                 <span>Classes actives : 2 promotions</span>
                 <span className="text-indigo-600 dark:text-indigo-400">Examen d'Orientation 8ème</span>
               </div>
             </div>
 
             {/* Cycle Humanités Générales & Techniques */}
-            <div className="p-5 rounded-2xl border shadow-xs space-y-3" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+            <div className="p-6 rounded-2xl border-0 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 space-y-3.5" style={{ background: 'var(--bg-surface)' }}>
               <div className="flex items-center justify-between">
-                <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
                   Cycle Humanités (1e-4e H)
                 </span>
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Finalistes EXETAT</span>
@@ -761,7 +761,7 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                 1ère H à 4ème H (3e à 6e Secondaire). Filières spécialisées : Math-Physique, Biologie-Chimie, Commerciale & Gestion, Pédagogie, Technique.
               </p>
-              <div className="pt-3 border-t flex justify-between text-xs font-bold text-slate-600 dark:text-slate-300" style={{ borderColor: 'var(--border)' }}>
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800/40 flex justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
                 <span>Options autorisées : 8 filières</span>
                 <span className="text-emerald-600 dark:text-emerald-400 font-bold">Diplôme d'État RDC</span>
               </div>
@@ -772,7 +772,7 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
 
       {/* ── CONTENU DE L'ONGLET 3 : PASSAGE DE PROMOTION (BULK PROMOTE) ── */}
       {activeTab === 'passage' && (
-        <div className="p-6 rounded-2xl border shadow-xs space-y-6" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+        <div className="p-6 rounded-2xl border-0 shadow-lg shadow-indigo-500/5 space-y-6" style={{ background: 'var(--bg-surface)' }}>
           <div>
             <h3 className="text-base font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
               Passage de Promotion & Mutation des Élèves
@@ -815,7 +815,7 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
 
           {/* Liste des Élèves à Promouvoir */}
           {sourceClassId ? (
-            <div className="space-y-3 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+            <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800/40">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
                   Liste des élèves de la promotion ({sourceClassStudents.length} élèves inscrits)
@@ -828,7 +828,7 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
                 </button>
               </div>
 
-              <div className="max-h-64 overflow-y-auto rounded-xl border divide-y" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+              <div className="max-h-64 overflow-y-auto rounded-xl border-0 shadow-xs divide-y divide-slate-100 dark:divide-slate-800/40" style={{ background: 'var(--bg-sunken)' }}>
                 {sourceClassStudents.length === 0 ? (
                   <p className="p-4 text-xs text-center text-slate-400">Aucun élève inscrit dans cette classe d'origine.</p>
                 ) : (
@@ -843,13 +843,13 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 dark:border-slate-700'}`}>
+                          <div className={`w-4 h-4 rounded border-0 flex items-center justify-center transition-all ${isSelected ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-200 dark:bg-slate-700'}`}>
                             {isSelected && <Check className="w-3 h-3 text-white" />}
                           </div>
                           <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{s.prenom} {s.nom} {s.postnom}</span>
                           <span className="font-mono text-[10.5px] text-slate-400">Mat: {s.registrationNumber}</span>
                         </div>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600">
                           {s.statut}
                         </span>
                       </div>
@@ -862,7 +862,7 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
                 <button
                   disabled={!targetClassId || selectedStudentIds.length === 0 || isPromoting}
                   onClick={handleExecutePromotion}
-                  className="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white font-bold text-xs shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30 flex items-center gap-2 transition-all duration-200 disabled:opacity-50 cursor-pointer"
                 >
                   <RefreshCw className={`w-4 h-4 ${isPromoting ? 'animate-spin' : ''}`} />
                   <span>{isPromoting ? 'Promotion en cours...' : `Promouvoir ${selectedStudentIds.length} Élèves Sélectionné(s)`}</span>
@@ -870,7 +870,7 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
               </div>
             </div>
           ) : (
-            <p className="p-8 text-center text-xs text-slate-400 border border-dashed rounded-xl">
+            <p className="p-8 text-center text-xs text-slate-400 border-0 bg-slate-50 dark:bg-slate-800/30 rounded-xl shadow-xs">
               Veuillez d'abord choisir une classe d'origine ci-dessus pour afficher l'effectif à promouvoir.
             </p>
           )}
@@ -894,53 +894,53 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
                 setEditingRoom(null);
                 setIsRoomModalOpen(true);
               }}
-              className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white font-bold text-xs shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30 flex items-center gap-1.5 transition-all duration-200 cursor-pointer"
             >
               <Plus className="w-4 h-4" /> Ajouter une Salle
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredSalles.map(s => (
               <div
                 key={s.id}
-                className="p-4 rounded-2xl border shadow-xs space-y-3"
-                style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+                className="p-5 rounded-2xl border-0 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 space-y-3.5"
+                style={{ background: 'var(--bg-surface)' }}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] font-black px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
+                  <span className="font-mono text-[10px] font-black px-2.5 py-0.5 rounded bg-indigo-500/15 text-indigo-700 dark:text-indigo-300">
                     {s.codeSalle}
                   </span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${s.statut === 'DISPONIBLE' ? 'bg-emerald-500/15 text-emerald-600 border border-emerald-500/30' : 'bg-amber-500/15 text-amber-600 border border-amber-500/30'}`}>
+                  <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${s.statut === 'DISPONIBLE' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-amber-500/15 text-amber-600'}`}>
                     {s.statut}
                   </span>
                 </div>
 
                 <div>
                   <h4 className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{s.nomSalle}</h4>
-                  <p className="text-xs text-slate-400 font-medium">{s.batiment || 'Bâtiment Principal'}</p>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">{s.batiment || 'Bâtiment Principal'}</p>
                 </div>
 
-                <div className="pt-2 border-t flex justify-between text-xs font-bold" style={{ borderColor: 'var(--border)' }}>
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800/40 flex justify-between text-xs font-bold">
                   <span className="text-slate-500 dark:text-slate-400">Capacité :</span>
                   <span className="text-indigo-600 dark:text-indigo-400">{s.capacite} places assises</span>
                 </div>
 
-                <div className="pt-2 flex justify-end gap-1">
+                <div className="pt-2 flex justify-end gap-1.5">
                   <button
                     onClick={() => {
                       setEditingRoom(s);
                       setIsRoomModalOpen(true);
                     }}
-                    className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-500/10 cursor-pointer"
+                    className="p-2 rounded-xl text-slate-600 dark:text-slate-300 shadow-xs hover:shadow-md hover:bg-slate-500/10 active:scale-[0.95] transition-all duration-200 cursor-pointer"
                   >
-                    <Edit3 className="w-3.5 h-3.5" />
+                    <Edit3 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setDeleteRoomId(s.id)}
-                    className="p-1 rounded-md border border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
+                    className="p-2 rounded-xl text-rose-600 dark:text-rose-400 shadow-xs hover:shadow-md hover:bg-rose-500/10 active:scale-[0.95] transition-all duration-200 cursor-pointer"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
