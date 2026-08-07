@@ -48,8 +48,8 @@ import {
   Heart,
   FileCheck
 } from 'lucide-react';
-import { mockStudents, mockClasses, mockCycles, mockSubjects, mockStaff } from '../../data/mockData';
-import { Eleve, Discipline, ClasseScolaire, CycleScolaire } from '../../types';
+import { Eleve, Discipline, ClasseScolaire, CycleScolaire, MembrePersonnel } from '../../types';
+import { LocalDatabaseService } from '../../services/localDatabase';
 import { StudentRegistrationModal } from './StudentRegistrationModal';
 import { ClassesPromotionsManager } from './ClassesPromotionsManager';
 import { StudentsManager } from './StudentsManager';
@@ -629,7 +629,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                       </tr>
                     </thead>
                     <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
-                      {mockSubjects.map(sub => (
+                      {([] as any[]).map((sub: any) => (
                         <tr key={sub.id} className="hover:bg-slate-500/5">
                           <td className="p-3 font-bold" style={{ color: 'var(--text-primary)' }}>{sub.nom}</td>
                           <td className="p-3 font-black text-indigo-400">Coeff. {sub.coefficient}</td>
@@ -918,7 +918,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
 // â”€â”€â”€ ONGLET 1 : ÉLÈVES & INSCRIPTIONS AVEC PAGINATION & FICHE COMPLÈTE DÉDIÉE â”€â”€
 
 const StudentsTab: React.FC = () => {
-  const [students, setStudents] = useState<Eleve[]>(mockStudents);
+  const [students, setStudents] = useState<Eleve[]>([]);
   const [search, setSearch] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Eleve | null>(null);
@@ -946,8 +946,7 @@ const StudentsTab: React.FC = () => {
   }, [filtered, currentPage, pageSize]);
 
   const classOptions = useMemo(() => [
-    { value: '', label: `Toutes les classes (${mockClasses.length})` },
-    ...mockClasses.map(cls => ({ value: cls.id, label: cls.nom })),
+    { value: '', label: 'Toutes les classes' },
   ], []);
 
   const handleRegisterNewStudent = (newStudent: Eleve) => {
@@ -1247,7 +1246,7 @@ const StudentsTab: React.FC = () => {
 // â”€â”€â”€ ONGLET 2 : CLASSES & CYCLES AVEC PAGINATION & CREATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const ClassesTab: React.FC = () => {
-  const [classesList, setClassesList] = useState<ClasseScolaire[]>(mockClasses);
+  const [classesList, setClassesList] = useState<ClasseScolaire[]>([]);
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
@@ -1340,7 +1339,7 @@ const ClassesTab: React.FC = () => {
 // â”€â”€â”€ ONGLET 3 : MATIÈRES, DISCIPLINES & COEFFICIENTS EPST â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const SubjectsTab: React.FC = () => {
-  const [subjectsList, setSubjectsList] = useState<Discipline[]>(mockSubjects);
+  const [subjectsList, setSubjectsList] = useState<Discipline[]>([]);
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
@@ -2460,58 +2459,87 @@ const SchoolYearsTab: React.FC = () => {
 
 // â”€â”€â”€ TEACHERS TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const TeachersTab: React.FC = () => (
-  <div>
-    <SectionHeader
-      title="Corps Enseignant & Personnel"
-      subtitle={`${mockStaff.length} membres du personnel · Année 2025-2026`}
-      actions={
-        <button className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-black text-xs shadow-md shadow-indigo-600/30 flex items-center gap-1.5 hover:bg-indigo-700 transition-all cursor-pointer">
-          <Plus className="w-4 h-4" /> Nouveau Dossier RH
-        </button>
-      }
-    />
+// ─── TEACHERS TAB ─────────────────────────────────────────────────────────────
 
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {mockStaff.map(s => (
-        <div
-          key={s.id}
-          className="rounded-2xl border shadow-md overflow-hidden hover:shadow-lg transition-shadow p-5"
-          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
-        >
-          <div className="flex items-start gap-3">
-            {s.avatarUrl ? (
-              <img src={s.avatarUrl} alt={s.prenom} className="w-12 h-12 rounded-2xl object-cover border border-indigo-500/30 shadow-sm" />
-            ) : (
-              <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black"
-                style={{ background: 'linear-gradient(135deg, #6366f1, #818cf8)' }}
-              >
-                {s.prenom[0]}{s.nom[0]}
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <h3 className="font-extrabold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{s.prenom} {s.nom}</h3>
-              <p className="text-xs text-slate-400 font-semibold">{s.role}</p>
-              <div className="mt-1.5">{statusBadge(s.statut)}</div>
-            </div>
-          </div>
+const TeachersTab: React.FC = () => {
+  const [staffList, setStaffList] = useState<MembrePersonnel[]>([]);
+  const [loading, setLoading] = useState(true);
 
-          <div className="mt-4 space-y-1.5 text-xs font-medium">
-            <div className="flex items-center gap-2 text-slate-400">
-              <Phone className="w-3.5 h-3.5" />
-              <span>{s.telephone}</span>
-            </div>
-            <div className="flex items-center gap-2 text-slate-400">
-              <Mail className="w-3.5 h-3.5" />
-              <span className="truncate">{s.email}</span>
-            </div>
-          </div>
+  useEffect(() => {
+    LocalDatabaseService.getStaff()
+      .then(res => setStaffList(res || []))
+      .catch(() => setStaffList([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="space-y-4">
+      <SectionHeader
+        title="Corps Enseignant & Personnel"
+        subtitle={`${staffList.length} membres du personnel enregistrés`}
+        actions={
+          <button className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white font-bold text-xs shadow-md shadow-indigo-500/20 flex items-center gap-1.5 transition-all cursor-pointer">
+            <Plus className="w-4 h-4" /> Nouveau Dossier RH
+          </button>
+        }
+      />
+
+      {loading ? (
+        <div className="p-8 text-center rounded-2xl border-0 shadow-md" style={{ background: 'var(--bg-surface)' }}>
+          <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+          <p className="text-xs text-slate-400 font-bold">Chargement du personnel...</p>
         </div>
-      ))}
+      ) : staffList.length === 0 ? (
+        <div className="p-12 text-center rounded-2xl border-0 shadow-md space-y-3" style={{ background: 'var(--bg-surface)' }}>
+          <Users className="w-12 h-12 text-slate-400 mx-auto" />
+          <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Aucun membre du personnel enregistré</h3>
+          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+            Créez des dossiers pour les enseignants, administratifs et agents de l'établissement.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {staffList.map(s => (
+            <div
+              key={s.id}
+              className="rounded-2xl border-0 shadow-md hover:shadow-xl transition-all p-5"
+              style={{ background: 'var(--bg-surface)' }}
+            >
+              <div className="flex items-start gap-3">
+                {s.avatarUrl ? (
+                  <img src={s.avatarUrl} alt={s.prenom} className="w-12 h-12 rounded-2xl object-cover shadow-sm" />
+                ) : (
+                  <div
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black"
+                    style={{ background: 'linear-gradient(135deg, #6366f1, #818cf8)' }}
+                  >
+                    {s.prenom[0]}{s.nom[0]}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-extrabold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{s.prenom} {s.nom}</h3>
+                  <p className="text-xs text-slate-400 font-semibold">{s.role}</p>
+                  <div className="mt-1.5">{statusBadge(s.statut)}</div>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-1.5 text-xs font-medium">
+                <div className="flex items-center gap-2 text-slate-400">
+                  <Phone className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>{s.telephone}</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-400">
+                  <Mail className="w-3.5 h-3.5 text-indigo-500" />
+                  <span className="truncate">{s.email}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 // â”€â”€â”€ SCHEDULE & GRADES PLACEHOLDERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

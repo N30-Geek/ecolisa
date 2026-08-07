@@ -153,12 +153,12 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
         LocalDatabaseService.getEleves(),
         LocalDatabaseService.getClasses(),
       ]);
-      setStudents(elvList.length > 0 ? elvList : mockStudents);
-      setClasses(clsList.length > 0 ? clsList : mockClasses);
+      setStudents(elvList || []);
+      setClasses(clsList || []);
     } catch (err) {
       console.error('[StudentsManager] Erreur chargement :', err);
-      setStudents(mockStudents);
-      setClasses(mockClasses);
+      setStudents([]);
+      setClasses([]);
     } finally {
       setLoading(false);
     }

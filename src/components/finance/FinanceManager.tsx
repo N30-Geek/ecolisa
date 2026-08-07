@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CustomSelect } from '../common/CustomSelect';
 import {
   Receipt,
@@ -28,7 +28,6 @@ import {
   ArrowDownLeft,
   MoreHorizontal,
 } from 'lucide-react';
-import { mockStaff } from '../../data/mockData';
 import { ResponsiveContainer, AreaChart, Area, XAxis, Tooltip, BarChart, Bar } from 'recharts';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
@@ -96,8 +95,17 @@ const PayrollTab: React.FC = () => {
   const fmt = (n: number, source?: string) => formatCurrency(n, currency, source || currency, exchangeRate);
 
   const [selectedMonth, setSelectedMonth] = useState('07-2026');
+  const [staff, setStaff] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const totalMasse = mockStaff.reduce((a, s) => a + convertCurrency(s.salaireBase || 0, (s.devise || 'USD'), currency, exchangeRate), 0);
+  useEffect(() => {
+    LocalDatabaseService.getStaff()
+      .then(res => setStaff(res || []))
+      .catch(() => setStaff([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const totalMasse = staff.reduce((a, s) => a + convertCurrency(s.salaireBase || 0, (s.devise || 'USD'), currency, exchangeRate), 0);
 
   return (
     <div>
@@ -123,8 +131,8 @@ const PayrollTab: React.FC = () => {
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
           { label: 'Masse Salariale', val: fmt(totalMasse), color: '#6366f1', icon: Wallet },
-          { label: 'Personnel Actif', val: String(mockStaff.filter(s => s.statut === 'ACTIF').length), color: '#10b981', icon: CheckCircle },
-          { label: 'En Congé / Absent', val: '2', color: '#f59e0b', icon: AlertTriangle },
+          { label: 'Personnel Actif', val: String(staff.filter(s => s.statut === 'ACTIF').length), color: '#10b981', icon: CheckCircle },
+          { label: 'En Congé / Absent', val: String(staff.filter(s => s.statut === 'CONGE').length), color: '#f59e0b', icon: AlertTriangle },
         ].map(s => (
           <div
             key={s.label}
@@ -135,92 +143,51 @@ const PayrollTab: React.FC = () => {
               <s.icon className="w-5 h-5" style={{ color: s.color }} />
             </div>
             <div>
-              <p className="text-[18px] font-black text-slate-900">{s.val}</p>
+              <p className="text-[18px] font-black" style={{ color: 'var(--text-primary)' }}>{s.val}</p>
               <p className="text-[11px] text-slate-400">{s.label}</p>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Table de paie */}
-      <div className="section-card">
-        <div className="p-5 border-b" style={{ borderColor: 'var(--border)' }}>
-          <h3 className="font-bold text-slate-900">Tableau de Paie — {selectedMonth}</h3>
+      {loading ? (
+        <div className="p-8 text-center rounded-xl border border-slate-200 dark:border-slate-800" style={{ background: 'var(--bg-surface)' }}>
+          <p className="text-xs text-slate-400 font-bold">Chargement de la paie du personnel...</p>
         </div>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Personnel</th>
-              <th>Fonction</th>
-              <th>Salaire Base</th>
-              <th>Heures Supp.</th>
-              <th>Prime</th>
-              <th>Retenues</th>
-              <th>Net à Payer</th>
-              <th>Statut</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {mockStaff.map((s, i) => {
-              const src = (s.devise || 'USD');
-              const base = convertCurrency(s.salaireBase || 0, src, currency, exchangeRate);
-              const heureSupp = convertCurrency([0, 150, 0, 200][i % 4], src, currency, exchangeRate);
-              const prime = convertCurrency([100, 0, 80, 0][i % 4], src, currency, exchangeRate);
-              const retenue = Math.round(base * 0.15);
-              const net = base + heureSupp + prime - retenue;
-              const isPaid = i % 3 !== 2;
-
-              return (
-                <tr key={s.id}>
-                  <td>
-                    <div className="flex items-center gap-2">
-                      {s.avatarUrl && (
-                        <img src={s.avatarUrl} alt={s.prenom} className="avatar w-7 h-7" />
-                      )}
-                      <div>
-                        <p className="font-bold text-[12px] text-slate-900">{s.prenom} {s.nom}</p>
-                        <p className="text-[10px] text-slate-400">{s.email}</p>
-                      </div>
-                    </div>
+      ) : staff.length === 0 ? (
+        <div className="p-8 text-center rounded-xl border border-slate-200 dark:border-slate-800" style={{ background: 'var(--bg-surface)' }}>
+          <p className="text-xs text-slate-400 font-bold">Aucun membre du personnel enregistré pour établir la paie.</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden" style={{ background: 'var(--bg-surface)' }}>
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider text-[10px] text-slate-400 bg-slate-50 dark:bg-slate-800/60">
+                <th className="p-3">Employé</th>
+                <th className="p-3">Fonction</th>
+                <th className="p-3 text-right">Salaire Base</th>
+                <th className="p-3 text-center">Statut Paie</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+              {staff.map((s, i) => (
+                <tr key={s.id || i} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                  <td className="p-3 font-bold" style={{ color: 'var(--text-primary)' }}>{s.prenom} {s.nom}</td>
+                  <td className="p-3 text-slate-400">{s.role}</td>
+                  <td className="p-3 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                    {fmt(s.salaireBase || 0, s.devise)}
                   </td>
-                  <td>
-                    <span className="badge badge-brand" style={{ fontSize: '10px' }}>{s.role}</span>
-                  </td>
-                  <td className="font-bold text-slate-900">{fmt(base)}</td>
-                  <td className="text-emerald-600 font-semibold">{heureSupp > 0 ? `+${fmt(heureSupp)}` : '—'}</td>
-                  <td className="text-indigo-600 font-semibold">{prime > 0 ? `+${fmt(prime)}` : '—'}</td>
-                  <td className="text-red-500 font-semibold">-{fmt(retenue)}</td>
-                  <td className="font-black text-[14px] text-slate-900">{fmt(net)}</td>
-                  <td>
-                    <span className={`badge ${isPaid ? 'badge-success' : 'badge-warning'}`}>
-                      {isPaid ? '✓ Payé' : '⏳ En attente'}
+                  <td className="p-3 text-center">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600">
+                      PAYÉ
                     </span>
                   </td>
-                  <td>
-                    <div className="flex gap-1">
-                      {!isPaid && (
-                        <button
-                          className="px-2 py-1 rounded-lg text-[10px] font-bold"
-                          style={{ background: 'rgba(16,185,129,0.10)', color: '#059669' }}
-                        >
-                          Payer
-                        </button>
-                      )}
-                      <button
-                        className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-indigo-50 transition-colors"
-                        title="Fiche de paie"
-                      >
-                        <Printer className="w-3.5 h-3.5 text-indigo-400" />
-                      </button>
-                    </div>
-                  </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };
