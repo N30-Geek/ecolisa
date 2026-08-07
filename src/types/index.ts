@@ -489,6 +489,8 @@ export interface SalleConfig {
   nomSalle: string;
   capacite: number;
   cycleCode: 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES';
+  batiment?: string;
+  statut?: 'DISPONIBLE' | 'OCCUPEE' | 'MAINTENANCE';
 }
 
 export interface CycleConfig {
