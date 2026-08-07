@@ -52,6 +52,7 @@ import { mockStudents, mockClasses, mockCycles, mockSubjects, mockStaff } from '
 import { Eleve, Discipline, ClasseScolaire, CycleScolaire } from '../../types';
 import { StudentRegistrationModal } from './StudentRegistrationModal';
 import { ClassesPromotionsManager } from './ClassesPromotionsManager';
+import { StudentsManager } from './StudentsManager';
 
 interface AcademicManagerProps {
   activeSubTab?: string;
@@ -2555,14 +2556,14 @@ export const AcademicManager: React.FC<AcademicManagerProps> = ({ activeSubTab =
 
   const renderTab = () => {
     switch (localTab) {
-      case 'students': return <StudentsTab />;
+      case 'students': return <StudentsManager />;
       case 'classes':  return <ClassesPromotionsManager onNavigateToStudents={(clsId) => setLocalTab('students')} />;
       case 'subjects': return <SubjectsTab />;
       case 'years':    return <SchoolYearsTab />;
       case 'teachers': return <TeachersTab />;
       case 'schedule': return <ScheduleTab />;
       case 'grades':   return <GradesTab />;
-      default:         return <StudentsTab />;
+      default:         return <StudentsManager />;
     }
   };
 
