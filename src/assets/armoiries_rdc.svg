@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 600" width="500" height="600">
+  <defs>
+    <radialGradient id="headGrad" cx="50%" cy="40%">
+      <stop offset="0%" stop-color="#f5d71c"/>
+      <stop offset="100%" stop-color="#c8a800"/>
+    </radialGradient>
+    <linearGradient id="shieldGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1e90ff"/>
+      <stop offset="100%" stop-color="#005cc5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Shield / Écu -->
+  <path d="M 250,8 C 350,8 430,50 460,150 C 480,280 400,480 250,590 C 100,480 20,280 40,150 C 70,50 150,8 250,8 Z" fill="url(#shieldGrad)" stroke="#1a1a1a" stroke-width="6"/>
+  <!-- Inner white crescent opening -->
+  <ellipse cx="250" cy="60" rx="130" ry="80" fill="white" opacity="0.95"/>
+
+  <!-- Tusk (Défense d'éléphant) Left -->
+  <path d="M 120,100 C 70,200 50,350 130,430 C 140,430 110,350 100,280 C 95,230 110,180 130,120 Z" fill="#ffe8b0" stroke="#6b5b00" stroke-width="2.5"/>
+
+  <!-- Spear (Lance) Right -->
+  <line x1="395" y1="80" x2="320" y2="440" stroke="#4a4a4a" stroke-width="7" stroke-linecap="round"/>
+  <polygon points="395,75 380,125 410,125" fill="#8a8a8a" stroke="#333" stroke-width="2"/>
+
+  <!-- Leopard Head -->
+  <ellipse cx="250" cy="260" rx="95" ry="90" fill="url(#headGrad)" stroke="#1a1a1a" stroke-width="3"/>
+  
+  <!-- Leopard Ears -->
+  <ellipse cx="170" cy="195" rx="22" ry="28" fill="#e8c700" stroke="#1a1a1a" stroke-width="2.5" transform="rotate(-15 170 195)"/>
+  <ellipse cx="330" cy="195" rx="22" ry="28" fill="#e8c700" stroke="#1a1a1a" stroke-width="2.5" transform="rotate(15 330 195)"/>
+  <ellipse cx="170" cy="195" rx="14" ry="18" fill="#d4a800" transform="rotate(-15 170 195)"/>
+  <ellipse cx="330" cy="195" rx="14" ry="18" fill="#d4a800" transform="rotate(15 330 195)"/>
+
+  <!-- Leopard Spots -->
+  <circle cx="195" cy="225" r="6" fill="#1a1a1a"/>
+  <circle cx="305" cy="225" r="6" fill="#1a1a1a"/>
+  <circle cx="180" cy="270" r="5" fill="#1a1a1a"/>
+  <circle cx="320" cy="270" r="5" fill="#1a1a1a"/>
+  <circle cx="200" cy="200" r="4" fill="#1a1a1a"/>
+  <circle cx="300" cy="200" r="4" fill="#1a1a1a"/>
+  <circle cx="230" cy="195" r="3.5" fill="#1a1a1a"/>
+  <circle cx="270" cy="195" r="3.5" fill="#1a1a1a"/>
+  <circle cx="170" cy="250" r="4.5" fill="#1a1a1a"/>
+  <circle cx="330" cy="250" r="4.5" fill="#1a1a1a"/>
+  <circle cx="210" cy="245" r="3" fill="#1a1a1a"/>
+  <circle cx="290" cy="245" r="3" fill="#1a1a1a"/>
+
+  <!-- Eyes -->
+  <ellipse cx="215" cy="240" rx="14" ry="11" fill="white" stroke="#1a1a1a" stroke-width="2"/>
+  <ellipse cx="285" cy="240" rx="14" ry="11" fill="white" stroke="#1a1a1a" stroke-width="2"/>
+  <circle cx="215" cy="240" r="6" fill="#1a1a1a"/>
+  <circle cx="285" cy="240" r="6" fill="#1a1a1a"/>
+  <circle cx="213" cy="238" r="2" fill="white"/>
+  <circle cx="283" cy="238" r="2" fill="white"/>
+
+  <!-- Nose -->
+  <path d="M 235,270 L 265,270 L 250,288 Z" fill="#c76b5c" stroke="#1a1a1a" stroke-width="2"/>
+  
+  <!-- Whisker dots -->
+  <circle cx="225" cy="285" r="2.5" fill="#1a1a1a"/>
+  <circle cx="275" cy="285" r="2.5" fill="#1a1a1a"/>
+  <circle cx="218" cy="295" r="2" fill="#1a1a1a"/>
+  <circle cx="282" cy="295" r="2" fill="#1a1a1a"/>
+
+  <!-- Open Mouth / Gueule -->
+  <path d="M 215,310 Q 250,360 285,310" fill="#cc3333" stroke="#1a1a1a" stroke-width="2.5"/>
+  <!-- Fangs -->
+  <path d="M 225,310 L 228,328 L 232,310" fill="white" stroke="#1a1a1a" stroke-width="1.5"/>
+  <path d="M 268,310 L 272,328 L 275,310" fill="white" stroke="#1a1a1a" stroke-width="1.5"/>
+  <!-- Tongue -->
+  <path d="M 240,330 Q 250,350 260,330" fill="#ff6666" stroke="#cc0000" stroke-width="1"/>
+
+  <!-- Rock / Socle -->
+  <path d="M 130,440 Q 190,420 250,425 Q 310,420 370,440 Q 380,480 250,495 Q 120,480 130,440 Z" fill="#b8860b" stroke="#6b5b00" stroke-width="3"/>
+  <path d="M 145,445 Q 200,430 250,435 Q 300,430 355,445 Q 360,465 250,475 Q 140,465 145,445 Z" fill="#d4a020" opacity="0.4"/>
+
+  <!-- Red Ribbon LEFT — JUSTICE -->
+  <path d="M 40,200 Q 80,310 160,380 L 170,355 Q 100,295 65,200 Z" fill="#dc2626" stroke="#8b0000" stroke-width="2"/>
+  <text x="80" y="300" fill="#facc15" font-size="28" font-weight="900" font-family="Arial, sans-serif" transform="rotate(55 80 300)" letter-spacing="2">JUSTICE</text>
+
+  <!-- Red Ribbon RIGHT — TRAVAIL -->
+  <path d="M 460,200 Q 420,310 340,380 L 330,355 Q 400,295 435,200 Z" fill="#dc2626" stroke="#8b0000" stroke-width="2"/>
+  <text x="345" y="305" fill="#facc15" font-size="26" font-weight="900" font-family="Arial, sans-serif" transform="rotate(-55 370 300)" letter-spacing="2">TRAVAIL</text>
+
+  <!-- Red Ribbon CENTER — PAIX -->
+  <path d="M 170,390 Q 210,405 250,410 Q 290,405 330,390 L 330,415 Q 290,430 250,435 Q 210,430 170,415 Z" fill="#dc2626" stroke="#8b0000" stroke-width="2"/>
+  <text x="250" y="418" fill="#facc15" font-size="28" font-weight="900" font-family="Arial, sans-serif" text-anchor="middle" letter-spacing="3">PAIX</text>
+</svg>

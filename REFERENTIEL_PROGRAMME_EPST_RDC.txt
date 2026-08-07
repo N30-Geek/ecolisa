@@ -1,0 +1,357 @@
+================================================================================
+RÉFÉRENTIEL DU SYSTÈME ÉDUCATIF EN RÉPUBLIQUE DÉMOCRATIQUE DU CONGO (EPST RDC)
+Source Officielle : https://manuels-scolaires-rdc.com/
+Guide des Cycles, Niveaux/Classes, Options, Cours Communs & Barème des Cotes (Maxima)
+================================================================================
+
+--------------------------------------------------------------------------------
+1. ARCHITECTURE DES CYCLES SCOLAIRES ET NIVEAUX / CLASSES
+--------------------------------------------------------------------------------
+
+A. CYCLE MATERNELLE (Éducation Préscolaire - 3 ans)
+   - 1ère Section Maternelle (Petite Section - 3 ans)
+   - 2ème Section Maternelle (Moyenne Section - 4 ans)
+   - 3ème Section Maternelle (Grande Section - 5 ans)
+
+B. CYCLE PRIMAIRE (Éducation de Base - 6 ans)
+   - 1ère Année Primaire (Degré Élémentaire)
+   - 2ème Année Primaire (Degré Élémentaire)
+   - 3ème Année Primaire (Degré Moyen)
+   - 4ème Année Primaire (Degré Moyen)
+   - 5ème Année Primaire (Degré Terminal)
+   - 6ème Année Primaire (Degré Terminal - Certificat d'Études Primaires / TENAFEP)
+
+C. SECONDAIRE DE BASE / CTEB (Tronc Commun d'Orientation - 2 ans)
+   - 7ème Année Éducation de Base (Ancienne 1ère Secondaire)
+   - 8ème Année Éducation de Base (Ancienne 2ème Secondaire - Test ENAFEP/TENASOSP)
+
+D. CYCLE DES HUMANITÉS (Secondaire Général, Technique & Professionnel - 4 ans)
+   - 1ère Année des Humanités (3ème Secondaire)
+   - 2ème Année des Humanités (4ème Secondaire)
+   - 3ème Année des Humanités (5ème Secondaire)
+   - 4ème Année des Humanités (6ème Secondaire - Examen d'État EXETAT)
+
+
+--------------------------------------------------------------------------------
+2. SOCLE COMMUN DES COURS TRANSVERSAUX (COURS COMMUNS DU SECONDAIRE)
+--------------------------------------------------------------------------------
+Les cours communs (ou généraux) sont suivis par l'ensemble des élèves du secondaire
+indépendamment de leur option, afin de garantir un tronc commun de compétences :
+
+A. DOMAINE DES LANGUES & COMMUNICATION
+   - Français (Grammaire, Orthographe, Textes, Expression Orale, Dissertations)
+   - Anglais (English Language, Grammar, Vocabulary & Conversation)
+   - Langues Congolaises (Lingala, Swahili, Ciluba, Kikongo)
+
+B. DOMAINE DES SCIENCES EXACTES ET APPLIQUÉES
+   - Mathématiques Générales (Algèbre, Géométrie, Statistiques de Base)
+   - Physique Générale (Mécanique, Électricité générale)
+   - Chimie Générale (Structure de la matière)
+   - Biologie Générale & Écologie
+   - Informatique / T.I.C (Initiation Bureautique, Algorithmique & Web)
+   - Intelligence Artificielle (Initiation aux usages numériques modernes)
+
+C. DOMAINE DES SCIENCES HUMAINES ET MORALES
+   - Histoire (Histoire de la RDC, de l'Afrique et Histoire Universelle)
+   - Géographie (Géographie Physique, Humaine et Économique de la RDC)
+   - Éducation Civique et Morale (E.C.M & Citoyenneté)
+   - Éducation à la Vie (EDVIE / Santé, Hygiène & Relation Sociale)
+   - Philosophie (Logique, Éthique, Métaphysique - à partir de la 3ème/4ème Humanités)
+   - Entreprenariat & Économie (Initiation à la gestion de projet - 3ème & 4ème Humanités)
+
+
+--------------------------------------------------------------------------------
+3. RÉPERTOIRE DES SECTIONS ET OPTIONS DES HUMANITÉS
+--------------------------------------------------------------------------------
+
+[SECTION A] HUMANITÉS TERTIAIRES, COMMERCIALES ET ADMINISTRATION
+   1. SECRÉTARIAT ET ADMINISTRATION
+   2. COMMERCIALE ET GESTION (Finances, Comptabilité, Commerce)
+   3. HÔTESSE D'ACCUEIL & TOURISME
+   4. HÔTELLERIE ET RESTAURATION
+
+[SECTION B] HUMANITÉS GÉNÉRALES ET LITTÉRAIRES
+   5. LATIN-PHILO (Littéraire & Langues Anciennes)
+   6. OPTION SCIENTIFIQUE (Mathématiques-Physique / Biologie-Chimie)
+   7. HUMANITÉS PÉDAGOGIQUES (Pédagogie Générale)
+   8. TECHNIQUES SOCIALES (Pédagogie Sociale)
+
+[SECTION C] ENSEIGNEMENT TECHNIQUE INDUSTRIEL & BÂTIMENT
+   9. CONSTRUCTION (Bâtiment & Travaux Publics)
+   10. ÉLECTRICITÉ (Électricité Industrielle & Bâtiment)
+   11. MÉCANIQUE GÉNÉRALE (Usinage & Maintenance)
+   12. MÉCANIQUE AUTOMOBILE
+   13. PLOMBERIE ET TUYAUTERIE
+   14. MAÇONNERIE
+   15. MENUISERIE ET ÉBÉNISTERIE
+
+[SECTION D] AGRICULTURE ET ENVIRONNEMENT
+   16. AGRICULTURE GÉNÉRALE
+   17. VÉTÉRINAIRE & SÉLECTION ANIMALE
+   18. NUTRITION & DIÉTÉTIQUE
+   19. FORESTERIE & ÉCOLOGIE APPLIQUÉE
+
+[SECTION E] TECHNOLOGIES ET SCIENCES APPLIQUÉES
+   20. INFORMATIQUE DE GESTION & RÉSEAUX (TICE)
+   21. ÉLECTRONIQUE ET TÉLÉCOMMUNICATIONS
+   22. AVIATION CIVILE
+   23. PÉTROCHIMIE ET INDUSTRIE
+   24. COUPE & COUTURE (Stylisme & Modélisme)
+
+
+--------------------------------------------------------------------------------
+4. PROGRAMME DÉTAILLÉ DES MATIÈRES SPÉCIFIQUES PAR OPTION
+--------------------------------------------------------------------------------
+
+================================================================================
+I. OPTION SECRÉTARIAT ET ADMINISTRATION
+================================================================================
+
+[1ère Année des Humanités / 3ème Secondaire]
+   - Correspondence Commerciale et Administrative Française (CCA Française)
+   - Correspondence Commerciale et Administrative Anglaise (CCA Anglaise)
+   - Informatique Bureautique & Traitement de Texte
+   - Sténographie (Prise de notes rapide)
+   - Comptabilité Générale (Niveau I)
+   - Fiscalité & Notions de Taxes
+   - Droit (Introduction au Droit Civil)
+   - Stage Académique / Visites Guidées en Entreprise
+
+[2ème Année des Humanités / 4ème Secondaire]
+   - Organisation de Bureau (Gestion du courrier, Classement, Archivage)
+   - CCA Française (Rédaction Administrative II)
+   - CCA Anglaise (Commercial Correspondence II)
+   - Informatique Bureautique (Excel & Saisie rapide)
+   - Sténographie II
+   - Comptabilité Générale (Niveau II)
+   - Fiscalité
+   - Droit Commercial
+   - Stage Académique / Visites Guidées
+
+[3ème Année des Humanités / 5ème Secondaire]
+   - Organisation de Bureau III (Accueil, Standard, Agenda du Direction)
+   - CCA Française III
+   - CCA Anglaise III
+   - Informatique (Réseaux & Bureautique Avancée)
+   - Sténographie III
+   - Comptabilité Générale III
+   - Fiscalité & Législation du Travail
+   - Droit Administratif
+   - Entreprenariat
+   - Stage en Entreprise / Visites Guidées
+
+[4ème Année des Humanités / 6ème Secondaire - Diplôme d'État EXETAT]
+   - Organisation de Bureau & Déontologie du Secrétariat
+   - Organisation des Entreprises (Management & Structure)
+   - CCA Française IV (Rédaction de Rapports & Procès-Verbaux)
+   - CCA Anglaise IV
+   - Informatique & Secrétariat Numérique
+   - Sténographie IV (Vitesse de dictée)
+   - Statistiques Appliquées au Secrétariat
+   - Droit du Travail & de la Sécurité Sociale
+   - Entreprenariat & Projets de Bureau
+
+================================================================================
+II. OPTION COMMERCIALE ET GESTION
+================================================================================
+
+[1ère Année des Humanités]
+   - Comptabilité Générale (Niveau I)
+   - CCA Anglaise I
+   - CCA Française I
+   - Documents du Commerce (DOCOM)
+   - Droit Civil
+   - Mathématiques Financières I
+   - Fiscalité I
+   - Informatique de Gestion
+   - Anglais Commercial
+
+[2ème Année des Humanités]
+   - Comptabilité Générale (Niveau II)
+   - CCA Anglaise II
+   - CCA Française II
+   - DOCOM II
+   - Droit Civil & Commercial
+   - Mathématiques Financières II
+   - Fiscalité II
+   - Informatique de Gestion (Tableurs & Base de données)
+
+[3ème Année des Humanités]
+   - Comptabilité Générale (Niveau III)
+   - CCA Anglaise III
+   - CCA Française III
+   - Fiscalité III
+   - Mathématiques Financières III
+   - Droit des Sociétés & Droit Commercial
+   - Économie Énergétique & Générale
+   - Entreprenariat
+
+[4ème Année des Humanités - EXETAT]
+   - Comptabilité Analytique & Budgétaire
+   - Comptabilité Sociétale & Avancée
+   - Mathématiques Financières IV
+   - Fiscalité & Audit Financier
+   - Droit du Travail & de la Sécurité Sociale
+   - Économie Générale & Monétaire
+   - Informatique Comptable (Logiciels SAGE/ERP)
+   - Entreprenariat & Gestion des PME
+
+================================================================================
+III. OPTION SCIENTIFIQUE (Math-Physique / Biologie-Chimie)
+================================================================================
+
+[1ère à 4ème Année des Humanités]
+   - Algèbre & Analyse Mathématique (Fonctions, Limites, Dérivées, Intégrales)
+   - Biologie Générale & Cytologie
+   - Écologie & Systématique des Végétaux
+   - Chimie Générale, Minérale & Organique
+   - Dessin Scientifique & Industriel
+   - Géologie & Minéralogie
+   - Géométrie dans l'Espace & Trigonométrie
+   - Microbiologie & Génétique
+   - Physique (Mécanique, Électrostatique, Électromagnétisme, Optique, Physique Atomique)
+   - Statistique Descriptive & Inférentielle
+   - T.I.C / Informatique Scientifique
+
+
+--------------------------------------------------------------------------------
+5. SYSTEME ET BARÈME OFFICIEL DES COTES (MAXIMA ET PONDÉRATION EPST RDC)
+--------------------------------------------------------------------------------
+
+================================================================================
+A. RÈGLES DE CALCUL DU BULLETIN SCOLAIRE EN RDC
+================================================================================
+
+Dans le système éducatif congolais (EPST RDC), le bulletin de notes annuel est structuré
+en 2 Semestres comprenant chacun 2 Périodes et 1 Examen :
+
+  1ER SEMESTRE :
+    - 1ère Période (P1)
+    - 2ème Période (P2)
+    - Examen du 1er Semestre (EX1)
+    - TOTAL 1ER SEMESTRE (TOT S1) = P1 + P2 + EX1
+
+  2ÈME SEMESTRE :
+    - 3ème Période (P3)
+    - 4ème Période (P4)
+    - Examen du 2ème Semestre (EX2)
+    - TOTAL 2ÈME SEMESTRE (TOT S2) = P3 + P4 + EX2
+
+  GRAND TOTAL ANNUEL (TOTAL GÉNÉRAL) = TOT S1 + TOT S2
+
+--------------------------------------------------------------------------------
+RÈGLE D'OR DE PONDÉRATION DES EXAMENS EN RDC :
+Le Maximum d'un Examen vaut toujours le DOUBLE du Maximum d'une Période.
+  Formula : Max Examen = Max Période × 2
+  Formula : Max Semestre = Max Période + Max Période + (Max Période × 2) = Max Période × 4
+  Formula : Max Annuel Général = Max Semestre × 2 = Max Période × 8
+--------------------------------------------------------------------------------
+
+Exemple de calcul pour une matière à Max Période = 10 :
+  - P1 = 10 pts
+  - P2 = 10 pts
+  - EX1 = 20 pts (10 × 2)
+  => Total Semestre 1 = 10 + 10 + 20 = 40 pts
+  - P3 = 10 pts
+  - P4 = 10 pts
+  - EX2 = 20 pts (10 × 2)
+  => Total Semestre 2 = 10 + 10 + 20 = 40 pts
+  => MAX ANNUEL DE LA MATIÈRE = 40 + 40 = 80 pts.
+
+Exemple de calcul pour une matière à Max Période = 20 :
+  - P1 = 20 pts | P2 = 20 pts | EX1 = 40 pts  => Max Semestre 1 = 80 pts
+  - P3 = 20 pts | P4 = 20 pts | EX2 = 40 pts  => Max Semestre 2 = 80 pts
+  => MAX ANNUEL DE LA MATIÈRE = 160 pts.
+
+
+================================================================================
+B. GRILLE DES MAXIMA PAR MATIÈRE SELON L'OPTION ET LE CYCLE
+================================================================================
+
+1. NIVEAU SECONDAIRE DE BASE / CTEB (7ème & 8ème Éducation de Base)
+--------------------------------------------------------------------------------
+MATIÈRE                       MAX PÉRIODE  MAX EXAMEN  MAX SEMESTRE  MAX ANNUEL
+--------------------------------------------------------------------------------
+Français (Textes/Grammaire)       20           40           80          160
+Mathématiques (Algèbre/Géom)      20           40           80          160
+Sciences Physiques                10           20           40           80
+Sciences de la Vie (Botan/Zoo)    10           20           40           80
+Anglais                           10           20           40           80
+Histoire                          10           20           40           80
+Géographie                        10           20           40           80
+Éducation Civique & Morale (ECM)   10           20           40           80
+Éducation à la Vie (EDVIE)        10           20           40           80
+Technologie & TIC                 10           20           40           80
+--------------------------------------------------------------------------------
+TOTAL BULLETIN 7È / 8È EB         120          240          480          960
+
+
+2. OPTION SECRÉTARIAT ET ADMINISTRATION (Humanités)
+--------------------------------------------------------------------------------
+MATIÈRE                       MAX PÉRIODE  MAX EXAMEN  MAX SEMESTRE  MAX ANNUEL
+--------------------------------------------------------------------------------
+Sténographie                      20           40           80          160
+Organisation de Bureau            20           40           80          160
+CCA Française (Correspondance)    20           40           80          160
+CCA Anglaise (Correspondance)     20           40           80          160
+Informatique & Bureautique        20           40           80          160
+Comptabilité Générale             20           40           80          160
+Droit (Civil/Commercial/Travail)  10           20           40           80
+Fiscalité                         10           20           40           80
+Français Général                  20           40           80          160
+Anglais Général                   10           20           40           80
+Mathématiques Générales           10           20           40           80
+Philosophie / ECM                 10           20           40           80
+--------------------------------------------------------------------------------
+
+
+3. OPTION COMMERCIALE ET GESTION (Humanités)
+--------------------------------------------------------------------------------
+MATIÈRE                       MAX PÉRIODE  MAX EXAMEN  MAX SEMESTRE  MAX ANNUEL
+--------------------------------------------------------------------------------
+Comptabilité Générale / Analyt.   20           40           80          160
+Mathématiques Financières         20           40           80          160
+Documents du Commerce (DOCOM)     20           40           80          160
+Informatique de Gestion           20           40           80          160
+Fiscalité & Législation           10           20           40           80
+Droit Commercial & Sociétés       10           20           40           80
+CCA Française / Anglaise          20           40           80          160
+Économie Générale                 10           20           40           80
+Français Général                  20           40           80          160
+Anglais Commercial               10           20           40           80
+Mathématiques Générales           10           20           40           80
+--------------------------------------------------------------------------------
+
+
+4. OPTION SCIENTIFIQUE (Math-Physique / Biologie-Chimie)
+--------------------------------------------------------------------------------
+MATIÈRE                       MAX PÉRIODE  MAX EXAMEN  MAX SEMESTRE  MAX ANNUEL
+--------------------------------------------------------------------------------
+Algèbre & Analyse Mathématique    20           40           80          160
+Physique                          20           40           80          160
+Chimie                            20           40           80          160
+Biologie & Cytologie / Écologie   20           40           80          160
+Géométrie & Trigonométrie         10           20           40           80
+Dessin Scientifique               10           20           40           80
+T.I.C / Informatique              10           20           40           80
+Français Général                  20           40           80          160
+Anglais                           10           20           40           80
+Histoire & Géographie             10           20           40           80
+Philosophie                       10           20           40           80
+--------------------------------------------------------------------------------
+
+
+================================================================================
+C. CONDITIONS ET SEUILS OFFICIELS DE RÉUSSITE EN RDC
+================================================================================
+
+1. POURCENTAGE MINIMUM DE RÉUSSITE :
+   - Pour réussir son année scolaire, un élève doit obtenir un **Pourcentage Général d'au moins 50%**
+     sur l'ensemble du Grand Total Annuel.
+
+2. SEUIL DES BRANCHES DE L'OPTION (BRANCHES MAJEURES) :
+   - L'élève doit obligatoirement obtenir au moins **50% dans les matières principales/spécifiques** de son option (ex: Comptabilité en Commerciale, Sténographie & CCA en Secrétariat, Math & Physique en Scientifique).
+
+3. RÈGLE DES ÉCHECS ET SECONDE SESSION (EXAMEN DE REPECHAGE) :
+   - Si le pourcentage général est situé entre 45% et 49.9%, ou en cas d'échecs dans 1 à 3 branches secondaires, l'élève est admis à présenter la **Seconde Session (Examens de Repêchage)** en septembre.
+   - En cas d'échecs multiples (> 3 branches) ou si le pourcentage annuel est inférieur à 45%, l'élève **Redouble sa classe**.

@@ -61,13 +61,70 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPayments: (invId)   => ipcRenderer.invoke('db-get-payments', invId),
   addPayment:  (p)       => ipcRenderer.invoke('db-add-payment', p),
 
-  // Finances — Depenses
+  // Finances — Dépenses
   getExpenses:   ()     => ipcRenderer.invoke('db-get-expenses'),
   addExpense:    (e)    => ipcRenderer.invoke('db-add-expense', e),
   deleteExpense: (id)   => ipcRenderer.invoke('db-delete-expense', id),
+
+  // Types de frais
+  getFeeTypes:   (yearId)  => ipcRenderer.invoke('db-get-fee-types', yearId),
+  addFeeType:    (ft)      => ipcRenderer.invoke('db-add-fee-type', ft),
+  updateFeeType: (id, upd) => ipcRenderer.invoke('db-update-fee-type', id, upd),
+  deleteFeeType: (id)      => ipcRenderer.invoke('db-delete-fee-type', id),
+
+  // Caisse
+  getCashOperations: (filters) => ipcRenderer.invoke('db-get-cash-operations', filters),
+  addCashOperation:  (op)      => ipcRenderer.invoke('db-add-cash-operation', op),
+  deleteCashOperation: (id)    => ipcRenderer.invoke('db-delete-cash-operation', id),
+
+  // Comptabilité
+  getComptes:    ()            => ipcRenderer.invoke('db-get-comptes'),
+  addCompte:     (c)           => ipcRenderer.invoke('db-add-compte', c),
+  updateCompte:  (id, upd)     => ipcRenderer.invoke('db-update-compte', id, upd),
+  deleteCompte:  (id)          => ipcRenderer.invoke('db-delete-compte', id),
+
+  getJournaux:   ()            => ipcRenderer.invoke('db-get-journaux'),
+  addJournal:    (j)           => ipcRenderer.invoke('db-add-journal', j),
+  updateJournal: (id, upd)     => ipcRenderer.invoke('db-update-journal', id, upd),
+  deleteJournal: (id)          => ipcRenderer.invoke('db-delete-journal', id),
+
+  getEcritures:  (filters)     => ipcRenderer.invoke('db-get-ecritures', filters),
+  addEcriture:   (e)           => ipcRenderer.invoke('db-add-ecriture', e),
+  deleteEcriture: (ecritureId) => ipcRenderer.invoke('db-delete-ecriture', ecritureId),
 
   // Personnel
   getStaff:    ()       => ipcRenderer.invoke('db-get-staff'),
   addStaff:    (m)      => ipcRenderer.invoke('db-add-staff', m),
   deleteStaff: (id)     => ipcRenderer.invoke('db-delete-staff', id),
+
+  // Cotes
+  getCotes:   (filters) => ipcRenderer.invoke('db-get-cotes', filters),
+  addCote:    (c)       => ipcRenderer.invoke('db-add-cote', c),
+  updateCote: (id, upd) => ipcRenderer.invoke('db-update-cote', id, upd),
+  deleteCote: (id)      => ipcRenderer.invoke('db-delete-cote', id),
+
+  // Presences
+  getPresences:   (filters) => ipcRenderer.invoke('db-get-presences', filters),
+  addPresence:    (p)       => ipcRenderer.invoke('db-add-presence', p),
+  deletePresence: (id)      => ipcRenderer.invoke('db-delete-presence', id),
+
+  // School Events
+  getSchoolEvents:   (filters) => ipcRenderer.invoke('db-get-school-events', filters),
+  addSchoolEvent:    (ev)      => ipcRenderer.invoke('db-add-school-event', ev),
+  deleteSchoolEvent: (id)      => ipcRenderer.invoke('db-delete-school-event', id),
+
+  // Documents scolaires
+  getStudentDocuments:    (studentId)       => ipcRenderer.invoke('documents-get-by-student', studentId),
+  deleteStudentDocument:  (id)              => ipcRenderer.invoke('documents-delete', id),
+  openStudentDocument:    (id)              => ipcRenderer.invoke('documents-open', id),
+  readStudentDocument:    (id)              => ipcRenderer.invoke('documents-read-file', id),
+  importStudentDocuments: (studentId)       => ipcRenderer.invoke('documents-import-files', studentId),
+  importStudentFolder:    (studentId)       => ipcRenderer.invoke('documents-import-folder', studentId),
+  importStudentImage:     (studentId, originalName, base64) => ipcRenderer.invoke('documents-import-image', studentId, originalName, base64),
+  compressStudentDocuments: (studentId, ids) => ipcRenderer.invoke('documents-compress', studentId, ids),
+  renameStudentDocument:  (id, newName)     => ipcRenderer.invoke('documents-rename', id, newName),
+
+  // Scanner matériel (WIA)
+  listWiaDevices: ()  => ipcRenderer.invoke('wia-list-devices'),
+  wiaScan:        ()  => ipcRenderer.invoke('wia-scan'),
 });

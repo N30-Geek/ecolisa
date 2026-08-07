@@ -38,8 +38,65 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
-import { PROVINCES_RDC } from '../academic/StudentRegistrationModal';
+import { PROVINCES_RDC, NATIONAL_EPST_OPTIONS } from '../../data/referentielEPST';
 import { LocalDatabaseService } from '../../services/localDatabase';
+
+export interface CardFieldOverride {
+  fields: string[];
+  legalMention: string;
+  validityPeriod: string;
+  contactPhone: string;
+  contactEmail: string;
+  showCoatOfArms: boolean;
+  showCountryFlag: boolean;
+  showFiligree: boolean;
+  showMiniLogos: boolean;
+  cardTheme: 'blue' | 'indigo' | 'emerald' | 'gold';
+  cardLayout: 'portrait' | 'landscape';
+  filigreeType: 'pattern' | 'text' | 'shape' | 'image';
+  filigreeText: string;
+  filigreeShape: 'circles' | 'lines' | 'dots' | 'diamonds' | 'cross' | 'waves' | 'stars';
+  filigreeImage: string;
+  filigreeOpacity: number;
+  filigreeDensity: 'low' | 'medium' | 'high';
+  headerAlign: 'left' | 'center' | 'right';
+  photoPosition: 'left' | 'right';
+  fieldsLayout: 'list' | 'grid' | 'compact';
+  textAlign: 'left' | 'center' | 'right';
+  showQR: boolean;
+  showTricolor: boolean;
+  showSchoolSeal: boolean;
+}
+
+export interface CardCustomization {
+  /** champs affichés sur le recto (parmi les champs Eleve) */
+  selectedFields: string[];
+  legalMention: string;
+  validityPeriod: string;
+  contactPhone: string;
+  contactEmail: string;
+  showCoatOfArms: boolean;
+  showCountryFlag: boolean;
+  showFiligree: boolean;
+  showMiniLogos: boolean;
+  cardTheme: 'blue' | 'indigo' | 'emerald' | 'gold';
+  cardLayout: 'portrait' | 'landscape';
+  /** personnalisation par cycle (PRIMAIRE, CTEB, HUMANITES, ...) */
+  byCycle?: Record<string, Partial<CardFieldOverride>>;
+  filigreeType: 'pattern' | 'text' | 'shape' | 'image';
+  filigreeText: string;
+  filigreeShape: 'circles' | 'lines' | 'dots' | 'diamonds' | 'cross' | 'waves' | 'stars';
+  filigreeImage: string;
+  filigreeOpacity: number;
+  filigreeDensity: 'low' | 'medium' | 'high';
+  headerAlign: 'left' | 'center' | 'right';
+  photoPosition: 'left' | 'right';
+  fieldsLayout: 'list' | 'grid' | 'compact';
+  textAlign: 'left' | 'center' | 'right';
+  showQR: boolean;
+  showTricolor: boolean;
+  showSchoolSeal: boolean;
+}
 
 export interface SchoolConfig {
   schoolName: string;
@@ -68,6 +125,7 @@ export interface SchoolConfig {
   promoterPinCode: string;
   activeSchoolYear: string;
   hwid: string;
+  cardCustomization?: CardCustomization;
 }
 
 interface OnboardingWizardProps {
@@ -110,23 +168,6 @@ const ROLE_OPTIONS: SelectOption[] = [
   { value: 'PREFET_DIRECTEUR', label: 'Préfet des Études / Directeur' },
   { value: 'DIRECTEUR_ETUDES', label: 'Directeur des Études (DE)' },
   { value: 'COMPTABLE', label: 'Comptable Intendant Général' },
-];
-
-// LISTE OFFICIELLE COMPLÈTE DES OPTIONS DE L'ENSEIGNEMENT NATIONAL EPST RDC
-export const NATIONAL_EPST_OPTIONS: { code: string; label: string; cite: string; category: string }[] = [
-  { code: 'MATH_PHYS', label: 'Mathématique-Physique (STEM)', cite: 'CITE 344', category: 'Sciences' },
-  { code: 'BIO_CHIMIE', label: 'Chimie-Biologie (SVT)', cite: 'CITE 344', category: 'Sciences' },
-  { code: 'COMMERCE', label: 'Commerciale & Gestion (OHADA)', cite: 'CITE 344', category: 'Commercial' },
-  { code: 'PEDAGOGIE', label: 'Pédagogie Générale (Sciences Éducation)', cite: 'CITE 344', category: 'Pédagogie' },
-  { code: 'LITTERAIRE', label: 'Littéraire & Langues (Latin-Philo)', cite: 'CITE 344', category: 'Humanités' },
-  { code: 'TECHNIQUE', label: 'Technique Industrielle & Électricité', cite: 'CITE 344', category: 'Technique' },
-  { code: 'MECANIQUE', label: 'Mécanique Générale & Automobile', cite: 'CITE 344', category: 'Technique' },
-  { code: 'AGRONOMIE', label: 'Agronomie & Agriculture Générale', cite: 'CITE 344', category: 'Agro-Pasteur' },
-  { code: 'COUPE_COUTURE', label: 'Coupe & Couture (Habillement)', cite: 'CITE 344', category: 'Arts & Métiers' },
-  { code: 'INFORMATIQUE', label: 'Informatique de Gestion & Réseaux', cite: 'CITE 344', category: 'Nouvelles Tech' },
-  { code: 'SOCIALE', label: 'Sociale & Économie Familiale', cite: 'CITE 344', category: 'Social' },
-  { code: 'ARTS', label: 'Arts Plastiques & Musique', cite: 'CITE 344', category: 'Culture' },
-  { code: 'SANTE', label: 'Sages-Femmes & Infirmerie Scolaire', cite: 'CITE 344', category: 'Santé' },
 ];
 
 const NATIONAL_OPTIONS_DROPDOWN: SelectOption[] = NATIONAL_EPST_OPTIONS.map((o) => ({

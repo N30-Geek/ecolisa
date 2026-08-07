@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   LayoutDashboard,
@@ -49,6 +49,7 @@ import {
 import { RôleSystème } from '../../types';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { CommandPalette } from './CommandPalette';
+import { LocalDatabaseService } from '../../services/localDatabase';
 
 interface NavbarProps {
   userRole: RôleSystème;
@@ -90,11 +91,14 @@ const roleOptions: SelectOption[] = [
   { value: 'PARENT_ELEVE', label: 'Parent / Élève', description: 'Consultation du portail famille', badge: 'PAR' },
 ];
 
-const schoolYearOptions: SelectOption[] = [
-  { value: '2025–2026', label: 'Année 2025–2026', description: 'Année Académique Active EPST', badge: 'Active' },
-  { value: '2024–2025', label: 'Année 2024–2025', description: 'Archives Clôturées RDC', badge: 'Archive' },
-  { value: '2026–2027', label: 'Année 2026–2027', description: 'Préparation et Inscriptions', badge: 'Futur' },
-];
+function getYearBadge(statut: string): string | undefined {
+  switch (statut) {
+    case 'EN_COURS': return 'Active';
+    case 'CLOTUREE': return 'Archive';
+    case 'PLANIFIEE': return 'Futur';
+    default: return undefined;
+  }
+}
 
 const tabBreadcrumbs: Record<string, { label: string; icon: React.ElementType; category: string }> = {
   dashboard:   { label: 'Tableau de Bord Exécutif', icon: LayoutDashboard, category: 'Vue Générale' },
@@ -156,6 +160,26 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [notifFilter, setNotifFilter] = useState<'all' | 'finance' | 'system'>('all');
+  const [yearOptions, setYearOptions] = useState<SelectOption[]>([]);
+
+  useEffect(() => {
+    LocalDatabaseService.getSchoolYears().then(years => {
+      const options = years.map(y => ({
+        value: y.nom,
+        label: y.nom,
+        description: `${y.debut} → ${y.fin}`,
+        badge: getYearBadge(y.statut),
+      }));
+      setYearOptions(options);
+      if (setActiveSchoolYear) {
+        const found = options.find(o => o.value === activeSchoolYear);
+        if (!found) {
+          const active = years.find(y => y.statut === 'EN_COURS')?.nom || years[0]?.nom;
+          setActiveSchoolYear(active || '');
+        }
+      }
+    });
+  }, []);
 
   const currentTabInfo = tabBreadcrumbs[activeTab] || {
     label: 'Tableau de Bord',
@@ -200,10 +224,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             {toggleSidebar && (
               <button
                 onClick={toggleSidebar}
-                className="w-9 h-9 rounded-xl border border-indigo-500/30 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-2xs cursor-pointer shrink-0"
+                className="toolbar-btn shrink-0"
                 title={isSidebarCollapsed ? 'Déplier le menu latéral' : 'Réduire le menu latéral'}
               >
-                <Menu className="w-4.5 h-4.5" />
+                <Menu className="w-4 h-4" />
               </button>
             )}
 
@@ -242,9 +266,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Selecteur Rapide d'Année Scolaire */}
             <div className="hidden lg:block ml-2 shrink-0">
               <CustomSelect
-                options={schoolYearOptions}
+                options={yearOptions.length ? yearOptions : [{ value: '', label: 'Aucune année créée', description: 'Créez une année dans Administration > Années' }]}
                 value={activeSchoolYear}
                 onChange={(val) => setActiveSchoolYear && setActiveSchoolYear(val)}
+                placeholder="Aucune année créée"
                 icon={Calendar}
                 className="w-44"
               />
@@ -255,20 +280,31 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="hidden md:flex items-center justify-center max-w-xs xl:max-w-sm w-full mx-2">
             <button
               onClick={() => setIsCommandPaletteOpen(true)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all duration-150 hover:border-indigo-500/40 active:scale-98 shadow-xs cursor-pointer group"
+              className="w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-150 cursor-pointer group"
               style={{
                 background: 'var(--bg-sunken)',
                 borderColor: 'var(--border)',
-                color: 'var(--text-secondary)',
+                color: 'var(--text-muted)',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(99,102,241,0.35)';
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 0 3px rgba(99,102,241,0.07)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)';
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none';
               }}
             >
               <div className="flex items-center gap-2 truncate">
-                <Search className="w-3.5 h-3.5 text-indigo-500 group-hover:scale-110 transition-transform" />
+                <Search className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
                 <span className="truncate group-hover:text-indigo-500 transition-colors">
                   Rechercher un élève, reçu, classe...
                 </span>
               </div>
-              <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-500/15 border border-slate-500/20 text-[10px] font-mono font-black text-indigo-500">
+              <kbd
+                className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9.5px] font-mono font-black text-indigo-500"
+                style={{ background: 'rgba(99,102,241,0.10)', border: '1px solid rgba(99,102,241,0.18)' }}
+              >
                 <Command className="w-2.5 h-2.5" /> K
               </kbd>
             </button>
@@ -279,18 +315,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Bascule Thème Clair / Sombre */}
             <button
               onClick={toggleTheme}
-              className="w-9 h-9 rounded-xl border flex items-center justify-center transition-all duration-150 hover:bg-slate-500/10 active:scale-95 cursor-pointer shadow-xs"
-              style={{
-                background: 'var(--bg-sunken)',
-                borderColor: 'var(--border)',
-                color: 'var(--text-primary)',
-              }}
+              className="toolbar-btn"
               title={isDarkMode ? 'Passer en Mode Clair' : 'Passer en Mode Sombre'}
             >
               {isDarkMode ? (
-                <Sun className="w-4 h-4 text-amber-400 transition-transform duration-300 hover:rotate-45" />
+                <Sun className="w-3.5 h-3.5 text-amber-400" />
               ) : (
-                <Moon className="w-4 h-4 text-indigo-600 transition-transform duration-300 hover:-rotate-12" />
+                <Moon className="w-3.5 h-3.5 text-indigo-500" />
               )}
             </button>
 
@@ -300,13 +331,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 if (isOnline) handleSync();
                 else setIsOnline(true);
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold border transition-all duration-150 active:scale-95 shadow-xs cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all duration-150 active:scale-95 cursor-pointer"
               style={{
-                background: isOnline ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-                borderColor: isOnline ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)',
+                background: isOnline ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)',
+                borderColor: isOnline ? 'rgba(16,185,129,0.20)' : 'rgba(239,68,68,0.20)',
                 color: isOnline ? '#10b981' : '#f87171',
               }}
-              title={isOnline ? 'Base SQLite locale synchronsée' : 'Mode Hors-Ligne'}
+              title={isOnline ? 'Base SQLite locale synchronisée' : 'Mode Hors-Ligne'}
             >
               {isSyncing ? (
                 <Loader className="w-3.5 h-3.5 animate-spin" />
@@ -327,17 +358,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                   setShowNotifMenu(!showNotifMenu);
                   setShowProfileMenu(false);
                 }}
-                className="w-9 h-9 rounded-xl border flex items-center justify-center relative transition-all duration-150 hover:bg-slate-500/10 active:scale-95 cursor-pointer shadow-xs"
-                style={{
-                  background: 'var(--bg-sunken)',
-                  borderColor: 'var(--border)',
-                  color: 'var(--text-primary)',
-                }}
+                className="toolbar-btn relative"
                 title="Notifications Système"
               >
-                <Bell className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                <Bell className="w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />
                 {notifications.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9.5px] font-black flex items-center justify-center shadow-xs border-2 border-white dark:border-slate-900">
+                  <span
+                    className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full text-white text-[8px] font-black flex items-center justify-center"
+                    style={{ background: '#ef4444', border: '1.5px solid var(--bg-surface)' }}
+                  >
                     {notifications.length}
                   </span>
                 )}
@@ -506,7 +535,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* LIGNE INFÉRIEURE : BARRE DE NAVIGATION PRINCIPALE DES PÔLES (MENU STRIP DE GRANDE CLASSE) */}
-        <div className="flex items-center gap-1 overflow-x-auto sidebar-scroll pt-1 border-t" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-center gap-1 overflow-x-auto sidebar-scroll pt-1.5 border-t" style={{ borderColor: 'var(--border)' }}>
           {NAV_CATEGORIES.map((cat) => {
             const CatIcon = cat.icon;
             const isCatActive = cat.tabs.includes(activeTab);
@@ -514,13 +543,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 key={cat.id}
                 onClick={() => onNavigate?.(cat.defaultTab)}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all whitespace-nowrap cursor-pointer ${
-                  isCatActive
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
-                }`}
+                className={`nav-strip-btn ${isCatActive ? 'active' : ''}`}
               >
-                <CatIcon className={`w-3.5 h-3.5 ${isCatActive ? 'text-white' : 'text-indigo-500'}`} />
+                <CatIcon className={`w-3.5 h-3.5 shrink-0 ${isCatActive ? 'text-white' : 'text-indigo-400'}`} />
                 <span>{cat.label}</span>
               </button>
             );

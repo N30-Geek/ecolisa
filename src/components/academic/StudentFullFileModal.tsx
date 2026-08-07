@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -18,6 +18,7 @@ import {
   CreditCard
 } from 'lucide-react';
 import { Eleve } from '../../types';
+import { BulletinCTBEModal } from './BulletinCTBEModal';
 
 interface StudentFullFileModalProps {
   isOpen: boolean;
@@ -30,6 +31,8 @@ export const StudentFullFileModal: React.FC<StudentFullFileModalProps> = ({
   onClose,
   student
 }) => {
+  const [showCTBEBulletin, setShowCTBEBulletin] = useState(false);
+
   if (!isOpen) return null;
 
   // Téléchargement direct du fichier PDF sans passer par la fenêtre d'impression
@@ -271,6 +274,12 @@ export const StudentFullFileModal: React.FC<StudentFullFileModalProps> = ({
 
           <div className="flex items-center gap-3">
             <button
+              onClick={() => setShowCTBEBulletin(true)}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-xs shadow-lg shadow-amber-600/30 flex items-center gap-2 transition-all cursor-pointer border border-amber-400/40"
+            >
+              <FileText className="w-4 h-4" /> 📜 Bulletin Officiel 7è / 8è CTBE
+            </button>
+            <button
               onClick={handleExportDOCX}
               className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs shadow-lg shadow-blue-600/30 flex items-center gap-2 transition-all cursor-pointer border border-blue-400/40"
             >
@@ -476,6 +485,14 @@ export const StudentFullFileModal: React.FC<StudentFullFileModalProps> = ({
           </button>
         </div>
       </div>
+
+      {showCTBEBulletin && (
+        <BulletinCTBEModal
+          isOpen={showCTBEBulletin}
+          onClose={() => setShowCTBEBulletin(false)}
+          student={student}
+        />
+      )}
     </div>
   );
 

@@ -9,9 +9,8 @@ import { DocumentEngine } from './components/documents/DocumentEngine';
 import { LicenseSyncManager } from './components/system/LicenseSyncManager';
 import { OnboardingWizard, SchoolConfig } from './components/onboarding/OnboardingWizard';
 import { SettingsManager } from './components/settings/SettingsManager';
-import { StudentRegistrationModal } from './components/academic/StudentRegistrationModal';
+import { TeacherManager } from './components/administration/TeacherManager';
 import { LoginScreen } from './components/auth/LoginScreen';
-import { mockClasses } from './data/mockData';
 import { RôleSystème } from './types';
 import { OfflineStorageService } from './services/offlineStorage';
 import { LocalDatabaseService, UserSession } from './services/localDatabase';
@@ -41,8 +40,7 @@ export function App() {
   const [userRole, setUserRole] = useState<RôleSystème>('PROMOTEUR_ADMIN');
   const [activeSchoolYear, setActiveSchoolYear] = useState<string>('2025–2026');
   const [isOnline, setIsOnline] = useState<boolean>(true);
-  const [showRegistrationModal, setShowRegistrationModal] = useState<boolean>(false);
-  
+
   // Auth & Onboarding State
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<UserSession | null>(null);
@@ -143,7 +141,7 @@ export function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <ExecutiveDashboard onNavigate={setActiveTab} onOpenRegistration={() => setShowRegistrationModal(true)} />;
+        return <ExecutiveDashboard onNavigate={setActiveTab} onOpenRegistration={() => setActiveTab('students')} />;
 
       // ── Gestion Pédagogies ──
       case 'students':
@@ -166,8 +164,9 @@ export function App() {
       case 'discipline':
         return <ComingSoonModule title="Discipline & Conduites" icon="⚖️" description="Registre de retenues, avertissements et cahier de liaison numérique." />;
       case 'teachers':
+        return <TeacherManager targetCategory="ENSEIGNANT" />;
       case 'hr':
-        return <ComingSoonModule title="Dossiers Personnel & Agents Scolaires" icon="👥" description="Gestion des dossiers du personnel, contrats, fonctions et affectations." />;
+        return <TeacherManager targetCategory="STAFF" />;
       case 'leaves':
         return <ComingSoonModule title="Congés & Absences" icon="🗓️" description="Gestion des demandes de congés et suivi des présences du personnel." />;
       // ── Vie Scolaire ──
@@ -193,7 +192,7 @@ export function App() {
         return <SettingsManager onOpenOnboarding={() => setShowOnboardingModal(true)} />;
 
       default:
-        return <ExecutiveDashboard onNavigate={setActiveTab} onOpenRegistration={() => setShowRegistrationModal(true)} />;
+        return <ExecutiveDashboard onNavigate={setActiveTab} onOpenRegistration={() => setActiveTab('students')} />;
     }
   };
 
@@ -235,18 +234,6 @@ export function App() {
       {/* Barre de titre frameless Electron */}
       <TitleBar isOnline={isOnline} />
 
-      {/* Modal d'Inscription Élève Global */}
-      {showRegistrationModal && (
-        <StudentRegistrationModal
-          onClose={() => setShowRegistrationModal(false)}
-          onRegister={(newStudent) => {
-            setShowRegistrationModal(false);
-            setActiveTab('apprenants');
-          }}
-          availableClasses={mockClasses.map(c => ({ id: c.id, nom: c.nom }))}
-        />
-      )}
-
       {/* Conteneur principal sous la TitleBar (Menu latéral FIXE + Zone de travail) */}
       <div className="flex-1 flex min-h-0 relative">
 
@@ -258,7 +245,6 @@ export function App() {
           isOnline={isOnline}
           isCollapsed={isSidebarCollapsed}
           setIsCollapsed={setIsSidebarCollapsed}
-          onOpenRegistration={() => setShowRegistrationModal(true)}
           onLock={handleLogout}
         />
 

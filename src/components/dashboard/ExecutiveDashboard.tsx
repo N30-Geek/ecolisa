@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Users,
   Calendar,
@@ -49,9 +49,18 @@ import {
   Pie,
   Cell
 } from 'recharts';
-import { mockEvents, mockFacultyUpdates } from '../../data/mockData';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
+import {
+  fetchDashboardData,
+  computeDashboardStats,
+  DashboardData,
+  DashboardStats,
+} from '../../services/dashboardData';
+import { useSchoolConfig } from '../../hooks/useSchoolConfig';
+import { formatCurrency } from '../../utils/currency';
+import { LocalDatabaseService } from '../../services/localDatabase';
+import { SchoolCalendar } from './SchoolCalendar';
 
 // ── Props du Dashboard Exécutif ────────────────────────────────────────────
 interface ExecutiveDashboardProps {
@@ -62,6 +71,7 @@ interface ExecutiveDashboardProps {
 // ── Tooltip personnalisé Recharts 100% Adaptatif Mode Clair & Sombre ───────
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
+  const { format } = useSchoolConfig();
   return (
     <div
       className="rounded-xl p-3 text-xs font-semibold shadow-xl border backdrop-blur-md"
@@ -94,7 +104,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
           <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>
             {typeof entry.value === 'number' && entry.name !== 'encaisse' && entry.name !== 'objectif'
               ? `${entry.value}%`
-              : `$${entry.value}k`}
+              : format(entry.value)}
           </span>
         </div>
       ))}
@@ -102,7 +112,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-// ── Carte KPI Épurée Évoluée ───────────────────────────────────
+// ── Carte KPI Épurée Évoluée ─────────────────────────────────────────────
 interface KpiCardProps {
   label: string;
   sublabel: string;
@@ -111,19 +121,31 @@ interface KpiCardProps {
   trendUp?: boolean;
   trendNeutral?: boolean;
   icon: React.ElementType;
+  iconColor?: 'indigo' | 'emerald' | 'amber' | 'rose' | 'violet' | 'sky';
   delay?: number;
   onViewDetails?: () => void;
 }
 
 const KpiCard: React.FC<KpiCardProps> = ({
-  label, sublabel, value, trend, trendUp, trendNeutral, icon: Icon, delay = 0, onViewDetails,
+  label, sublabel, value, trend, trendUp, trendNeutral, icon: Icon, iconColor = 'indigo', delay = 0, onViewDetails,
 }) => (
   <div
-    className="animate-fade-in p-4 rounded-xl border shadow-xs transition-all relative overflow-hidden group flex flex-col justify-between"
+    className="animate-fade-in p-4 rounded-2xl border transition-all relative overflow-hidden group flex flex-col justify-between cursor-default"
     style={{
       animationDelay: `${delay}ms`,
       background: 'var(--bg-surface)',
       borderColor: 'var(--border)',
+      boxShadow: 'var(--shadow-xs)',
+    }}
+    onMouseEnter={(e) => {
+      (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-md)';
+      (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(99,102,241,0.20)';
+      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
+    }}
+    onMouseLeave={(e) => {
+      (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-xs)';
+      (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)';
+      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
     }}
   >
     <div>
@@ -132,14 +154,12 @@ const KpiCard: React.FC<KpiCardProps> = ({
           <span className="text-[11px] font-bold uppercase tracking-wider block" style={{ color: 'var(--text-muted)' }}>
             {label}
           </span>
-          <span className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400 mt-0.5 block">
+          <span className="text-[10.5px] font-medium mt-0.5 block" style={{ color: 'var(--text-disabled)' }}>
             {sublabel}
           </span>
         </div>
-        <div
-          className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 shadow-xs transition-transform group-hover:scale-105 border border-indigo-500/20 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
-        >
-          <Icon className="w-4.5 h-4.5" />
+        <div className={`kpi-icon-wrap ${iconColor} group-hover:scale-105 transition-transform`}>
+          <Icon className="w-4 h-4" />
         </div>
       </div>
 
@@ -149,17 +169,17 @@ const KpiCard: React.FC<KpiCardProps> = ({
         </div>
         <div className="mt-2 flex items-center justify-between gap-2">
           <span
-            className={`inline-flex items-center gap-1 text-[10.5px] font-semibold px-2 py-0.5 rounded-md ${
+            className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
               trendNeutral
                 ? 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20'
                 : trendUp
-                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20'
-                : 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/20'
+                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
+                : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'
             }`}
           >
             {!trendNeutral && (trendUp
-              ? <TrendingUp className="w-3 h-3" />
-              : <TrendingDown className="w-3 h-3" />
+              ? <TrendingUp className="w-2.5 h-2.5" />
+              : <TrendingDown className="w-2.5 h-2.5" />
             )}
             {trend}
           </span>
@@ -170,10 +190,12 @@ const KpiCard: React.FC<KpiCardProps> = ({
     {onViewDetails && (
       <button
         onClick={onViewDetails}
-        className="mt-3 pt-2 border-t w-full flex items-center justify-between text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline transition-colors cursor-pointer group/btn"
-        style={{ borderColor: 'var(--border)' }}
+        className="mt-3 pt-2 border-t w-full flex items-center justify-between text-xs font-semibold transition-colors cursor-pointer group/btn"
+        style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#6366f1'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; }}
       >
-        <span>Consulter l'intégralité</span>
+        <span>Voir les détails</span>
         <ArrowRight className="w-3.5 h-3.5 group-hover/btn:translate-x-1 transition-transform" />
       </button>
     )}
@@ -316,9 +338,14 @@ const mockRdcSchoolCalendar: CalendarEventData[] = [
   { id: 'ferie-independance', titre: 'Fête de l’Indépendance de la RDC 🇨🇩', dateDebut: 'Mercredi 30 Juin 2027', categorie: 'FÉRIÉ', publicCible: 'TOUS', highlight: true },
 ];
 
-const RdcOfficialSchoolCalendar: React.FC = () => {
+const RdcOfficialSchoolCalendar: React.FC<{ events?: CalendarEventData[] }> = ({ events }) => {
   const [catFilter, setCatFilter] = useState<string>('TOUS');
   const [searchTerm, setSearchTerm] = useState<string>('');
+
+  const allEvents = useMemo<CalendarEventData[]>(() => {
+    if (events && events.length > 0) return events;
+    return mockRdcSchoolCalendar;
+  }, [events]);
 
   const handleExportPDF = () => {
     const element = document.getElementById('rdc-official-calendar-print-section');
@@ -347,7 +374,7 @@ const RdcOfficialSchoolCalendar: React.FC = () => {
   };
 
   const filteredEvents = useMemo(() => {
-    return mockRdcSchoolCalendar.filter(ev => {
+    return allEvents.filter(ev => {
       const matchCat = catFilter === 'TOUS' || ev.categorie === catFilter;
       const matchSearch = !searchTerm || ev.titre.toLowerCase().includes(searchTerm.toLowerCase()) || (ev.subtitre && ev.subtitre.toLowerCase().includes(searchTerm.toLowerCase()));
       return matchCat && matchSearch;
@@ -503,7 +530,7 @@ const RdcOfficialSchoolCalendar: React.FC = () => {
 interface CycleAttendanceData {
   id: string;
   nom: string;
-  code: 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE';
+  code: string;
   isPresentInSchool: boolean;
   effectifTotal: number;
   presentsTotal: number;
@@ -552,11 +579,18 @@ const mockDailyAttendance: CycleAttendanceData[] = [
   },
 ];
 
-const DailyAttendanceByCategory: React.FC<{ selectedCycleFilter: string }> = ({ selectedCycleFilter }) => {
+const DailyAttendanceByCategory: React.FC<{ selectedCycleFilter: string; data?: DashboardStats['attendanceByCycle'] }> = ({ selectedCycleFilter, data }) => {
+  const cycleData = useMemo(() => {
+    if (data && data.length > 0) return data;
+    return mockDailyAttendance;
+  }, [data]);
+
   const activeCycles = useMemo(() => {
-    return mockDailyAttendance.filter(c => {
+    const secondaire = new Set(['CTEB', 'HUMANITES']);
+    return cycleData.filter(c => {
       if (!c.isPresentInSchool) return false;
       if (selectedCycleFilter === 'ALL') return true;
+      if (selectedCycleFilter === 'SECONDAIRE') return secondaire.has(c.code);
       return c.code === selectedCycleFilter;
     });
   }, [selectedCycleFilter]);
@@ -794,31 +828,31 @@ const AlertItem: React.FC<AlertItemProps> = ({ type, title, detail, action, onAc
 // ── Options de Filtrage Intelligentes & Adaptatives Selon le Cycle EPST ─────
 const cycleOptions: SelectOption[] = [
   { value: 'ALL', label: 'Tous les Cycles EPST', icon: School },
-  { value: 'MATERNELLE', label: 'Cycle Maternelle', icon: GraduationCap, badge: '1 250 élèves' },
-  { value: 'PRIMAIRE', label: 'Cycle Primaire', icon: School, badge: '5 800 élèves' },
-  { value: 'SECONDAIRE', label: 'Secondaire & Humanités', icon: Award, badge: '7 245 élèves' },
+  { value: 'MATERNELLE', label: 'Cycle Maternelle', icon: GraduationCap },
+  { value: 'PRIMAIRE', label: 'Cycle Primaire', icon: School },
+  { value: 'SECONDAIRE', label: 'Secondaire & Humanités', icon: Award },
 ];
 
 const maternelleOptions: SelectOption[] = [
   { value: 'ALL', label: 'Toutes les Sections Maternelle', icon: GraduationCap },
-  { value: 'PS', label: 'Petite Section (3 ans)', icon: GraduationCap, badge: '350 élèves' },
-  { value: 'MS', label: 'Moyenne Section (4 ans)', icon: GraduationCap, badge: '420 élèves' },
-  { value: 'GS', label: 'Grande Section (5 ans)', icon: GraduationCap, badge: '480 élèves' },
+  { value: 'PS', label: 'Petite Section (3 ans)', icon: GraduationCap },
+  { value: 'MS', label: 'Moyenne Section (4 ans)', icon: GraduationCap },
+  { value: 'GS', label: 'Grande Section (5 ans)', icon: GraduationCap },
 ];
 
 const primaireOptions: SelectOption[] = [
   { value: 'ALL', label: 'Toutes les Classes Primaire', icon: School },
-  { value: 'DEG_ELEM', label: '1ère & 2ème Primaire', icon: School, badge: '1 900 élèves' },
-  { value: 'DEG_MOY',  label: '3ème & 4ème Primaire', icon: School, badge: '2 000 élèves' },
-  { value: 'DEG_TERM', label: '5ème & 6ème Primaire', icon: School, badge: '1 900 élèves' },
+  { value: 'DEG_ELEM', label: '1ère & 2ème Primaire', icon: School },
+  { value: 'DEG_MOY',  label: '3ème & 4ème Primaire', icon: School },
+  { value: 'DEG_TERM', label: '5ème & 6ème Primaire', icon: School },
 ];
 
 const secondaireOptions: SelectOption[] = [
   { value: 'ALL', label: 'Toutes les Options Humanités', icon: BookOpen },
-  { value: 'MATH_PHYS', label: 'Mathématique-Physique', icon: BookOpen, badge: 'STEM' },
-  { value: 'BIO_CHIMIE', label: 'Biologie-Chimie', icon: BookOpen, badge: 'SVT' },
-  { value: 'COMMERCE', label: 'Commerciale & Gestion', icon: DollarSign, badge: 'GESTION' },
-  { value: 'PEDAGOGIE', label: 'Pédagogie Générale', icon: Users, badge: 'EDU' },
+  { value: 'MATH_PHYS', label: 'Mathématique-Physique', icon: BookOpen },
+  { value: 'BIO_CHIMIE', label: 'Biologie-Chimie', icon: BookOpen },
+  { value: 'COMMERCE', label: 'Commerciale & Gestion', icon: BookOpen },
+  { value: 'PEDAGOGIE', label: 'Pédagogie Générale', icon: Users },
 ];
 
 const periodOptions: SelectOption[] = [
@@ -830,15 +864,53 @@ const periodOptions: SelectOption[] = [
 
 // ── Dashboard Exécutif Épuré Haute Visibilité Mode Clair & Sombre ──
 export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNavigate, onOpenRegistration }) => {
+  const { currency, exchangeRate, format } = useSchoolConfig();
   const [activeSubTab, setActiveSubTab] = useState<'executive' | 'calendar' | 'pedagogy' | 'finances' | 'viescolaire'>('executive');
   const [chartMode, setChartMode] = useState<'BOTH' | 'COTES' | 'PRESENCE'>('BOTH');
-  const [actualites, setActualites] = useState(mockFacultyUpdates);
+
+  const [data, setData] = useState<DashboardData>({
+    loading: true,
+    students: [],
+    classes: [],
+    schoolYears: [],
+    subjects: [],
+    staff: [],
+    invoices: [],
+    payments: [],
+    expenses: [],
+    cotes: [],
+    presences: [],
+    schoolEvents: [],
+    selectedYear: undefined,
+  });
+
+  const refreshData = async () => {
+    setData(prev => ({ ...prev, loading: true }));
+    const raw = await fetchDashboardData();
+    setData(raw);
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      const raw = await fetchDashboardData();
+      if (!mounted) return;
+      setData(raw);
+    };
+    load();
+    
+    // Auto-refresh léger toutes les 15 secondes pour synchroniser la base de données
+    const interval = setInterval(load, 15000);
+    return () => { mounted = false; clearInterval(interval); };
+  }, []);
+
+  const stats = useMemo<DashboardStats>(() => computeDashboardStats(data, currency, exchangeRate), [data, currency, exchangeRate]);
 
   // ÉTATS DES FILTRES MULTI-CRITÈRES INTELLIGENTS
   const [selectedCycleFilter, setSelectedCycleFilter] = useState<string>('ALL');
   const [selectedOptionFilter, setSelectedOptionFilter] = useState<string>('ALL');
-  const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('2025_2026');
-  const [selectedDateFilter, setSelectedDateFilter] = useState<string>('2025-09-01');
+  const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('2026_2027');
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
 
   // GESTION DU CHANGEMENT DE CYCLE
   const handleCycleChange = (cycle: string) => {
@@ -866,82 +938,107 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
     return count;
   }, [selectedCycleFilter, selectedOptionFilter, selectedPeriodFilter]);
 
-  const rawDonneesPerformance = [
-    { mois: 'Sept', moyenneCotes: 0, tauxPresence: 0 },
-    { mois: 'Oct',  moyenneCotes: 0, tauxPresence: 0 },
-    { mois: 'Nov',  moyenneCotes: 0, tauxPresence: 0 },
-    { mois: 'Déc',  moyenneCotes: 0, tauxPresence: 0 },
-    { mois: 'Jan',  moyenneCotes: 0, tauxPresence: 0 },
-    { mois: 'Mar',  moyenneCotes: 0, tauxPresence: 0 },
-    { mois: 'Mai',  moyenneCotes: 0, tauxPresence: 0 },
-    { mois: 'Jul',  moyenneCotes: 0, tauxPresence: 0 },
-  ];
-
-  const rawDonneesFinancieres = [
-    { trimestre: 'T1', encaisse: 0, objectif: 0 },
-    { trimestre: 'T2', encaisse: 0, objectif: 0 },
-    { trimestre: 'T3', encaisse: 0, objectif: 0 },
-    { trimestre: 'T4', encaisse: 0, objectif: 0 },
-    { trimestre: "T1'26", encaisse: 0, objectif: 0 },
-  ];
-
-  const donneesPerformance = useMemo(() => {
-    return rawDonneesPerformance;
-  }, []);
-
-  const donneesFinancieres = useMemo(() => {
-    return rawDonneesFinancieres;
-  }, []);
-
-  const donneesCycle = [
-    { name: 'Maternelle', value: 0, pct: '0%', color: '#6366f1' },
-    { name: 'Primaire', value: 0, pct: '0%', color: '#10b981' },
-    { name: 'Humanités', value: 0, pct: '0%', color: '#818cf8' },
-  ];
-
-  const approuverConge = (id: string) => {
-    setActualites(prev => prev.map(fu => fu.id === id ? { ...fu, necessiteApprobation: false } : fu));
+  const periodFilterMonths: Record<string, number[]> = {
+    '2025_2026': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    S1: [0, 1, 2, 3, 4],
+    S2: [5, 6, 7, 8, 9, 10],
+    T1: [0, 1, 2],
   };
 
+  const periodFilterQuarters: Record<string, string[]> = {
+    '2025_2026': ['T1', 'T2', 'T3', 'T4'],
+    S1: ['T1', 'T2'],
+    S2: ['T3', 'T4'],
+    T1: ['T1'],
+  };
+
+  const donneesPerformance = useMemo(() => {
+    const allowed = periodFilterMonths[selectedPeriodFilter] || periodFilterMonths['2025_2026'];
+    return stats.monthlyPerformance.filter((_, idx) => allowed.includes(idx));
+  }, [stats.monthlyPerformance, selectedPeriodFilter]);
+
+  const donneesFinancieres = useMemo(() => {
+    const allowed = periodFilterQuarters[selectedPeriodFilter] || periodFilterQuarters['2025_2026'];
+    return stats.quarterlyFinance.filter((q) => allowed.some((a) => q.trimestre.startsWith(a)));
+  }, [stats.quarterlyFinance, selectedPeriodFilter]);
+
+  const donneesCycle = useMemo(() => {
+    const total = Math.max(1, stats.totalStudents);
+    const secondaire = new Set(['SECONDAIRE', 'HUMANITES', 'CTEB']);
+    let items = stats.studentsByCycle.map((c) => ({ ...c, pct: `${Math.round((c.value / total) * 100)}%` }));
+    if (selectedCycleFilter !== 'ALL') {
+      items = items.filter((c) => c.code === selectedCycleFilter || (selectedCycleFilter === 'SECONDAIRE' && secondaire.has(c.code)));
+    }
+    return items;
+  }, [stats.studentsByCycle, stats.totalStudents, selectedCycleFilter]);
+
+  const cycleTotal = useMemo(() => donneesCycle.reduce((sum, c) => sum + c.value, 0), [donneesCycle]);
+
+  const monthlyPresenceStats = useMemo(() => {
+    const month = Number(selectedDateFilter.split('-')[1]) - 1;
+    if (Number.isNaN(month)) return { absences: 0, retards: 0, justifiees: 0 };
+    return data.presences.reduce((acc, p) => {
+      const m = Number((p.dateJour || '').split('-')[1]) - 1;
+      if (m === month) {
+        if (p.statut === 'ABSENT') acc.absences++;
+        if (p.statut === 'RETARD') acc.retards++;
+        if (p.statut === 'JUSTIFIE') acc.justifiees++;
+      }
+      return acc;
+    }, { absences: 0, retards: 0, justifiees: 0 });
+  }, [data.presences, selectedDateFilter]);
+
   const kpis: KpiCardProps[] = useMemo(() => {
+    const fmt = (n: number) => n.toLocaleString();
+    const paid = stats.totalRevenue;
+    const goal = stats.totalInvoiced;
+    const recovery = stats.recoveryRate;
+    const totalStudents = stats.totalStudents;
+    const activeStudents = stats.activeStudents;
     return [
       {
         label: 'Effectif Total Élèves',
-        sublabel: 'Registre vierge (0 inscrit)',
-        value: '0',
-        trend: '0 inscrit',
-        trendNeutral: true,
+        sublabel: `${fmt(activeStudents)} actif${activeStudents > 1 ? 's' : ''}`,
+        value: fmt(totalStudents),
+        trend: `${fmt(totalStudents)} inscrit${totalStudents > 1 ? 's' : ''}`,
+        trendUp: activeStudents >= 0,
         icon: GraduationCap,
+        iconColor: 'indigo',
         delay: 0,
         onViewDetails: () => onNavigate && onNavigate('students'),
       },
       {
         label: 'Recettes Perçues',
         sublabel: 'Minerval & frais encaissés',
-        value: '$0',
-        trend: '$0 encaissé',
-        trendNeutral: true,
+        value: format(paid),
+        trend: `${recovery}% recouvré`,
+        trendUp: recovery > 50,
+        trendNeutral: recovery === 0,
         icon: DollarSign,
+        iconColor: 'emerald',
         delay: 60,
         onViewDetails: () => onNavigate && onNavigate('invoices'),
       },
       {
         label: 'Présence Enseignants',
-        sublabel: 'Taux aujourd’hui',
-        value: '0.0%',
-        trend: '0 présent',
-        trendNeutral: true,
+        sublabel: 'Personnels actifs',
+        value: `${fmt(stats.totalStaff)}`,
+        trend: `${fmt(stats.totalStaff)} présent${stats.totalStaff > 1 ? 's' : ''}`,
+        trendUp: true,
         icon: UserCheck,
+        iconColor: 'violet',
         delay: 120,
-        onViewDetails: () => onNavigate && onNavigate('attendance'),
+        onViewDetails: () => onNavigate && onNavigate('staff'),
       },
       {
         label: 'Taux de Réussite',
         sublabel: 'Moyenne générale école',
-        value: '0.0%',
-        trend: '0 évaluation',
-        trendNeutral: true,
+        value: `${stats.averageScore}%`,
+        trend: `${stats.averageScore}% moyenne`,
+        trendUp: stats.averageScore >= 60,
+        trendNeutral: stats.averageScore === 0,
         icon: Award,
+        iconColor: 'amber',
         delay: 180,
         onViewDetails: () => onNavigate && onNavigate('grades'),
       },
@@ -981,6 +1078,19 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
 
         {/* BOUTONS D'ACTION ÉPURÉS */}
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            onClick={refreshData}
+            className="px-3.5 py-2 rounded-lg font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer border text-indigo-500 hover:bg-indigo-500/10"
+            style={{
+              background: 'var(--bg-sunken)',
+              borderColor: 'var(--border)',
+            }}
+            title="Actualiser les données de la base de données en direct"
+          >
+            <RotateCcw className={`w-4 h-4 text-indigo-500 ${data.loading ? 'animate-spin' : ''}`} />
+            <span>Actualiser</span>
+          </button>
+
           <button
             onClick={() => {
               if (onOpenRegistration) {
@@ -1189,9 +1299,25 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                   </div>
                 </div>
 
-                <div className="h-60">
+                {/* Message d'information si aucune cote enregistrée */}
+                {stats.averageScore === 0 && (
+                  <div className="mb-3 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between text-xs text-amber-700 dark:text-amber-300">
+                    <span className="flex items-center gap-2 font-medium">
+                      <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                      Aucune cote n'a encore été saisie dans le registre. La moyenne générale est à 0%.
+                    </span>
+                    <button
+                      onClick={() => onNavigate && onNavigate('grades')}
+                      className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-200 font-bold transition-all shrink-0 cursor-pointer"
+                    >
+                      Saisir des Cotes
+                    </button>
+                  </div>
+                )}
+
+                <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={donneesPerformance} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <AreaChart data={donneesPerformance} margin={{ top: 10, right: 15, left: 0, bottom: 0 }}>
                       <defs>
                         <linearGradient id="gradCotes" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.35} />
@@ -1202,9 +1328,18 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                           <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(150,150,150,0.1)" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(150,150,150,0.12)" vertical={false} />
                       <XAxis dataKey="mois" stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} />
-                      <YAxis hide domain={[40, 100]} />
+                      <YAxis
+                        domain={[0, 100]}
+                        ticks={[0, 25, 50, 75, 100]}
+                        stroke="var(--text-muted)"
+                        fontSize={10}
+                        tickLine={false}
+                        axisLine={false}
+                        unit="%"
+                        width={35}
+                      />
                       <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(99,102,241,0.2)', strokeWidth: 1 }} />
                       {(chartMode === 'BOTH' || chartMode === 'COTES') && (
                         <Area
@@ -1242,11 +1377,11 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                 <div className="flex items-center gap-4 text-xs">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
-                    <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>Moyenne générale (81.4%)</span>
+                    <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>Moyenne générale ({stats.averageScore}%)</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                    <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>Assiduité globale (94.2%)</span>
+                    <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>Assiduité globale ({stats.presenceRate}%)</span>
                   </div>
                 </div>
 
@@ -1271,7 +1406,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                     Synthèse Financière
                   </h2>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                    0.0%
+                    {stats.recoveryRate}%
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3">
@@ -1292,9 +1427,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
 
                 <div className="space-y-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
                   {[
-                    { label: "Frais d'Études (Minerval)", val: '$0', color: '#6366f1', icon: GraduationCap },
-                    { label: 'Subventions & Donateurs', val: '$0', color: '#10b981', icon: Award },
-                    { label: 'Impayés en Recouvrement', val: '$0', color: '#ef4444', icon: AlertCircle },
+                    { label: "Frais d'Études (Minerval)", val: format(stats.totalRevenue), color: '#6366f1', icon: GraduationCap },
+                    { label: 'Subventions & Donateurs', val: format(0), color: '#10b981', icon: Award },
+                    { label: 'Impayés en Recouvrement', val: format(stats.totalUnpaid), color: '#ef4444', icon: AlertCircle },
                   ].map((item) => (
                     <div
                       key={item.label}
@@ -1382,41 +1517,31 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                   </span>
                 </div>
 
-                <div className="space-y-3">
-                  {actualites.map((fu) => (
-                    <div key={fu.id} className="flex items-start gap-2.5">
-                      <img
-                        src={fu.avatarUrl}
-                        alt={fu.nomAuteur}
-                        className="w-8 h-8 rounded-full object-cover border border-slate-500/20 shadow-xs shrink-0 mt-0.5"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[11.5px] leading-snug" style={{ color: 'var(--text-secondary)' }}>
-                          <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{fu.nomAuteur}</span>
-                          {' '}{fu.titre}
-                        </p>
-                        <span className="text-[9.5px] mt-0.5 block font-medium text-slate-500 dark:text-slate-400">{fu.ilYA}</span>
-
-                        {fu.necessiteApprobation && (
-                          <div className="flex gap-1.5 mt-1.5">
-                            <button
-                              onClick={() => approuverConge(fu.id)}
-                              className="px-2.5 py-0.5 text-[10px] font-bold rounded-md flex items-center gap-1 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 transition-colors cursor-pointer"
-                            >
-                              <Check className="w-3 h-3" /> Valider
-                            </button>
-                            <button
-                              onClick={() => approuverConge(fu.id)}
-                              className="px-2.5 py-0.5 text-[10px] font-bold rounded-md flex items-center gap-1 bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 hover:bg-rose-500/25 transition-colors cursor-pointer"
-                            >
-                              <X className="w-3 h-3" /> Refuser
-                            </button>
-                          </div>
-                        )}
+                {stats.recentActivity.length === 0 ? (
+                  <div className="p-4 rounded-xl border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucune Activité Récente</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Aucune activité enregistrée pour cette année scolaire.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {stats.recentActivity.map((fu) => (
+                      <div key={fu.id} className="flex items-start gap-2.5">
+                        <img
+                          src={fu.avatarUrl}
+                          alt={fu.nomAuteur}
+                          className="w-8 h-8 rounded-full object-cover border border-slate-500/20 shadow-xs shrink-0 mt-0.5"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11.5px] leading-snug" style={{ color: 'var(--text-secondary)' }}>
+                            <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{fu.nomAuteur}</span>
+                            {' '}{fu.titre}
+                          </p>
+                          <span className="text-[9.5px] mt-0.5 block font-medium text-slate-500 dark:text-slate-400">{fu.ilYA}</span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <button
@@ -1444,27 +1569,34 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                   </div>
                 </div>
 
-                <div className="space-y-2.5">
-                  {mockEvents.map((ev) => (
-                    <div key={ev.id} className="flex items-start gap-2.5">
-                      <div className="rounded-lg p-1 text-center min-w-[38px] shrink-0 border shadow-xs" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                        <div className="text-[8px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          {ev.dateJour.split(' ')[1]}
+                {stats.upcomingEvents.length === 0 ? (
+                  <div className="p-4 rounded-xl border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucun Événement Planifié</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Aucun événement dans l'agenda de l'année scolaire.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {stats.upcomingEvents.map((ev) => (
+                      <div key={ev.id} className="flex items-start gap-2.5">
+                        <div className="rounded-lg p-1 text-center min-w-[38px] shrink-0 border shadow-xs" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                          <div className="text-[8px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            {ev.dateJour.split(' ')[1] || ''}
+                          </div>
+                          <div className="text-[12px] font-black text-indigo-600 dark:text-indigo-400 leading-tight">
+                            {ev.dateJour.split(' ')[0] || ev.dateJour}
+                          </div>
                         </div>
-                        <div className="text-[12px] font-black text-indigo-600 dark:text-indigo-400 leading-tight">
-                          {ev.dateJour.split(' ')[0]}
+                        <div className="flex-1 min-w-0 pt-0.5">
+                          <h4 className="text-[11.5px] font-bold leading-tight truncate" style={{ color: 'var(--text-primary)' }}>{ev.titre}</h4>
+                          <p className="text-[9.5px] mt-0.5 flex items-center gap-1 font-medium text-slate-500 dark:text-slate-400">
+                            <Clock className="w-3 h-3 text-indigo-500" />
+                            {ev.heureLieu}
+                          </p>
                         </div>
                       </div>
-                      <div className="flex-1 min-w-0 pt-0.5">
-                        <h4 className="text-[11.5px] font-bold leading-tight truncate" style={{ color: 'var(--text-primary)' }}>{ev.titre}</h4>
-                        <p className="text-[9.5px] mt-0.5 flex items-center gap-1 font-medium text-slate-500 dark:text-slate-400">
-                          <Clock className="w-3 h-3 text-indigo-500" />
-                          {ev.heureLieu}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <button
@@ -1481,10 +1613,21 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
         </>
       )}
 
-      {/* ===== ONGLET 2 : CALENDRIER SCOLAIRE RDC 2026-2027 ===== */}
+      {/* ===== ONGLET 2 : CALENDRIER SCOLAIRE ===== */}
       {activeSubTab === 'calendar' && (
         <div className="space-y-4 animate-fade-in">
-          <RdcOfficialSchoolCalendar />
+          <SchoolCalendar
+            events={(data.schoolEvents.length > 0 ? data.schoolEvents : mockRdcSchoolCalendar) as any}
+            defaultYear={data.selectedYear?.debut ? new Date(data.selectedYear.debut).getFullYear() : undefined}
+            onAddEvent={async (ev) => {
+              const saved = await LocalDatabaseService.addSchoolEvent(ev as any);
+              if (saved) {
+                setData(prev => ({ ...prev, schoolEvents: [...prev.schoolEvents, saved] }));
+              } else {
+                setData(prev => ({ ...prev, schoolEvents: [...prev.schoolEvents, ev as any] }));
+              }
+            }}
+          />
         </div>
       )}
 
@@ -1492,7 +1635,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
       {activeSubTab === 'pedagogy' && (
         <div className="space-y-4 animate-fade-in">
           {/* SECTION PRÉSENCES DU JOUR PAR CATÉGORIE INTEGRÉE DANS PÉDAGOGIE */}
-          <DailyAttendanceByCategory selectedCycleFilter={selectedCycleFilter} />
+          <DailyAttendanceByCategory selectedCycleFilter={selectedCycleFilter} data={stats.attendanceByCycle} />
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
 
@@ -1507,7 +1650,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                     Distribution des Élèves par Cycle EPST
                   </h3>
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
-                    Total: 0
+                    Total: {cycleTotal.toLocaleString()}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Répartition des effectifs selon le filtre actif ({selectedCycleFilter})</p>
@@ -1535,8 +1678,8 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                   </ResponsiveContainer>
 
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-xl font-black" style={{ color: 'var(--text-primary)' }}>0</span>
-                    <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Élève</span>
+                    <span className="text-xl font-black" style={{ color: 'var(--text-primary)' }}>{cycleTotal.toLocaleString()}</span>
+                    <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Élève{cycleTotal > 1 ? 's' : ''}</span>
                   </div>
                 </div>
 
@@ -1614,9 +1757,21 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
         <div className="space-y-4 animate-fade-in">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
-              { label: 'Total Encaissements Minerval', val: '$0', sub: '0% des objectifs annuels' },
-              { label: 'Reste à Recouvrer (Impayés)', val: '$0', sub: '0 dossier en retard' },
-              { label: 'Solde en Caisse & Banques', val: '$0', sub: 'Comptabilité vierge' },
+              {
+                label: 'Total Encaissements Minerval',
+                val: format(stats.totalRevenue),
+                sub: `${stats.recoveryRate}% des objectifs annuels`,
+              },
+              {
+                label: 'Reste à Recouvrer (Impayés)',
+                val: format(stats.totalUnpaid),
+                sub: `${data.invoices.filter((inv) => (inv.montantTotal || 0) - (inv.montantPaye || 0) > 0).length} dossier(s) en retard`,
+              },
+              {
+                label: 'Solde en Caisse & Banques',
+                val: format(stats.cashBalance),
+                sub: stats.totalExpenses > 0 ? `Dépenses: ${format(stats.totalExpenses)}` : 'Comptabilité vierge',
+              },
             ].map((f, i) => (
               <div
                 key={i}
@@ -1648,22 +1803,22 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
               <div>
                 <h3 className="font-bold text-base mb-2" style={{ color: 'var(--text-primary)' }}>Ventilation des Encaissements par Canal</h3>
                 <div className="space-y-2.5 mt-3">
-                  {[
-                    { mode: 'Mobile Money (M-Pesa Kinshasa)', mont: '$0', pct: 0, icon: Smartphone },
-                    { mode: 'Airtel Money RDC', mont: '$0', pct: 0, icon: Smartphone },
-                    { mode: 'Virement Banque (Equity BCDC)', mont: '$0', pct: 0, icon: CreditCard },
-                    { mode: 'Caisse Espèces École', mont: '$0', pct: 0, icon: DollarSign },
-                  ].map((m, i) => (
-                    <div key={i} className="p-3 rounded-xl flex items-center justify-between" style={{ background: 'var(--bg-sunken)' }}>
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg flex items-center justify-center border border-indigo-500/20 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-                          <m.icon className="w-3.5 h-3.5" />
+                  {stats.paymentMethods.length > 0 ? stats.paymentMethods.map((m, i) => {
+                    const Icon = m.method.includes('Caisse') ? DollarSign : m.method.includes('Carte') || m.method.includes('Banque') ? CreditCard : Smartphone;
+                    return (
+                      <div key={i} className="p-3 rounded-xl flex items-center justify-between" style={{ background: 'var(--bg-sunken)' }}>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-lg flex items-center justify-center border border-indigo-500/20 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                            <Icon className="w-3.5 h-3.5" />
+                          </div>
+                          <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{m.method}</span>
                         </div>
-                        <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{m.mode}</span>
+                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{format(m.amount)} ({m.pct}%)</span>
                       </div>
-                      <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{m.mont} ({m.pct}%)</span>
-                    </div>
-                  ))}
+                    );
+                  }) : (
+                    <p className="text-xs text-slate-500 dark:text-slate-400 p-3">Aucun encaissement enregistré.</p>
+                  )}
                 </div>
               </div>
 
@@ -1683,10 +1838,21 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
             >
               <div>
                 <h3 className="font-bold text-base mb-2" style={{ color: 'var(--text-primary)' }}>Top des Impayés par Promotion</h3>
-                <div className="p-4 rounded-xl border text-center space-y-1 mt-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucun Impayé Enregistré</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Toutes les factures et minervals sont en ordre.</p>
-                </div>
+                {stats.topUnpaidInvoices.length > 0 ? (
+                  <div className="space-y-2 mt-3">
+                    {stats.topUnpaidInvoices.map((inv, i) => (
+                      <div key={i} className="p-3 rounded-xl flex items-center justify-between" style={{ background: 'var(--bg-sunken)' }}>
+                        <span className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{inv.nomEleve}</span>
+                        <span className="text-xs font-bold text-rose-600 dark:text-rose-400">{format(inv.montant)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl border text-center space-y-1 mt-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucun Impayé Enregistré</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Toutes les factures et minervals sont en ordre.</p>
+                  </div>
+                )}
               </div>
 
               <button
@@ -1694,7 +1860,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                 className="mt-4 pt-3 border-t w-full flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 hover:underline transition-colors cursor-pointer"
                 style={{ borderColor: 'var(--border)' }}
               >
-                <span>Registre des impayés (0)</span>
+                <span>Registre des impayés ({stats.topUnpaidInvoices.length})</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -1706,7 +1872,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
       {activeSubTab === 'viescolaire' && (
         <div className="space-y-4 animate-fade-in">
           {/* SECTION PRÉSENCE DU JOUR PAR CATÉGORIE DEPLACÉE ICI DANS VIE SCOLAIRE */}
-          <DailyAttendanceByCategory selectedCycleFilter={selectedCycleFilter} />
+          <DailyAttendanceByCategory selectedCycleFilter={selectedCycleFilter} data={stats.attendanceByCycle} />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div
@@ -1719,7 +1885,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                     <HeartPulse className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                     <span>Infirmerie & Consultations Récentes</span>
                   </h3>
-                  <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded-full border border-indigo-500/25">0 fiche ce mois</span>
+                  <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded-full border border-indigo-500/25">{monthlyPresenceStats.absences} absence{monthlyPresenceStats.absences > 1 ? 's' : ''} ce mois</span>
                 </div>
                 <div className="p-4 rounded-xl border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                   <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucune Consultation Récente</p>
@@ -1747,7 +1913,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                     <Scale className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                     <span>Rapports Disciplinaires Récents</span>
                   </h3>
-                  <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded-full border border-indigo-500/25">0 sanction</span>
+                  <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded-full border border-indigo-500/25">{monthlyPresenceStats.retards} retard{monthlyPresenceStats.retards > 1 ? 's' : ''}</span>
                 </div>
                 <div className="p-4 rounded-xl border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                   <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucun Rapport Disciplinaire</p>

@@ -15,12 +15,15 @@ import {
   MapPin,
   School,
   DollarSign,
-  FileCheck
+  FileCheck,
+  CreditCard,
+  SlidersHorizontal
 } from 'lucide-react';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
-import { PROVINCES_RDC } from '../academic/StudentRegistrationModal';
+import { PROVINCES_RDC } from '../../data/referentielEPST';
 import { SchoolConfig } from '../onboarding/OnboardingWizard';
 import { LocalDatabaseService } from '../../services/localDatabase';
+import { CardSettingsPanel } from './CardSettingsPanel';
 
 const PROVINCE_OPTIONS: SelectOption[] = PROVINCES_RDC.map((p) => ({
   value: p,
@@ -55,14 +58,46 @@ interface SettingsManagerProps {
 }
 
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ onOpenOnboarding }) => {
-  const [activeTab, setActiveTab] = useState<'school' | 'cycles' | 'promoter' | 'finance' | 'system'>('school');
+  const [activeTab, setActiveTab] = useState<'school' | 'cycles' | 'promoter' | 'finance' | 'preferences' | 'system'>('school');
   const [isSaved, setIsSaved] = useState(false);
+
+  const defaultCardCustomization = {
+    selectedFields: ['nom', 'postnom', 'prenom', 'dateNaissance', 'sexe', 'adressePhysique', 'provinceOrigine', 'nomClasse', 'registrationNumber'],
+    legalMention: 'Cette carte est strictement personnelle. Toute falsification est punissable par la loi.',
+    validityPeriod: '2025–2026',
+    contactPhone: '+243 81 555 0192',
+    contactEmail: 'contact@ecolisa.cd',
+    showCoatOfArms: true,
+    showCountryFlag: true,
+    showFiligree: true,
+    showMiniLogos: true,
+    cardTheme: 'blue' as const,
+    cardLayout: 'portrait' as const,
+    byCycle: {},
+    filigreeType: 'pattern' as const,
+    filigreeText: 'EPST',
+    filigreeShape: 'circles' as const,
+    filigreeImage: '',
+    filigreeOpacity: 0.18,
+    filigreeDensity: 'medium' as const,
+    headerAlign: 'center' as const,
+    photoPosition: 'right' as const,
+    fieldsLayout: 'grid' as const,
+    textAlign: 'left' as const,
+    showQR: true,
+    showTricolor: true,
+    showSchoolSeal: true,
+  };
 
   const [config, setConfig] = useState<SchoolConfig>(() => {
     const raw = localStorage.getItem('ecolisa_school_config');
     if (raw) {
       try {
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw) as SchoolConfig;
+        return {
+          ...parsed,
+          cardCustomization: { ...defaultCardCustomization, ...parsed.cardCustomization }
+        };
       } catch (e) {}
     }
     return {
@@ -83,6 +118,8 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onOpenOnboardi
       selectedOptions: ['MATH_PHYS', 'COMMERCE', 'BIO_CHIMIE'],
       currency: 'USD',
       exchangeRate: 2850,
+      subscriptionPlan: 'ANNUEL',
+      paymentMethod: 'MOBILE_MONEY',
       promoterName: 'Dr. Jean-Baptiste KABANGE',
       promoterRole: 'PROMOTEUR_ADMIN',
       promoterEmail: 'admin@ecolisa.cd',
@@ -90,6 +127,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onOpenOnboardi
       promoterPinCode: '992001',
       activeSchoolYear: '2025–2026',
       hwid: 'HWID-ED25519-RDC-99201-NODE-MAC',
+      cardCustomization: defaultCardCustomization
     };
   });
 
@@ -159,7 +197,8 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onOpenOnboardi
           { id: 'cycles', label: '2. Cycles & Options EPST', icon: GraduationCap },
           { id: 'promoter', label: '3. Compte Promoteur & 2FA', icon: ShieldCheck },
           { id: 'finance', label: '4. Devise & Caisse', icon: Wallet },
-          { id: 'system', label: '5. HWID & Système', icon: Cpu },
+          { id: 'preferences', label: '5. Préférences', icon: SlidersHorizontal },
+          { id: 'system', label: '6. HWID & Système', icon: Cpu },
         ].map((t) => {
           const TabIcon = t.icon;
           const isActive = activeTab === t.id;
@@ -466,11 +505,26 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onOpenOnboardi
           </div>
         )}
 
-        {/* ONGLET 5 : LICENCE & SYSTEME */}
+        {/* ONGLET 5 : PRÉFÉRENCES */}
+        {activeTab === 'preferences' && (
+          <CardSettingsPanel
+            value={config.cardCustomization || defaultCardCustomization}
+            onChange={(cardCustomization) => setConfig((prev) => ({ ...prev, cardCustomization }))}
+            schoolName={config.schoolName}
+            schoolPhone={config.phone}
+            schoolEmail={config.email}
+            schoolAddress={config.address}
+            activeSchoolYear={config.activeSchoolYear}
+            logoUrl={config.logoUrl}
+            secopeCode={config.secopeCode}
+          />
+        )}
+
+        {/* ONGLET 6 : LICENCE & SYSTEME */}
         {activeTab === 'system' && (
           <div className="space-y-4 animate-fade-in">
             <h3 className="text-xs font-black uppercase text-indigo-400 tracking-wider">
-              Empreinte Matérielle & Moteur de Base de Données
+              Empreinte Matérielle & Moteur de Base de Données SQLite
             </h3>
 
             <div className="p-3.5 rounded-xl border bg-slate-500/5 space-y-2" style={{ borderColor: 'var(--border)' }}>
@@ -478,6 +532,35 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onOpenOnboardi
                 <Cpu className="w-4 h-4" /> Empreinte Matérielle HWID (Hardware ID)
               </div>
               <p className="font-mono text-xs font-bold text-slate-300">{config.hwid}</p>
+            </div>
+
+            {/* Injection des Données de Test Massives */}
+            <div className="p-4 rounded-xl border space-y-3" style={{ background: 'rgba(99,102,241,0.06)', borderColor: 'rgba(99,102,241,0.25)' }}>
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-indigo-500" />
+                <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                  Génération des Données de Test (1 125+ Élèves, Staff & Matières)
+                </h4>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Remplissez la base de données relationnelle SQLite avec plus de 1 125 élèves répartis dans les 24 classes (Maternelle, Primaire, CTEB, Humanités Math-Physique, Bio-Chimie, Commerciale, Pédagogie), ainsi que 35 agents du staff et profs, et les matières officielles EPST.
+              </p>
+              <button
+                type="button"
+                onClick={async () => {
+                  const res = await LocalDatabaseService.seedDatabase();
+                  if (res.success) {
+                    alert(`✅ Succès ! ${res.count || 1125} Élèves, le Staff Administratif, les Professeurs, les Classes et les Matières ont été générés dans SQLite avec succès !`);
+                    window.location.reload();
+                  } else {
+                    alert(`⚠️ Information : ${res.error || 'Base de données déjà peuplée.'}`);
+                  }
+                }}
+                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Générer les 1 125+ Élèves & le Staff Administratif (Test Volant)</span>
+              </button>
             </div>
           </div>
         )}

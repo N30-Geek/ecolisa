@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Check, Search } from 'lucide-react';
 
 export interface SelectOption {
@@ -18,6 +19,8 @@ interface CustomSelectProps {
   className?: string;
   disabled?: boolean;
   searchable?: boolean;
+  creatable?: boolean;
+  createLabel?: (term: string) => string;
 }
 
 export const CustomSelect: React.FC<CustomSelectProps> = ({
@@ -29,17 +32,57 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   className = '',
   disabled = false,
   searchable,
+  creatable,
+  createLabel = (term: string) => `Créer « ${term} »`,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0, width: 0, openUp: false });
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  const selectedOption = options.find((opt) => opt.value === value);
+  const selectedOption = options.find((opt) => opt.value === value)
+    || (value ? { value, label: value } : undefined);
   const isSearchable = searchable ?? options.length > 6;
+  const estimatedMenuHeight = Math.min(options.length * 34 + (isSearchable ? 44 : 0) + 16, 300);
+
+  const computePosition = () => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < estimatedMenuHeight && rect.top > spaceBelow;
+    setMenuPos({
+      top: openUp ? rect.top - 6 : rect.bottom + 6,
+      left: rect.left,
+      width: rect.width,
+      openUp,
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (isOpen) computePosition();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleReflow = () => computePosition();
+    window.addEventListener('resize', handleReflow);
+    window.addEventListener('scroll', handleReflow, true);
+    return () => {
+      window.removeEventListener('resize', handleReflow);
+      window.removeEventListener('scroll', handleReflow, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        containerRef.current && !containerRef.current.contains(target) &&
+        menuRef.current && !menuRef.current.contains(target)
+      ) {
         setIsOpen(false);
       }
     };
@@ -47,54 +90,34 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredOptions = isSearchable && searchTerm.trim() !== ''
+  const baseFiltered = isSearchable && searchTerm.trim() !== ''
     ? options.filter((opt) => opt.label.toLowerCase().includes(searchTerm.toLowerCase()))
     : options;
 
-  return (
-    <div className={`relative text-left ${isOpen ? 'z-[9999]' : 'z-10'} ${className}`} ref={containerRef}>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => {
-          setIsOpen(!isOpen);
-          setSearchTerm('');
-        }}
-        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors border shadow-xs cursor-pointer ${
-          isOpen
-            ? 'border-indigo-500 ring-2 ring-indigo-500/20'
-            : 'hover:border-indigo-500/40'
-        } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+  const canCreate = creatable && searchTerm.trim() !== '' && !options.some(opt =>
+    opt.value.toLowerCase() === searchTerm.toLowerCase() ||
+    opt.label.toLowerCase() === searchTerm.toLowerCase()
+  );
+
+  const filteredOptions = canCreate
+    ? [...baseFiltered, { value: searchTerm.trim(), label: createLabel(searchTerm.trim()) }]
+    : baseFiltered;
+
+  const menuJSX = isOpen ? createPortal(
+    (
+      <div
+        ref={menuRef}
+        className="fixed rounded-2xl border shadow-2xl z-[99999] p-1.5 space-y-1.5 animate-scale-in"
         style={{
-          background: 'var(--bg-sunken)',
-          borderColor: isOpen ? '#6366f1' : 'var(--border)',
-          color: 'var(--text-primary)',
+          top: menuPos.openUp ? undefined : menuPos.top,
+          bottom: menuPos.openUp ? window.innerHeight - menuPos.top : undefined,
+          left: menuPos.left,
+          width: Math.max(menuPos.width, 260),
+          background: 'var(--bg-surface)',
+          borderColor: 'var(--border)',
+          boxShadow: '0 20px 30px -10px rgba(0, 0, 0, 0.4)',
         }}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          {selectedOption?.icon ? (
-            <selectedOption.icon className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-          ) : Icon ? (
-            <Icon className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-          ) : null}
-          <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
-        </div>
-        <ChevronDown
-          className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${
-            isOpen ? 'rotate-180 text-indigo-500' : ''
-          }`}
-        />
-      </button>
-
-      {isOpen && (
-        <div
-          className="absolute left-0 top-full mt-1 min-w-[260px] w-full rounded-xl border shadow-2xl z-[99999] p-1.5 space-y-1.5 animate-scale-in"
-          style={{
-            background: 'var(--sidebar-popover-bg)',
-            borderColor: 'var(--sidebar-popover-border)',
-            boxShadow: '0 20px 30px -10px rgba(0, 0, 0, 0.4)',
-          }}
-        >
           {isSearchable && (
             <div className="p-1 border-b" style={{ borderColor: 'var(--border)' }}>
               <div className="relative flex items-center">
@@ -133,9 +156,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                       setSearchTerm('');
                     }}
                     className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
-                      isSelected
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'hover:bg-slate-100 dark:hover:bg-slate-800'
+                      isSelected ? 'bg-indigo-600 text-white shadow-xs' : 'hover:bg-[var(--bg-sunken)]'
                     }`}
                     style={{
                       color: isSelected ? '#ffffff' : 'var(--text-primary)',
@@ -166,8 +187,45 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
               })
             )}
           </div>
+      </div>
+    ),
+    document.body
+  ) : null;
+
+  return (
+    <div className={`relative text-left ${className}`} ref={containerRef}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          setIsOpen(!isOpen);
+          setSearchTerm('');
+        }}
+        className={`w-full flex items-center justify-between gap-2 px-4 py-3 rounded-2xl text-sm font-bold transition-colors border cursor-pointer focus:outline-none ${
+          disabled ? 'opacity-50 cursor-not-allowed' : ''
+        }`}
+        style={{
+          background: 'var(--bg-sunken)',
+          borderColor: isOpen ? '#6366f1' : 'var(--border)',
+          color: 'var(--text-primary)',
+        }}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {selectedOption?.icon ? (
+            <selectedOption.icon className="w-4 h-4 text-indigo-500 shrink-0" />
+          ) : Icon ? (
+            <Icon className="w-4 h-4 text-indigo-500 shrink-0" />
+          ) : null}
+          <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
         </div>
-      )}
+        <ChevronDown
+          className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${
+            isOpen ? 'rotate-180 text-indigo-500' : ''
+          }`}
+        />
+      </button>
+
+      {menuJSX}
     </div>
   );
 };

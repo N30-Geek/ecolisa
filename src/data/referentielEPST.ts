@@ -4,7 +4,7 @@
 //           Secondaire et Technique (EPST)
 // ============================================================
 
-import type { OptionSecondaire, MatièreEPST, CycleScolaire } from '../types';
+import type { OptionSecondaire, MatièreEPST, CycleScolaire, Discipline } from '../types';
 
 // ─── Cycles Officiels DRC ─────────────────────────────────────────────────────
 
@@ -311,6 +311,23 @@ export const PROVINCES_RDC = [
   'Tanganyika','Haut-Lomami','Lualaba','Haut-Katanga',
 ];
 
+// LISTE OFFICIELLE COMPLÈTE DES OPTIONS DE L'ENSEIGNEMENT NATIONAL EPST RDC
+export const NATIONAL_EPST_OPTIONS: { code: string; label: string; cite: string; category: string }[] = [
+  { code: 'MATH_PHYS', label: 'Mathématique-Physique (STEM)', cite: 'CITE 344', category: 'Sciences' },
+  { code: 'BIO_CHIMIE', label: 'Chimie-Biologie (SVT)', cite: 'CITE 344', category: 'Sciences' },
+  { code: 'COMMERCE', label: 'Commerciale & Gestion (OHADA)', cite: 'CITE 344', category: 'Commercial' },
+  { code: 'PEDAGOGIE', label: 'Pédagogie Générale (Sciences Éducation)', cite: 'CITE 344', category: 'Pédagogie' },
+  { code: 'LITTERAIRE', label: 'Littéraire & Langues (Latin-Philo)', cite: 'CITE 344', category: 'Humanités' },
+  { code: 'TECHNIQUE', label: 'Technique Industrielle & Électricité', cite: 'CITE 344', category: 'Technique' },
+  { code: 'MECANIQUE', label: 'Mécanique Générale & Automobile', cite: 'CITE 344', category: 'Technique' },
+  { code: 'AGRONOMIE', label: 'Agronomie & Agriculture Générale', cite: 'CITE 344', category: 'Agro-Pasteur' },
+  { code: 'COUPE_COUTURE', label: 'Coupe & Couture (Habillement)', cite: 'CITE 344', category: 'Arts & Métiers' },
+  { code: 'INFORMATIQUE', label: 'Informatique de Gestion & Réseaux', cite: 'CITE 344', category: 'Nouvelles Tech' },
+  { code: 'SOCIALE', label: 'Sociale & Économie Familiale', cite: 'CITE 344', category: 'Social' },
+  { code: 'ARTS', label: 'Arts Plastiques & Musique', cite: 'CITE 344', category: 'Culture' },
+  { code: 'SANTE', label: 'Sages-Femmes & Infirmerie Scolaire', cite: 'CITE 344', category: 'Santé' },
+];
+
 // ─── Fonctions Utilitaires ────────────────────────────────────────────────────
 
 export function getMatieresPourCycle(cycleId: string): MatièreEPST[] {
@@ -328,4 +345,187 @@ export function getMatieresPourOption(optionId: string): MatièreEPST[] {
 
 export function getNomOption(optionId: string): string {
   return OPTIONS_EPST.find(o => o.id === optionId)?.nom ?? optionId;
+}
+
+export function getDisciplinesOfficialEPST(cycleId: string, optionCode?: string): Discipline[] {
+  const ts = Date.now();
+
+  // 1. PRIMAIRE
+  if (cycleId === 'PRESCHOOL' || cycleId === 'PRIMAIRE') {
+    return [
+      { id: `epst-fr-${ts}`, nom: 'Français (Oral, Lecture & Écriture)', code: 'FR', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, categorie: 'LANGUES' },
+      { id: `epst-math-${ts}`, nom: 'Mathématiques & Arithmétique', code: 'MATH', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, categorie: 'SCIENCES' },
+      { id: `epst-evs-${ts}`, nom: 'Sciences d\'Éveil & Technologie', code: 'EVS', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'SCIENCES' },
+      { id: `epst-hg-${ts}`, nom: 'Histoire & Géographie', code: 'HG', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'CULTURE_GENERALE' },
+      { id: `epst-ecm-${ts}`, nom: 'Éducation Civique & Morale (ECM)', code: 'ECM', coefficient: 1, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'CULTURE_GENERALE' },
+      { id: `epst-ling-${ts}`, nom: 'Langue Congolaise (Nationale)', code: 'LING', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'LANGUES' },
+      { id: `epst-eps-${ts}`, nom: 'Éducation Physique & Sports (EPS)', code: 'EPS', coefficient: 1, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'PRATIQUE' },
+      { id: `epst-itm-${ts}`, nom: 'Éducation Artistique & ITM', code: 'ITM', coefficient: 1, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'PRATIQUE' },
+    ];
+  }
+
+  // 2. CTEB (7ème & 8ème Éducation de Base)
+  if (cycleId === 'CTEB' || cycleId === 'SECONDAIRE_CTEB') {
+    return [
+      { id: `epst-fr-${ts}`, nom: 'Français (Textes & Grammaire)', code: 'FR', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, categorie: 'LANGUES' },
+      { id: `epst-math-${ts}`, nom: 'Mathématiques (Algèbre & Géométrie)', code: 'MATH', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, categorie: 'SCIENCES' },
+      { id: `epst-phys-${ts}`, nom: 'Sciences Physiques', code: 'PHYS', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'SCIENCES' },
+      { id: `epst-bio-${ts}`, nom: 'Sciences de la Vie (Botanique/Zoologie)', code: 'BIO', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'SCIENCES' },
+      { id: `epst-angl-${ts}`, nom: 'Anglais (English Language)', code: 'ANGL', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'LANGUES' },
+      { id: `epst-hist-${ts}`, nom: 'Histoire', code: 'HIST', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'CULTURE_GENERALE' },
+      { id: `epst-geo-${ts}`, nom: 'Géographie', code: 'GEO', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'CULTURE_GENERALE' },
+      { id: `epst-ecm-${ts}`, nom: 'Éducation Civique & Morale (ECM)', code: 'ECM', coefficient: 1, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'CULTURE_GENERALE' },
+      { id: `epst-edvie-${ts}`, nom: 'Éducation à la Vie (EDVIE)', code: 'EDVIE', coefficient: 1, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'CULTURE_GENERALE' },
+      { id: `epst-tic-${ts}`, nom: 'Technologie & Les T.I.C', code: 'TIC', coefficient: 1, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'PRATIQUE' },
+    ];
+  }
+
+  // 3. HUMANITÉS ET TECHNIQUES PAR OPTION
+  const opt = (optionCode || '').toUpperCase();
+
+  // SECRÉTARIAT ET ADMINISTRATION
+  if (opt.includes('SECR') || opt.includes('ADMIN')) {
+    return [
+      { id: `epst-sten-${ts}`, nom: 'Sténographie', code: 'STEN', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-orgb-${ts}`, nom: 'Organisation de Bureau', code: 'ORGB', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-ccaf-${ts}`, nom: 'Correspondence Commerciale Fr. (CCA)', code: 'CCAF', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-ccaa-${ts}`, nom: 'Correspondence Commerciale Angl. (CCA)', code: 'CCAA', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-info-${ts}`, nom: 'Informatique & Bureautique', code: 'INFO', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-cpt-${ts}`, nom: 'Comptabilité Générale', code: 'CPT', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-droit-${ts}`, nom: 'Droit (Civil & Commercial)', code: 'DROIT', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'OPTION' },
+      { id: `epst-fisc-${ts}`, nom: 'Fiscalité', code: 'FISC', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'OPTION' },
+      { id: `epst-fr-${ts}`, nom: 'Français Général', code: 'FR', coefficient: 3, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, categorie: 'LANGUES' },
+      { id: `epst-angl-${ts}`, nom: 'Anglais', code: 'ANGL', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'LANGUES' },
+      { id: `epst-math-${ts}`, nom: 'Mathématiques Générales', code: 'MATH', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'SCIENCES' },
+      { id: `epst-phil-${ts}`, nom: 'Philosophie & ECM', code: 'PHIL', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'CULTURE_GENERALE' },
+    ];
+  }
+
+  // COMMERCIALE ET GESTION / COMPTABILITÉ
+  if (opt.includes('COMM') || opt.includes('COMPTA') || opt.includes('GEST')) {
+    return [
+      { id: `epst-cpt-${ts}`, nom: 'Comptabilité Générale & Analytique', code: 'CPT', coefficient: 5, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-mfin-${ts}`, nom: 'Mathématiques Financières', code: 'MFIN', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-doc-${ts}`, nom: 'Documents du Commerce (DOCOM)', code: 'DOC', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-infg-${ts}`, nom: 'Informatique de Gestion', code: 'INFG', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-fisc-${ts}`, nom: 'Fiscalité & Législation', code: 'FISC', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'OPTION' },
+      { id: `epst-droit-${ts}`, nom: 'Droit Commercial & Sociétés', code: 'DROIT', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'OPTION' },
+      { id: `epst-cca-${ts}`, nom: 'CCA Française & Anglaise', code: 'CCA', coefficient: 3, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, categorie: 'OPTION' },
+      { id: `epst-eco-${ts}`, nom: 'Économie Générale', code: 'ECO', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'CULTURE_GENERALE' },
+      { id: `epst-fr-${ts}`, nom: 'Français Général', code: 'FR', coefficient: 3, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, categorie: 'LANGUES' },
+      { id: `epst-angl-${ts}`, nom: 'Anglais Commercial', code: 'ANGL', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'LANGUES' },
+    ];
+  }
+
+  // OPTION SCIENTIFIQUE (MATH-PHY / BIO-CHIMIE)
+  if (opt.includes('MATH') || opt.includes('PHY') || opt.includes('BIO') || opt.includes('CHIM') || opt.includes('SCI')) {
+    return [
+      { id: `epst-alg-${ts}`, nom: 'Algèbre & Analyse Mathématique', code: 'ALG', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'SCIENCES' },
+      { id: `epst-phys-${ts}`, nom: 'Physique', code: 'PHYS', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'SCIENCES' },
+      { id: `epst-chim-${ts}`, nom: 'Chimie', code: 'CHIM', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'SCIENCES' },
+      { id: `epst-bio-${ts}`, nom: 'Biologie & Cytologie / Écologie', code: 'BIO', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'SCIENCES' },
+      { id: `epst-geom-${ts}`, nom: 'Géométrie & Trigonométrie', code: 'GEOM', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'SCIENCES' },
+      { id: `epst-dess-${ts}`, nom: 'Dessin Scientifique', code: 'DESS', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'PRATIQUE' },
+      { id: `epst-tic-${ts}`, nom: 'T.I.C / Informatique', code: 'TIC', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'PRATIQUE' },
+      { id: `epst-fr-${ts}`, nom: 'Français Général', code: 'FR', coefficient: 3, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, categorie: 'LANGUES' },
+      { id: `epst-angl-${ts}`, nom: 'Anglais', code: 'ANGL', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'LANGUES' },
+      { id: `epst-hg-${ts}`, nom: 'Histoire & Géographie', code: 'HG', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'CULTURE_GENERALE' },
+      { id: `epst-phil-${ts}`, nom: 'Philosophie', code: 'PHIL', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'CULTURE_GENERALE' },
+    ];
+  }
+
+  // LATIN-PHILO
+  if (opt.includes('LAT') || opt.includes('PHILO') || opt.includes('LITT')) {
+    return [
+      { id: `epst-lat-${ts}`, nom: 'Langue & Littérature Latine', code: 'LAT', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-phil-${ts}`, nom: 'Philosophie & Logique', code: 'PHIL', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-fr-${ts}`, nom: 'Français & Littérature Comparée', code: 'FR', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'LANGUES' },
+      { id: `epst-angl-${ts}`, nom: 'Anglais Littéraire', code: 'ANGL', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'LANGUES' },
+      { id: `epst-hist-${ts}`, nom: 'Histoire Critique', code: 'HIST', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'CULTURE_GENERALE' },
+      { id: `epst-geo-${ts}`, nom: 'Géographie Économique', code: 'GEO', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'CULTURE_GENERALE' },
+      { id: `epst-math-${ts}`, nom: 'Mathématiques Sociales', code: 'MATH', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'SCIENCES' },
+    ];
+  }
+
+  // PÉDAGOGIE GÉNÉRALE
+  if (opt.includes('PEDA')) {
+    return [
+      { id: `epst-peda-${ts}`, nom: 'Pédagogie Générale & Appliquée', code: 'PEDA', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-psy-${ts}`, nom: 'Psychologie Enfantine', code: 'PSY', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-did-${ts}`, nom: 'Didactiques Spéciales', code: 'DID', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+      { id: `epst-docim-${ts}`, nom: 'Évaluation Scolaire & Docimologie', code: 'DOCIM', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'OPTION' },
+      { id: `epst-leg-${ts}`, nom: 'Législation Scolaire EPST', code: 'LEG', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'OPTION' },
+      { id: `epst-fr-${ts}`, nom: 'Français Général', code: 'FR', coefficient: 3, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, categorie: 'LANGUES' },
+      { id: `epst-math-${ts}`, nom: 'Mathématiques Générales', code: 'MATH', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'SCIENCES' },
+      { id: `epst-angl-${ts}`, nom: 'Anglais', code: 'ANGL', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'LANGUES' },
+    ];
+  }
+
+  // DEFAULT / TECHNIQUES & AUTRES OPTIONS (Électricité, Construction, Mécanique, Couture, etc.)
+  return [
+    { id: `epst-tp-${ts}`, nom: 'Pratique & Atelier Spécialisé', code: 'TP', coefficient: 5, maxScore: 30, maxExamen: 60, maxSemestre: 120, maxAnnuel: 240, isOptionMajora: true, categorie: 'PRATIQUE' },
+    { id: `epst-tech-${ts}`, nom: 'Technologie de la Spécialité', code: 'TECH', coefficient: 4, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, isOptionMajora: true, categorie: 'OPTION' },
+    { id: `epst-dtech-${ts}`, nom: 'Dessin Technique & Schémas', code: 'DTECH', coefficient: 3, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, categorie: 'PRATIQUE' },
+    { id: `epst-rdm-${ts}`, nom: 'Mécanique Appliquée / RDM', code: 'RDM', coefficient: 3, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, categorie: 'SCIENCES' },
+    { id: `epst-fr-${ts}`, nom: 'Français & Expression', code: 'FR', coefficient: 3, maxScore: 20, maxExamen: 40, maxSemestre: 80, maxAnnuel: 160, categorie: 'LANGUES' },
+    { id: `epst-math-${ts}`, nom: 'Mathématiques Techniques', code: 'MATH', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'SCIENCES' },
+    { id: `epst-entr-${ts}`, nom: 'Entreprenariat & Gestion d\'Atelier', code: 'ENTR', coefficient: 2, maxScore: 10, maxExamen: 20, maxSemestre: 40, maxAnnuel: 80, categorie: 'CULTURE_GENERALE' },
+  ];
+}
+
+// ─── Structure Officielle des Classes EPST RDC ─────────────────────────────
+
+export interface ClasseOfficielleEPST {
+  id: string;
+  nom: string;
+  cycleId: string;
+  optionCode?: string;
+  salle: string;
+  capacite: number;
+  professeurTitulaire: string;
+}
+
+export function getClassStructureOfficialEPST(cycleId: string, optionCode: string = 'SECR_ADMIN'): ClasseOfficielleEPST[] {
+  const ts = Date.now();
+  if (cycleId === 'PRESCHOOL') {
+    return [
+      { id: `cls-mat1-${ts}`, nom: '1ère Maternelle (Petite Section)', cycleId: 'PRESCHOOL', salle: 'Salle M-01', capacite: 30, professeurTitulaire: 'Mme Claire Mukendi' },
+      { id: `cls-mat2-${ts}`, nom: '2ème Maternelle (Moyenne Section)', cycleId: 'PRESCHOOL', salle: 'Salle M-02', capacite: 35, professeurTitulaire: 'Mme Beatrice Kabamba' },
+      { id: `cls-mat3-${ts}`, nom: '3ème Maternelle (Grande Section)', cycleId: 'PRESCHOOL', salle: 'Salle M-03', capacite: 35, professeurTitulaire: 'Mme Sophie Tshimanga' },
+    ];
+  }
+
+  if (cycleId === 'PRIMAIRE') {
+    return [
+      { id: `cls-prim1a-${ts}`, nom: '1ère Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-101', capacite: 45, professeurTitulaire: 'M. Joseph Kalala' },
+      { id: `cls-prim1b-${ts}`, nom: '1ère Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-102', capacite: 45, professeurTitulaire: 'Mme Helene Masengu' },
+      { id: `cls-prim2a-${ts}`, nom: '2ème Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-201', capacite: 45, professeurTitulaire: 'M. Dieudonné Kande' },
+      { id: `cls-prim2b-${ts}`, nom: '2ème Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-202', capacite: 45, professeurTitulaire: 'Mme Rose Badibanga' },
+      { id: `cls-prim3a-${ts}`, nom: '3ème Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-301', capacite: 45, professeurTitulaire: 'M. Francois Ilunga' },
+      { id: `cls-prim3b-${ts}`, nom: '3ème Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-302', capacite: 45, professeurTitulaire: 'Mme Grace Kazadi' },
+      { id: `cls-prim4a-${ts}`, nom: '4ème Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-401', capacite: 40, professeurTitulaire: 'M. Alphonse Tshilombo' },
+      { id: `cls-prim4b-${ts}`, nom: '4ème Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-402', capacite: 40, professeurTitulaire: 'Mme Therese Ngalula' },
+      { id: `cls-prim5a-${ts}`, nom: '5ème Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-501', capacite: 40, professeurTitulaire: 'M. Patrick Mulamba' },
+      { id: `cls-prim5b-${ts}`, nom: '5ème Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-502', capacite: 40, professeurTitulaire: 'Mme Chantal Tshiyamba' },
+      { id: `cls-prim6a-${ts}`, nom: '6ème Primaire A (TENAFEP)', cycleId: 'PRIMAIRE', salle: 'Local P-601', capacite: 40, professeurTitulaire: 'M. Celestin Bukasa' },
+      { id: `cls-prim6b-${ts}`, nom: '6ème Primaire B (TENAFEP)', cycleId: 'PRIMAIRE', salle: 'Local P-602', capacite: 40, professeurTitulaire: 'Mme Pauline Mwamba' },
+    ];
+  }
+
+  if (cycleId === 'CTEB') {
+    return [
+      { id: `cls-cteb7a-${ts}`, nom: '7ème Éducation de Base A (7è CTEB)', cycleId: 'CTEB', salle: 'Pavillon EB-01', capacite: 45, professeurTitulaire: 'M. Emmanuel Kibambe' },
+      { id: `cls-cteb7b-${ts}`, nom: '7ème Éducation de Base B (7è CTEB)', cycleId: 'CTEB', salle: 'Pavillon EB-02', capacite: 45, professeurTitulaire: 'Mme Marie Mbuyi' },
+      { id: `cls-cteb8a-${ts}`, nom: '8ème Éducation de Base A (ENAFEP)', cycleId: 'CTEB', salle: 'Pavillon EB-03', capacite: 45, professeurTitulaire: 'M. Jean-Paul Mbayo' },
+      { id: `cls-cteb8b-${ts}`, nom: '8ème Éducation de Base B (ENAFEP)', cycleId: 'CTEB', salle: 'Pavillon EB-04', capacite: 45, professeurTitulaire: 'Mme Antoinette Kasongo' },
+    ];
+  }
+
+  const optName = OPTIONS_EPST.find(o => o.code === optionCode)?.nom || optionCode;
+  return [
+    { id: `cls-hum1-${ts}`, nom: `1ère (3è) Humanités ${optName}`, cycleId: 'HUMANITES', optionCode, salle: 'Aile H-101', capacite: 40, professeurTitulaire: 'M. Sylvain Tshisekedi' },
+    { id: `cls-hum2-${ts}`, nom: `2ème (4è) Humanités ${optName}`, cycleId: 'HUMANITES', optionCode, salle: 'Aile H-102', capacite: 40, professeurTitulaire: 'Mme Veronique Lumpungu' },
+    { id: `cls-hum3-${ts}`, nom: `3ème (5è) Humanités ${optName}`, cycleId: 'HUMANITES', optionCode, salle: 'Aile H-201', capacite: 40, professeurTitulaire: 'M. Desire Kabwe' },
+    { id: `cls-hum4-${ts}`, nom: `4ème (6è) Humanités ${optName} (EXAMEN D'ÉTAT)`, cycleId: 'HUMANITES', optionCode, salle: 'Aile H-202', capacite: 40, professeurTitulaire: 'Mme Christine Banza' },
+  ];
 }
