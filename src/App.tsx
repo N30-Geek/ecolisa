@@ -141,7 +141,7 @@ export function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <ExecutiveDashboard onNavigate={setActiveTab} onOpenRegistration={() => setActiveTab('students')} />;
+        return <ExecutiveDashboard activeSchoolYear={activeSchoolYear} onNavigate={setActiveTab} onOpenRegistration={() => setActiveTab('students')} />;
 
       // ── Gestion Pédagogies ──
       case 'students':
@@ -152,21 +152,25 @@ export function App() {
       case 'examens':
       case 'classes':
       case 'subjects':
-        return <AcademicManager activeSubTab={activeTab} />;
+        return <AcademicManager activeSchoolYear={activeSchoolYear} activeSubTab={activeTab} />;
 
       // ── Finances & Caisse ──
       case 'invoices':
+      case 'cash':
       case 'payroll':
       case 'expenses':
-        return <FinanceManager activeSubTab={activeTab} />;
+      case 'fees':
+      case 'accounting':
+      case 'reports':
+        return <FinanceManager activeSchoolYear={activeSchoolYear} activeSubTab={activeTab} />;
 
       // ── Administration ──
       case 'discipline':
         return <ComingSoonModule title="Discipline & Conduites" icon="⚖️" description="Registre de retenues, avertissements et cahier de liaison numérique." />;
       case 'teachers':
-        return <TeacherManager targetCategory="ENSEIGNANT" />;
+        return <TeacherManager activeSchoolYear={activeSchoolYear} targetCategory="ENSEIGNANT" />;
       case 'hr':
-        return <TeacherManager targetCategory="STAFF" />;
+        return <TeacherManager activeSchoolYear={activeSchoolYear} targetCategory="STAFF" />;
       case 'leaves':
         return <ComingSoonModule title="Congés & Absences" icon="🗓️" description="Gestion des demandes de congés et suivi des présences du personnel." />;
       // ── Vie Scolaire ──

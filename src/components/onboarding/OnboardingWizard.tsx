@@ -79,11 +79,11 @@ export interface CardCustomization {
   showCountryFlag: boolean;
   showFiligree: boolean;
   showMiniLogos: boolean;
-  cardTheme: 'blue' | 'indigo' | 'emerald' | 'gold';
+  cardTheme: 'blue' | 'indigo' | 'emerald' | 'gold' | 'burgundy' | 'violet' | 'light_rdc';
   cardLayout: 'portrait' | 'landscape';
   /** personnalisation par cycle (PRIMAIRE, CTEB, HUMANITES, ...) */
   byCycle?: Record<string, Partial<CardFieldOverride>>;
-  filigreeType: 'pattern' | 'text' | 'shape' | 'image';
+  filigreeType: 'pattern' | 'text' | 'shape' | 'image' | 'guilloche' | 'mesh_grid' | 'epst_seal_repeating';
   filigreeText: string;
   filigreeShape: 'circles' | 'lines' | 'dots' | 'diamonds' | 'cross' | 'waves' | 'stars';
   filigreeImage: string;
@@ -96,6 +96,10 @@ export interface CardCustomization {
   showQR: boolean;
   showTricolor: boolean;
   showSchoolSeal: boolean;
+  showOfficialEpstLogo?: boolean;
+  showSchoolLogo?: boolean;
+  headerBgColor?: string;
+  cardBgColor?: string;
 }
 
 export interface SchoolConfig {

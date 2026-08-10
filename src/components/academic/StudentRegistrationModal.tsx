@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   User,
   GraduationCap,
@@ -35,16 +36,21 @@ import {
   UserCheck,
   DollarSign,
   FileText,
-  Award
+  Award,
+  CheckCircle2,
+  UserPlus,
+  AlertTriangle
 } from 'lucide-react';
 import { Eleve, ClasseScolaire, AnneeScolaireConfig, FactureEleve, TransactionPaiement, TypeFraisScolaire, LigneFacture } from '../../types';
 import type { SchoolConfig } from '../onboarding/OnboardingWizard';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
 import { WebcamCaptureModal } from '../common/WebcamCaptureModal';
+import { ReceiptModal } from '../finance/ReceiptModal';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { formatCurrency, convertCurrency } from '../../utils/currency';
+import { NumberInput } from '../common/NumberInput';
 import { PROVINCES_RDC } from '../../data/referentielEPST';
 
 const PROVINCES_RDC_OPTIONS: SelectOption[] = PROVINCES_RDC.map(p => ({ value: p, label: p }));
@@ -101,10 +107,70 @@ const REGIME_OPTIONS: SelectOption[] = [
   { value: 'SEMI_INTERNE', label: 'Semi-Interne (Cantine)' },
 ];
 
-const LANGUE_OPTIONS: SelectOption[] = [
-  { value: 'Français', label: 'Français (Programme Officiel EPST)' },
-  { value: 'Anglais', label: 'Section Bilangue Français / Anglais' },
+const RELIGION_OPTIONS: SelectOption[] = [
+  { value: 'Catholique', label: 'Catholique (Église Catholique RDC)' },
+  { value: 'Protestante', label: 'Protestante (ECC / Évangélique)' },
+  { value: 'Kimbanguiste', label: 'Kimbanguiste (EJCSK)' },
+  { value: 'Église de Réveil', label: 'Église de Réveil / Charismatique' },
+  { value: 'Islam / Musulmane', label: 'Islam / Musulmane' },
+  { value: 'Orthodoxe', label: 'Orthodoxe' },
+  { value: 'Témoins de Jéhovah', label: 'Témoins de Jéhovah' },
+  { value: 'Aucune', label: 'Aucune / Non spécifiée' },
+  { value: 'AUTRE', label: '✏️ Autre confession (Saisie manuelle...)' },
 ];
+
+const RELATION_TUTEUR_OPTIONS: SelectOption[] = [
+  { value: 'Père', label: 'Père' },
+  { value: 'Mère', label: 'Mère' },
+  { value: 'Tuteur légal', label: 'Tuteur légal' },
+  { value: 'Oncle', label: 'Oncle' },
+  { value: 'Tante', label: 'Tante' },
+  { value: 'Grand-parent', label: 'Grand-parent' },
+  { value: 'Frère', label: 'Frère' },
+  { value: 'Sœur', label: 'Sœur' },
+  { value: 'Autre', label: 'Autre Parent' },
+];
+
+const RELATION_URGENCE_OPTIONS: SelectOption[] = [
+  { value: 'Parent', label: 'Parent' },
+  { value: 'Tuteur', label: 'Tuteur Légal' },
+  { value: 'Médecin', label: 'Médecin Famille' },
+  { value: 'Voisin', label: 'Voisin / Proche' },
+  { value: 'Autre', label: 'Autre Contact' },
+];
+
+const TRANSPORT_OPTIONS: SelectOption[] = [
+  { value: 'AUCUN', label: 'Aucun (Marche à pied)' },
+  { value: 'BUS', label: 'Bus Scolaire Écolisa' },
+  { value: 'VOITURE', label: 'Voiture Personnelle' },
+  { value: 'MOTO', label: 'Transport Moto / Taxi' },
+  { value: 'PIED', label: 'À pied' },
+];
+
+const LANGUE_MATERNELLE_OPTIONS: SelectOption[] = [
+  { value: 'Français', label: 'Français' },
+  { value: 'Lingala', label: 'Lingala' },
+  { value: 'Swahili', label: 'Swahili' },
+  { value: 'Kikongo', label: 'Kikongo' },
+  { value: 'Tshiluba', label: 'Tshiluba' },
+  { value: 'Anglais', label: 'Anglais' },
+  { value: 'Autre', label: 'Autre Langue' },
+];
+
+// Helper de priorité des frais scolaires
+const getFeePriorityInfo = (ft: Partial<TypeFraisScolaire> & { nom?: string; categorie?: string }) => {
+  const cat = String(ft.categorie || '');
+  if (ft.obligatoire || cat === 'FRAIS_INSCRIPTION' || cat === 'FRAIS_REINSCRIPTION') {
+    return { priority: 1, code: 'P1', label: 'P1 - Inscription (Obligatoire)', color: '#10b981', badgeBg: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' };
+  }
+  if (cat.includes('CARTE') || cat.includes('MINERVAL')) {
+    return { priority: 2, code: 'P2', label: 'P2 - Identité & Minerval', color: '#6366f1', badgeBg: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30' };
+  }
+  if (cat.includes('CONNEXES') || cat.includes('KITS') || cat.includes('EQUIPEMENTS') || cat.includes('BUS') || cat.includes('ACTIVITE')) {
+    return { priority: 3, code: 'P3', label: 'P3 - Services & Équipements', color: '#f59e0b', badgeBg: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30' };
+  }
+  return { priority: 4, code: 'P4', label: 'P4 - Frais Optionnels', color: '#64748b', badgeBg: 'bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30' };
+};
 
 const MOYEN_PAIEMENT_OPTIONS: SelectOption[] = [
   { value: 'CASH', label: 'Cash en Caisse', icon: Banknote },
@@ -130,8 +196,8 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
   const isEdit = !!initialStudent;
   const { currency: systemCurrency, exchangeRate } = useSchoolConfig();
 
-  // Navigation du Wizard (4 étapes d'origine conservées)
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  // Navigation du Wizard (3 étapes optimisées)
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [previewTab, setPreviewTab] = useState<'BADGE' | 'SYNTHESE'>('BADGE');
   const [isWebcamOpen, setIsWebcamOpen] = useState<boolean>(false);
 
@@ -141,8 +207,16 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
   const [isLoading, setIsLoading] = useState(true);
   const [feeTypes, setFeeTypes] = useState<TypeFraisScolaire[]>([]);
   const [selectedFeeIds, setSelectedFeeIds] = useState<string[]>([]);
+  const [customFeePayments, setCustomFeePayments] = useState<Record<string, number>>({});
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // État de confirmation / prompt post-inscription (Inscrire un autre élève ?)
+  const [showSuccessPrompt, setShowSuccessPrompt] = useState<boolean>(false);
+  const [justRegisteredStudent, setJustRegisteredStudent] = useState<Eleve | null>(null);
+  const [lastSavedInvoice, setLastSavedInvoice] = useState<FactureEleve | null>(null);
+  const [lastSavedPayment, setLastSavedPayment] = useState<TransactionPaiement | null>(null);
+  const [showReceiptModal, setShowReceiptModal] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -223,7 +297,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
     moyenneAnneePrecedente: 0,
     dateInscription: new Date().toISOString().split('T')[0],
 
-    // Étape 4 : Frais d'inscription & Paiement
+    // Étape 3 : Frais d'inscription & Paiement
     payerMaintenant: true,
     montantInscription: 0,
     devise: systemCurrency as 'USD' | 'CDF',
@@ -232,6 +306,8 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
     datePaiement: new Date().toISOString().split('T')[0],
     numeroRecu: `RECU-${Date.now()}`,
     nomCaissier: '',
+    derogationActive: false,
+    derogationMotif: '',
   });
 
   // Matricule auto-généré format EPST RDC
@@ -283,36 +359,147 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
     LocalDatabaseService.getFeeTypes(formData.schoolYearId).then(setFeeTypes);
   }, [formData.schoolYearId]);
 
-  // Frais applicables selon le profil de l'élève
+  // Frais applicables selon la classe et l'année scolaire sélectionnées (Synthèse dynamique)
   const applicableFees = useMemo(() => {
-    const option = CYCLES_AVEC_OPTIONS.includes(formData.cycleId)
-      ? formData.optionEPST
-      : 'TRONC_COMMUN';
-    return feeTypes.filter(ft => {
-      if (ft.actif === false) return false;
-      if (ft.schoolYearId && ft.schoolYearId !== formData.schoolYearId && ft.anneeScolaireId !== formData.schoolYearId) return false;
-      if (ft.cycleId && ft.cycleId !== 'TOUS' && ft.cycleId !== formData.cycleId) return false;
-      if (ft.optionCode && ft.optionCode !== 'TOUS' && ft.optionCode !== option) return false;
-      if (ft.regime && ft.regime !== 'TOUS' && ft.regime !== formData.regime) return false;
-      if (ft.portee && ft.portee !== 'TOUS' && ft.portee !== formData.nomClasse) return false;
-      return true;
-    });
-  }, [feeTypes, formData.cycleId, formData.optionEPST, formData.regime, formData.nomClasse, formData.schoolYearId]);
+    const list: any[] = [];
+    const targetClass = classesList.find(c => c.id === formData.classId);
+    const targetYear = schoolYears.find(y => y.id === (targetClass?.schoolYearId || formData.schoolYearId));
 
-  // Sélection automatique des frais d'inscription
-  useEffect(() => {
-    if (feeTypes.length && !selectedFeeIds.length) {
-      const auto = applicableFees
-        .filter(ft => ft.obligatoire || ft.categorie === 'FRAIS_INSCRIPTION' || ft.categorie === 'FRAIS_REINSCRIPTION')
-        .map(ft => ft.id);
-      setSelectedFeeIds(auto);
+    // 1. Frais d'Inscription (Priorité 1 - Obligatoire)
+    const inscriptMontant = targetClass?.fraisInscription ?? targetYear?.fraisInscription ?? 0;
+    if (inscriptMontant > 0) {
+      list.push({
+        id: 'fee_inscript_auto',
+        nom: `Frais d'Inscription ${targetClass?.nom ? '(' + targetClass.nom + ')' : ''}`.trim(),
+        montant: inscriptMontant,
+        devise: targetClass?.devise || systemCurrency,
+        categorie: 'FRAIS_INSCRIPTION',
+        obligatoire: true,
+        actif: true,
+      });
     }
-  }, [applicableFees, feeTypes.length, selectedFeeIds.length]);
+
+    // 2. Frais de Carte Élève & Badge QR Code (Priorité 1 - Obligatoire)
+    if (targetYear?.fraisCarte && targetYear.fraisCarte > 0) {
+      list.push({
+        id: 'fee_carte_auto',
+        nom: 'Frais de Carte d’Élève & Badge QR Code',
+        montant: targetYear.fraisCarte,
+        devise: systemCurrency,
+        categorie: 'FRAIS_CARTE',
+        obligatoire: true,
+        actif: true,
+      });
+    }
+
+    // 3. Frais de Connexion Système & SMS (Priorité 1 - Obligatoire)
+    if (targetYear?.fraisConnexion && targetYear.fraisConnexion > 0) {
+      list.push({
+        id: 'fee_connexion_auto',
+        nom: 'Frais de Plateforme Système & SMS',
+        montant: targetYear.fraisConnexion,
+        devise: systemCurrency,
+        categorie: 'FRAIS_CONNEXION',
+        obligatoire: true,
+        actif: true,
+      });
+    }
+
+    // 4. Frais de Scolarité / Minerval (Priorité 2 - Payable simultanément)
+    const minervalMontant = targetClass?.fraisMinerval ?? 0;
+    if (minervalMontant > 0) {
+      list.push({
+        id: 'fee_minerval_auto',
+        nom: `Frais de Scolarité / Minerval (${targetClass?.nom || 'Classe'})`,
+        montant: minervalMontant,
+        devise: targetClass?.devise || systemCurrency,
+        categorie: 'FRAIS_MINERVAL',
+        obligatoire: false,
+        actif: true,
+      });
+    }
+
+    // 5. Frais Annexes de la classe ou de l'année
+    if (targetClass?.fraisAnnexe && targetClass.fraisAnnexe > 0) {
+      list.push({
+        id: 'fee_annexe_class_auto',
+        nom: `Frais Annexes Classe (${targetClass.nom})`,
+        montant: targetClass.fraisAnnexe,
+        devise: targetClass.devise || systemCurrency,
+        categorie: 'FRAIS_ANNEXE',
+        obligatoire: false,
+        actif: true,
+      });
+    }
+
+    if (targetYear?.fraisAnnexes && targetYear.fraisAnnexes.length > 0) {
+      targetYear.fraisAnnexes.forEach(fa => {
+        list.push({
+          id: `fee_annexe_${fa.id}`,
+          nom: fa.intitule,
+          montant: fa.montant,
+          devise: fa.devise || systemCurrency,
+          categorie: fa.typeFrais || 'FRAIS_ANNEXE',
+          obligatoire: fa.obligatoire ?? false,
+          actif: true,
+        });
+      });
+    }
+
+    // 6. DB feeTypes personnalisés
+    if (feeTypes && feeTypes.length > 0) {
+      const option = CYCLES_AVEC_OPTIONS.includes(formData.cycleId) ? formData.optionEPST : 'TRONC_COMMUN';
+      feeTypes.forEach(ft => {
+        if (ft.actif === false) return;
+        if (ft.schoolYearId && ft.schoolYearId !== formData.schoolYearId && ft.anneeScolaireId !== formData.schoolYearId) return;
+        if (ft.cycleId && ft.cycleId !== 'TOUS' && ft.cycleId !== formData.cycleId) return;
+        if (ft.optionCode && ft.optionCode !== 'TOUS' && ft.optionCode !== option) return;
+        if (ft.regime && ft.regime !== 'TOUS' && ft.regime !== formData.regime) return;
+        if (ft.portee && ft.portee !== 'TOUS' && ft.portee !== formData.nomClasse) return;
+        
+        if (!list.some(existing => existing.id === ft.id || existing.nom.toLowerCase() === ft.nom.toLowerCase())) {
+          list.push(ft);
+        }
+      });
+    }
+
+    return list;
+  }, [classesList, schoolYears, feeTypes, formData.classId, formData.schoolYearId, formData.cycleId, formData.optionEPST, formData.regime, formData.nomClasse, systemCurrency]);
+
+  // Initialisation par défaut des montants versés pour les frais lorsqu'ils sont chargés
+  useEffect(() => {
+    if (applicableFees.length > 0) {
+      setCustomFeePayments(prev => {
+        const next = { ...prev };
+        applicableFees.forEach(ft => {
+          if (next[ft.id] === undefined) {
+            next[ft.id] = ft.montant;
+          }
+        });
+        return next;
+      });
+    }
+  }, [applicableFees]);
+
+  // Sélection automatique des frais obligatoires par défaut
+  useEffect(() => {
+    if (applicableFees.length > 0) {
+      const auto = applicableFees
+        .filter(ft => ft.obligatoire || ft.categorie === 'FRAIS_INSCRIPTION' || ft.categorie === 'FRAIS_CARTE' || ft.categorie === 'FRAIS_CONNEXION' || ft.categorie === 'FRAIS_REINSCRIPTION')
+        .map(ft => ft.id);
+      
+      setSelectedFeeIds(prev => {
+        if (prev.length === 0) return auto;
+        const valid = prev.filter(id => applicableFees.some(f => f.id === id));
+        return Array.from(new Set([...valid, ...auto]));
+      });
+    }
+  }, [applicableFees]);
 
   // Lignes de facture calculées
   const invoiceLignes: LigneFacture[] = useMemo(() => {
     return selectedFeeIds.map(id => {
-      const ft = feeTypes.find(f => f.id === id);
+      const ft = applicableFees.find(f => f.id === id);
       const rawMontant = ft?.montant || 0;
       const ftDevise = ft?.devise || systemCurrency;
       const finalMontant = convertCurrency(rawMontant, ftDevise, formData.devise, exchangeRate);
@@ -326,12 +513,68 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
         devise: formData.devise,
       };
     });
-  }, [selectedFeeIds, feeTypes, systemCurrency, formData.devise, exchangeRate]);
+  }, [selectedFeeIds, applicableFees, systemCurrency, formData.devise, exchangeRate]);
 
   // Total calculé des frais sélectionnés
   const totalFacture = useMemo(() => {
     return invoiceLignes.reduce((sum, l) => sum + l.montant, 0);
   }, [invoiceLignes]);
+
+  // Total payé à la caisse calculé depuis la somme des saisies individuelles par frais
+  const totalPaidCalculated = useMemo(() => {
+    if (!formData.payerMaintenant) return 0;
+    return selectedFeeIds.reduce((sum, id) => {
+      const paid = customFeePayments[id];
+      return sum + (paid !== undefined ? (Number(paid) || 0) : 0);
+    }, 0);
+  }, [selectedFeeIds, customFeePayments, formData.payerMaintenant]);
+
+  // Resynchroniser le montant de caisse global avec la somme des paiements individuels
+  useEffect(() => {
+    if (formData.payerMaintenant) {
+      setFormData(prev => ({ ...prev, montantInscription: totalPaidCalculated }));
+    }
+  }, [totalPaidCalculated, formData.payerMaintenant]);
+
+  // Répartition par ligne de frais selon la saisie séparée des montants
+  const allocatedFeeLines = useMemo(() => {
+    const sorted = [...invoiceLignes].sort((a, b) => {
+      const ftA = applicableFees.find(f => f.id === a.feeTypeId);
+      const ftB = applicableFees.find(f => f.id === b.feeTypeId);
+      const prioA = ftA ? getFeePriorityInfo(ftA).priority : 4;
+      const prioB = ftB ? getFeePriorityInfo(ftB).priority : 4;
+      return prioA - prioB;
+    });
+
+    return sorted.map(ligne => {
+      const ft = applicableFees.find(f => f.id === ligne.feeTypeId);
+      const prioInfo = ft ? getFeePriorityInfo(ft) : getFeePriorityInfo({ nom: ligne.nom, categorie: ligne.categorie } as any);
+      
+      const rawUserPaid = formData.payerMaintenant ? customFeePayments[ligne.feeTypeId] : 0;
+      const userPaidNum = rawUserPaid !== undefined ? Number(rawUserPaid) || 0 : (formData.payerMaintenant ? ligne.montant : 0);
+      const allocated = Math.min(ligne.montant, Math.max(0, userPaidNum));
+      const soldeRestant = Math.max(0, ligne.montant - allocated);
+      const isCovered = allocated >= ligne.montant - 0.001;
+      const isPartial = allocated > 0 && !isCovered;
+
+      return {
+        ...ligne,
+        prioInfo,
+        allocated,
+        soldeRestant,
+        isCovered,
+        isPartial,
+      };
+    });
+  }, [invoiceLignes, applicableFees, formData.payerMaintenant, customFeePayments]);
+
+  // Vérifier si les frais d'inscription obligatoires (P1) sont entièrement couverts
+  const mandatoryFeesCovered = useMemo(() => {
+    if (!formData.payerMaintenant) return true;
+    const p1Lines = allocatedFeeLines.filter(l => l.prioInfo.priority === 1);
+    if (p1Lines.length === 0) return true;
+    return p1Lines.every(l => l.isCovered);
+  }, [formData.payerMaintenant, allocatedFeeLines]);
 
   // Mettre à jour le montantInscription dès que le total change
   useEffect(() => {
@@ -493,7 +736,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
       }
       setStep(3);
     } else if (step === 3) {
-      setStep(4);
+      handleSaveStudent();
     }
   };
 
@@ -514,6 +757,14 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
 
     setIsSubmitting(true);
     setValidationError(null);
+
+    // Vérification de la couverture des frais obligatoires (P1)
+    if (formData.payerMaintenant && invoiceLignes.length > 0 && !mandatoryFeesCovered && !formData.derogationActive) {
+      setValidationError("Impossible d'inscrire l'élève : les frais d'inscription obligatoires (P1) ne sont pas soldés. Si la Direction autorise cet acompte, veuillez cocher la case 'Activer la Dérogation / Inscription Temporaire'.");
+      setStep(3);
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       const targetClass = classesList.find(c => c.id === formData.classId);
@@ -538,7 +789,9 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
         groupeSanguin: formData.groupeSanguin,
         allergies: formData.allergies,
         informationsMedicales: formData.informationsMedicales,
-        description: formData.description || formData.notes,
+        description: formData.derogationActive
+          ? `[Dérogation Accordée - Inscription Temporaire] ${formData.derogationMotif ? 'Motif: ' + formData.derogationMotif : ''} | ${formData.description || ''}`
+          : formData.description,
         notesPsychopedagogiques: formData.notes || formData.description,
         telephoneEleve: formData.telephoneEleve,
         emailEleve: formData.emailEleve,
@@ -546,7 +799,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
         schoolYearId: formData.schoolYearId,
         classId: formData.classId,
         nomClasse: targetClass?.nom || formData.nomClasse,
-        statut: 'ACTIF',
+        statut: (formData.derogationActive || !mandatoryFeesCovered) ? 'ACTIF' : 'ACTIF',
         nomPere: formData.nomPere,
         professionPere: formData.professionPere,
         telephonePere: formData.telephonePere,
@@ -654,16 +907,103 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
             allocations,
           };
           await LocalDatabaseService.addPayment(payment);
+          setLastSavedInvoice(newInvoice);
+          setLastSavedPayment(payment);
+        } else {
+          setLastSavedInvoice(newInvoice);
+          setLastSavedPayment(null);
         }
       }
 
-      onBack();
+      if (isEdit) {
+        onBack();
+      } else if (saved) {
+        setJustRegisteredStudent(saved);
+        setShowSuccessPrompt(true);
+      } else {
+        onBack();
+      }
     } catch (err: any) {
       console.error('[StudentRegistration] Erreur enregistrement :', err);
       setValidationError(err?.message || "Erreur lors de l'enregistrement de l'élève.");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Continuer d'inscrire un autre élève (Réinitialisation propre du formulaire)
+  const handleContinueNewRegistration = () => {
+    setShowSuccessPrompt(false);
+    setJustRegisteredStudent(null);
+    const newRegCode = Math.floor(1000 + Math.random() * 9000);
+    const newRegistrationNumber = `2026-EPST-${newRegCode}-KIN`;
+
+    setFormData(prev => ({
+      ...prev,
+      registrationNumber: newRegistrationNumber,
+      nom: '',
+      postnom: '',
+      prenom: '',
+      sexe: 'M',
+      dateNaissance: '2015-01-01',
+      lieuNaissance: 'Kinshasa',
+      nationalite: 'Congolaise (RDC)',
+      province: 'Kinshasa',
+      provinceOrigine: 'Kinshasa',
+      territoireCommune: '',
+      chefferieSecteur: '',
+      groupement: '',
+      village: '',
+      adressePhysique: '',
+      adresse: '',
+      groupeSanguin: 'O+',
+      allergies: '',
+      informationsMedicales: '',
+      description: '',
+      telephoneEleve: '',
+      emailEleve: '',
+      photoUrl: '',
+      nomPere: '',
+      professionPere: '',
+      telephonePere: '',
+      emailPere: '',
+      nomMere: '',
+      professionMere: '',
+      telephoneMere: '',
+      emailMere: '',
+      emailParent: '',
+      contactUrgence: '',
+      notes: '',
+      numeroActeNaissance: '',
+      ecoleOrigine: '',
+      religion: '',
+      handicap: '',
+      vaccinations: '',
+      medecinTraitant: '',
+      assuranceSante: '',
+      numeroCarteSante: '',
+      nomTuteur: '',
+      telephoneTuteur: '',
+      professionTuteur: '',
+      relationTuteur: 'Père',
+      adresseTuteur: '',
+      nomReferentUrgence: '',
+      telephoneReferentUrgence: '',
+      relationReferentUrgence: 'Parent',
+      payerMaintenant: true,
+      referencePaiement: '',
+      numeroRecu: `RECU-${Date.now()}`,
+    }));
+
+    setStep(1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Terminer et retourner au répertoire des élèves
+  const handleFinishRegistration = () => {
+    setShowSuccessPrompt(false);
+    setJustRegisteredStudent(null);
+    onBack();
   };
 
   const cycleIcon = formData.cycleId === 'MATERNELLE' ? Baby : formData.cycleId === 'HUMANITES' ? GraduationCap : BookOpenCheck;
@@ -715,19 +1055,18 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
               </div>
             </div>
 
-            {/* Barre de navigation des 4 étapes d'origine */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-1.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+            {/* Barre de navigation des 3 étapes optimisées */}
+            <div className="grid grid-cols-3 gap-2 p-1.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
               {[
-                { num: 1, label: 'Identité', icon: User },
-                { num: 2, label: 'Scolarité', icon: School },
-                { num: 3, label: 'Parents', icon: UsersIcon },
-                { num: 4, label: 'Paiement', icon: Wallet },
+                { num: 1, label: 'Identité & Tuteurs', icon: User },
+                { num: 2, label: 'Scolarité & EPST', icon: School },
+                { num: 3, label: 'Frais & Paiement', icon: Wallet },
               ].map((s) => (
                 <button
                   key={s.num}
                   type="button"
                   onClick={() => setStep(s.num as any)}
-                  className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-black transition-all cursor-pointer ${
                     step === s.num
                       ? 'bg-indigo-600 text-white shadow-xs'
                       : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
@@ -747,10 +1086,10 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
             </div>
           )}
 
-          {/* Formulaire Pas-à-Pas */}
+          {/* Formulaire Pas-à-Pas (3 Étapes Optimisées) */}
           <form onSubmit={handleSaveStudent} className="space-y-6">
             
-            {/* ÉTAPE 1 : IDENTITÉ, ORIGINE RDC & SANTÉ */}
+            {/* ÉTAPE 1 : IDENTITÉ, PARENTS / TUTEURS & FICHE SANTÉ */}
             {step === 1 && (
               <div className="space-y-6 animate-fadeIn">
                 {/* Photo Studio & Upload */}
@@ -800,33 +1139,29 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                   </div>
                 </div>
 
-                {/* Section Identifiant EPST */}
-                <div className="p-4 rounded-xl border space-y-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
-                    <FileText className="w-4 h-4" />
-                    <span>Identifiant Officiel EPST RDC</span>
-                  </h3>
-                  <div>
-                    <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                      N° PERMANENT EPST / Matricule Élève
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.registrationNumber}
-                      onChange={(e) => setFormData({ ...formData, registrationNumber: e.target.value })}
-                      placeholder="Ex: 2026-EPST-8492-KIN"
-                      className="w-full px-3.5 py-2 rounded-lg text-xs font-mono font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                    />
-                  </div>
-                </div>
-
                 {/* Section Identité Civique */}
                 <div className="space-y-4">
                   <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
                     <User className="w-4 h-4 text-indigo-500" />
-                    <span>Identité Civique de l'Élève</span>
+                    <span>1. Identité Civique & Matricule EPST</span>
                   </h3>
+
+                  <div className="p-3.5 rounded-xl border flex items-center gap-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <FileText className="w-4 h-4 text-indigo-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                        N° PERMANENT EPST / Matricule Officiel Élève
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.registrationNumber}
+                        onChange={(e) => setFormData({ ...formData, registrationNumber: e.target.value })}
+                        placeholder="Ex: 2026-EPST-8492-KIN"
+                        className="w-full bg-transparent text-xs font-mono font-bold focus:outline-none"
+                        style={{ color: 'var(--text-primary)' }}
+                      />
+                    </div>
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
@@ -950,14 +1285,240 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                   </div>
                 </div>
 
-                {/* Section Santé */}
-                <div className="p-4 rounded-xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                {/* Section Intégrée : Parents, Tuteurs Légaux & Contacts Urgence */}
+                <div className="p-5 rounded-2xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2 border-b" style={{ borderColor: 'var(--border)' }}>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-2">
+                      <UsersIcon className="w-4 h-4" />
+                      <span>2. Parents, Tuteurs Légaux & Contacts Famille</span>
+                    </h3>
+
+                    {/* Boutons d'auto-remplissage rapide du Tuteur */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (formData.nomPere) {
+                            setFormData(prev => ({
+                              ...prev,
+                              nomTuteur: prev.nomPere,
+                              telephoneTuteur: prev.telephonePere,
+                              professionTuteur: prev.professionPere,
+                              relationTuteur: 'Père',
+                            }));
+                          }
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 cursor-pointer transition-all"
+                      >
+                        Copier Père comme Tuteur
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (formData.nomMere) {
+                            setFormData(prev => ({
+                              ...prev,
+                              nomTuteur: prev.nomMere,
+                              telephoneTuteur: prev.telephoneMere,
+                              professionTuteur: prev.professionMere,
+                              relationTuteur: 'Mère',
+                            }));
+                          }
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 cursor-pointer transition-all"
+                      >
+                        Copier Mère comme Tuteur
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Fiche Père */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Nom du Père
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.nomPere}
+                        onChange={(e) => setFormData({ ...formData, nomPere: e.target.value })}
+                        placeholder="Nom complet du père"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Téléphone du Père
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.telephonePere}
+                        onChange={(e) => setFormData({ ...formData, telephonePere: e.target.value })}
+                        placeholder="+243 ..."
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Profession du Père
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.professionPere}
+                        onChange={(e) => setFormData({ ...formData, professionPere: e.target.value })}
+                        placeholder="Ex: Ingénieur"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Fiche Mère */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Nom de la Mère
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.nomMere}
+                        onChange={(e) => setFormData({ ...formData, nomMere: e.target.value })}
+                        placeholder="Nom complet de la mère"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Téléphone de la Mère
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.telephoneMere}
+                        onChange={(e) => setFormData({ ...formData, telephoneMere: e.target.value })}
+                        placeholder="+243 ..."
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Profession de la Mère
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.professionMere}
+                        onChange={(e) => setFormData({ ...formData, professionMere: e.target.value })}
+                        placeholder="Ex: Enseignante"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Fiche Tuteur Responsable & Urgence */}
+                  <div className="pt-3 border-t space-y-4" style={{ borderColor: 'var(--border)' }}>
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                          Nom du Tuteur Principal
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.nomTuteur}
+                          onChange={(e) => setFormData({ ...formData, nomTuteur: e.target.value })}
+                          placeholder="Nom complet"
+                          className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                          Téléphone Tuteur
+                        </label>
+                        <input
+                          type="tel"
+                          value={formData.telephoneTuteur}
+                          onChange={(e) => setFormData({ ...formData, telephoneTuteur: e.target.value })}
+                          placeholder="+243 ..."
+                          className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                          Lien de Parenté
+                        </label>
+                        <CustomSelect
+                          options={RELATION_TUTEUR_OPTIONS}
+                          value={formData.relationTuteur}
+                          onChange={(val) => setFormData({ ...formData, relationTuteur: val })}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                          Contact Urgence Infirmerie
+                        </label>
+                        <input
+                          type="tel"
+                          value={formData.telephoneReferentUrgence}
+                          onChange={(e) => setFormData({ ...formData, telephoneReferentUrgence: e.target.value, contactUrgence: e.target.value })}
+                          placeholder="+243 (Urgence)"
+                          className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-rose-500"
+                          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section Confession Religieuse & Santé / Infirmerie */}
+                <div className="p-5 rounded-2xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                   <h3 className="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-2">
                     <Heart className="w-4 h-4" />
-                    <span>Santé & Groupe Sanguin</span>
+                    <span>3. Confession Religieuse & Fiche Médicale Infirmerie</span>
                   </h3>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {/* Confession Religieuse avec Option Saisie Manuelle */}
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Confession Religieuse
+                      </label>
+                      <CustomSelect
+                        options={RELIGION_OPTIONS}
+                        value={formData.religion}
+                        onChange={(val) => setFormData({ ...formData, religion: val })}
+                      />
+                    </div>
+
+                    {/* Saisie manuelle de la religion si option "AUTRE" sélectionnée */}
+                    {formData.religion === 'AUTRE' && (
+                      <div>
+                        <label className="block text-xs font-bold mb-1.5 text-indigo-600 dark:text-indigo-400">
+                          Précisez la Religion <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={(formData as any).religionAutre || ''}
+                          onChange={(e) => setFormData({ ...formData, religionAutre: e.target.value } as any)}
+                          placeholder="Entrez la confession religieuse..."
+                          className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
+                        />
+                      </div>
+                    )}
+
                     <div>
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Groupe Sanguin
@@ -971,28 +1532,31 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
 
                     <div>
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Langue Maternelle
+                      </label>
+                      <CustomSelect
+                        options={LANGUE_MATERNELLE_OPTIONS}
+                        value={formData.langueMaternelle}
+                        onChange={(val) => setFormData({ ...formData, langueMaternelle: val })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Allergies Connues
                       </label>
                       <input
                         type="text"
                         value={formData.allergies}
                         onChange={(e) => setFormData({ ...formData, allergies: e.target.value })}
-                        placeholder="Ex: Intolérance au lactose"
+                        placeholder="Ex: Poussière, lactose..."
                         className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                       />
                     </div>
-                  </div>
-                </div>
 
-                {/* Section Dossier Administratif & Social */}
-                <div className="p-4 rounded-xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
-                    <FileText className="w-4 h-4" />
-                    <span>Dossier Administratif & Social</span>
-                  </h3>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         N° Acte de Naissance
@@ -1009,119 +1573,13 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
 
                     <div>
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        École d'Origine
+                        Antécédents Médicaux / Notes
                       </label>
                       <input
                         type="text"
-                        value={formData.ecoleOrigine}
-                        onChange={(e) => setFormData({ ...formData, ecoleOrigine: e.target.value })}
-                        placeholder="Nom de l'école précédente"
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Religion
-                      </label>
-                      <CustomSelect
-                        options={[
-                          { value: '', label: 'Non précisée' },
-                          { value: 'Catholique', label: 'Catholique' },
-                          { value: 'Protestant', label: 'Protestant / Évangélique' },
-                          { value: 'Kimbanguiste', label: 'Kimbanguiste' },
-                          { value: 'Musulman', label: 'Musulman' },
-                          { value: 'Autre', label: 'Autre' },
-                        ]}
-                        value={formData.religion}
-                        onChange={(val) => setFormData({ ...formData, religion: val })}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Langue Maternelle
-                      </label>
-                      <CustomSelect
-                        options={[
-                          { value: 'Français', label: 'Français' },
-                          { value: 'Lingala', label: 'Lingala' },
-                          { value: 'Swahili', label: 'Swahili' },
-                          { value: 'Kikongo', label: 'Kikongo' },
-                          { value: 'Tshiluba', label: 'Tshiluba' },
-                          { value: 'Autre', label: 'Autre' },
-                        ]}
-                        value={formData.langueMaternelle}
-                        onChange={(val) => setFormData({ ...formData, langueMaternelle: val })}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Handicap / Affection
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.handicap}
-                        onChange={(e) => setFormData({ ...formData, handicap: e.target.value })}
-                        placeholder="Aucun ou préciser"
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Vaccinations à jour
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.vaccinations}
-                        onChange={(e) => setFormData({ ...formData, vaccinations: e.target.value })}
-                        placeholder="Ex: BCG, DTC, Rougeole"
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Médecin Traitant
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.medecinTraitant}
-                        onChange={(e) => setFormData({ ...formData, medecinTraitant: e.target.value })}
-                        placeholder="Nom et contact du médecin"
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Assurance / Mutuelle Santé
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.assuranceSante}
-                        onChange={(e) => setFormData({ ...formData, assuranceSante: e.target.value })}
-                        placeholder="Ex: CNSS, privée"
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        N° Carte / Fiche Médicale
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.numeroCarteSante}
-                        onChange={(e) => setFormData({ ...formData, numeroCarteSante: e.target.value })}
-                        placeholder="Numéro de carte"
+                        value={formData.informationsMedicales}
+                        onChange={(e) => setFormData({ ...formData, informationsMedicales: e.target.value })}
+                        placeholder="Précisez si affection particulière"
                         className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                       />
@@ -1135,14 +1593,14 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                     onClick={handleStepNext}
                     className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-xs transition-all cursor-pointer"
                   >
-                    <span>Passer à l’Étape 2 (Scolarité)</span>
+                    <span>Passer à l’Étape 2 (Scolarité & EPST)</span>
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* ÉTAPE 2 : SCOLARITÉ, PROMOTION & OPTION EPST */}
+            {/* ÉTAPE 2 : SCOLARITÉ, PROMOTION & FILIÈRE EPST */}
             {step === 2 && (
               <div className="space-y-6 animate-fadeIn">
                 <div className="space-y-4">
@@ -1237,7 +1695,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                       Langue d'Enseignement
                     </label>
                     <CustomSelect
-                      options={LANGUE_OPTIONS}
+                      options={LANGUE_MATERNELLE_OPTIONS}
                       value={formData.langue}
                       onChange={(val) => setFormData({ ...formData, langue: val })}
                     />
@@ -1257,13 +1715,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                         Transport Scolaire
                       </label>
                       <CustomSelect
-                        options={[
-                          { value: 'AUCUN', label: 'Aucun' },
-                          { value: 'BUS', label: 'Bus scolaire' },
-                          { value: 'VOITURE', label: 'Voiture' },
-                          { value: 'MOTO', label: 'Moto' },
-                          { value: 'PIED', label: 'À pied' },
-                        ]}
+                        options={TRANSPORT_OPTIONS}
                         value={formData.transportScolaire}
                         onChange={(val) => setFormData({ ...formData, transportScolaire: val as any })}
                       />
@@ -1285,15 +1737,13 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
 
                     <div>
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Moyenne Année Précédente
+                        École d'Origine
                       </label>
                       <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={formData.moyenneAnneePrecedente}
-                        onChange={(e) => setFormData({ ...formData, moyenneAnneePrecedente: Number(e.target.value) })}
-                        placeholder="Sur 100"
+                        type="text"
+                        value={formData.ecoleOrigine}
+                        onChange={(e) => setFormData({ ...formData, ecoleOrigine: e.target.value })}
+                        placeholder="Nom école précédente"
                         className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                       />
@@ -1336,281 +1786,26 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                     onClick={handleStepNext}
                     className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-xs transition-all cursor-pointer"
                   >
-                    <span>Passer à l’Étape 3 (Parents)</span>
+                    <span>Passer à l’Étape 3 (Frais & Paiement)</span>
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* ÉTAPE 3 : PARENTS & TUTEURS LÉGAUX */}
+            {/* ÉTAPE 3 : FRAIS SCOLAIRES, SIGNALEMENT DE PRIORITÉ & RÉPARTITION DU PAIEMENT */}
             {step === 3 && (
               <div className="space-y-6 animate-fadeIn">
-                <div className="p-4 rounded-xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-2">
-                    <UsersIcon className="w-4 h-4" />
-                    <span>Tuteurs Légaux & Contacts Famille</span>
-                  </h3>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Nom du Père
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.nomPere}
-                        onChange={(e) => setFormData({ ...formData, nomPere: e.target.value })}
-                        placeholder="Nom complet du père"
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Téléphone du Père
-                      </label>
-                      <input
-                        type="tel"
-                        value={formData.telephonePere}
-                        onChange={(e) => setFormData({ ...formData, telephonePere: e.target.value })}
-                        placeholder="+243 ..."
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Profession du Père
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.professionPere}
-                        onChange={(e) => setFormData({ ...formData, professionPere: e.target.value })}
-                        placeholder="Ex: Ingénieur"
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Nom de la Mère
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.nomMere}
-                        onChange={(e) => setFormData({ ...formData, nomMere: e.target.value })}
-                        placeholder="Nom complet de la mère"
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Téléphone de la Mère
-                      </label>
-                      <input
-                        type="tel"
-                        value={formData.telephoneMere}
-                        onChange={(e) => setFormData({ ...formData, telephoneMere: e.target.value })}
-                        placeholder="+243 ..."
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Profession de la Mère
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.professionMere}
-                        onChange={(e) => setFormData({ ...formData, professionMere: e.target.value })}
-                        placeholder="Ex: Enseignante"
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section Tuteur & Contact d'Urgence */}
-                <div className="p-4 rounded-xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-2">
-                    <Phone className="w-4 h-4" />
-                    <span>Tuteur & Contact d'Urgence</span>
-                  </h3>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Nom du Tuteur (si autre que père/mère)
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.nomTuteur}
-                        onChange={(e) => setFormData({ ...formData, nomTuteur: e.target.value })}
-                        placeholder="Nom complet du tuteur"
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Téléphone du Tuteur
-                      </label>
-                      <input
-                        type="tel"
-                        value={formData.telephoneTuteur}
-                        onChange={(e) => setFormData({ ...formData, telephoneTuteur: e.target.value })}
-                        placeholder="+243 ..."
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Profession du Tuteur
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.professionTuteur}
-                        onChange={(e) => setFormData({ ...formData, professionTuteur: e.target.value })}
-                        placeholder="Ex: Commerçant"
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Lien de Parenté (Tuteur)
-                      </label>
-                      <CustomSelect
-                        options={[
-                          { value: 'Père', label: 'Père' },
-                          { value: 'Mère', label: 'Mère' },
-                          { value: 'Oncle', label: 'Oncle' },
-                          { value: 'Tante', label: 'Tante' },
-                          { value: 'Grand-parent', label: 'Grand-parent' },
-                          { value: 'Frère', label: 'Frère' },
-                          { value: 'Sœur', label: 'Sœur' },
-                          { value: 'Tuteur légal', label: 'Tuteur légal' },
-                          { value: 'Autre', label: 'Autre' },
-                        ]}
-                        value={formData.relationTuteur}
-                        onChange={(val) => setFormData({ ...formData, relationTuteur: val })}
-                      />
-                    </div>
-
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Adresse du Tuteur
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.adresseTuteur}
-                        onChange={(e) => setFormData({ ...formData, adresseTuteur: e.target.value })}
-                        placeholder="Avenue, N°, Quartier, Commune"
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Contact en Cas d'Urgence
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.nomReferentUrgence}
-                        onChange={(e) => setFormData({ ...formData, nomReferentUrgence: e.target.value })}
-                        placeholder="Nom complet"
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-rose-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Téléphone Urgence
-                      </label>
-                      <input
-                        type="tel"
-                        value={formData.telephoneReferentUrgence}
-                        onChange={(e) => setFormData({ ...formData, telephoneReferentUrgence: e.target.value })}
-                        placeholder="+243 ..."
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-rose-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Lien (Urgence)
-                      </label>
-                      <CustomSelect
-                        options={[
-                          { value: 'Parent', label: 'Parent' },
-                          { value: 'Tuteur', label: 'Tuteur' },
-                          { value: 'Médecin', label: 'Médecin' },
-                          { value: 'Voisin', label: 'Voisin' },
-                          { value: 'Autre', label: 'Autre' },
-                        ]}
-                        value={formData.relationReferentUrgence}
-                        onChange={(val) => setFormData({ ...formData, relationReferentUrgence: val })}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setStep(2)}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl border text-xs font-bold transition-all hover:bg-slate-500/10"
-                    style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    <span>Retour à l’Étape 2</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleStepNext}
-                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-xs transition-all cursor-pointer"
-                  >
-                    <span>Passer à l’Étape 4 (Facturation & Paie)</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ÉTAPE 4 : FRAIS D'INSCRIPTION, FACTURATION & REÇU DE CAISSE */}
-            {step === 4 && (
-              <div className="space-y-6 animate-fadeIn">
-                <div className="p-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 space-y-4">
+                <div className="p-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 space-y-5">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
                       <Wallet className="w-4 h-4" />
-                      <span>4. Frais d'Inscription</span>
+                      <span>3. Frais Scolaires & Facturation Priorisée</span>
                     </h3>
 
-                    {/* Montant à payer à l'inscription */}
+                    {/* Total facture global */}
                     <div className="text-right">
-                      <p className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Montant à payer à l'inscription</p>
+                      <p className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Total Facture Inscription</p>
                       <p className="text-base font-black text-emerald-700 dark:text-emerald-300">
                         {formatCurrency(totalFacture, formData.devise, formData.devise, exchangeRate)}
                       </p>
@@ -1622,7 +1817,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                     <button
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, payerMaintenant: true, montantInscription: prev.montantInscription || totalFacture }))}
-                      className={`flex items-center gap-2 p-3 rounded-xl border text-xs font-black transition-all cursor-pointer ${
+                      className={`flex items-center gap-2 p-3.5 rounded-xl border text-xs font-black transition-all cursor-pointer ${
                         formData.payerMaintenant
                           ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                           : 'bg-slate-500/5 text-slate-700 dark:text-slate-300 hover:bg-emerald-500/10'
@@ -1635,7 +1830,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                     <button
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, payerMaintenant: false, montantInscription: 0 }))}
-                      className={`flex items-center gap-2 p-3 rounded-xl border text-xs font-black transition-all cursor-pointer ${
+                      className={`flex items-center gap-2 p-3.5 rounded-xl border text-xs font-black transition-all cursor-pointer ${
                         !formData.payerMaintenant
                           ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
                           : 'bg-slate-500/5 text-slate-700 dark:text-slate-300 hover:bg-amber-500/10'
@@ -1646,97 +1841,207 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                     </button>
                   </div>
 
-                  {formData.payerMaintenant && (
-                    <div className="space-y-4 pt-2">
-                      {/* Grille des frais applicables */}
-                      {applicableFees.length > 0 && (
-                        <div className="space-y-2">
-                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                            Sélectionnez les frais applicables à l'inscription :
-                          </label>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {applicableFees.map(ft => {
-                              const isChecked = selectedFeeIds.includes(ft.id);
-                              return (
-                                <div
-                                  key={ft.id}
-                                  onClick={() => toggleFeeSelection(ft.id)}
-                                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                                    isChecked
-                                      ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400'
-                                      : 'bg-slate-500/5 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <input
-                                      type="checkbox"
-                                      checked={isChecked}
-                                      onChange={() => {}}
-                                      className="rounded text-emerald-600 focus:ring-emerald-500"
-                                    />
-                                    <span className="text-xs font-bold truncate">{ft.nom}</span>
-                                  </div>
-                                  <span className="text-xs font-black shrink-0 ml-2">
-                                    {ft.montant} {ft.devise || systemCurrency}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Indicateur du statut de paiement */}
-                      {formData.payerMaintenant && (
-                        <div className="p-3 rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}>
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Total facture</p>
-                              <p className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>
-                                {formatCurrency(totalFacture, formData.devise, formData.devise, exchangeRate)}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Reste à payer</p>
-                              <p className="text-sm font-black text-rose-600 dark:text-rose-400">
-                                {formatCurrency(Math.max(0, totalFacture - (Number(formData.montantInscription) || 0)), formData.devise, formData.devise, exchangeRate)}
-                              </p>
-                            </div>
-                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black border ${
-                              (Number(formData.montantInscription) || 0) >= totalFacture - 0.001
-                                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25'
-                                : (Number(formData.montantInscription) || 0) > 0
-                                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/25'
-                                  : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/25'
-                            }`}>
-                              {(Number(formData.montantInscription) || 0) >= totalFacture - 0.001
-                                ? 'SOLDÉ'
-                                : (Number(formData.montantInscription) || 0) > 0
-                                  ? 'PARTIEL'
-                                  : 'NON PAYÉ'}
+                  {/* Sélection des frais applicables définis pour la classe sélectionnée */}
+                  {applicableFees.length > 0 && (
+                    <div className="space-y-3 pt-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl border" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black uppercase text-slate-800 dark:text-slate-200">
+                              Grille Tarifaire Définie pour :
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md text-xs font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
+                              {formData.nomClasse || 'Classe Sélectionnée'}
                             </span>
                           </div>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-                        <div>
-                          <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                            Montant Total Payé
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={formData.montantInscription}
-                            onChange={(e) => setFormData({ ...formData, montantInscription: Number(e.target.value) })}
-                            className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                          />
+                          <p className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400 mt-0.5">
+                            Cochez les frais à régler simultanément (Inscription + Minerval + Frais annexes).
+                          </p>
                         </div>
 
+                        {/* Boutons d'action rapide Tout cocher / Obligatoires */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedFeeIds(applicableFees.map(f => f.id))}
+                            className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 transition-all cursor-pointer"
+                          >
+                            Tout Sélectionner
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedFeeIds(applicableFees.filter(f => f.obligatoire || f.categorie === 'FRAIS_INSCRIPTION' || f.categorie === 'FRAIS_CARTE' || f.categorie === 'FRAIS_CONNEXION').map(f => f.id))}
+                            className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 transition-all cursor-pointer"
+                          >
+                            Obligatoires Seuls
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {applicableFees.map(ft => {
+                          const isChecked = selectedFeeIds.includes(ft.id);
+                          const prio = getFeePriorityInfo(ft);
+                          return (
+                            <div
+                              key={ft.id}
+                              onClick={() => toggleFeeSelection(ft.id)}
+                              className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                                isChecked
+                                  ? 'bg-emerald-500/10 border-emerald-500/60 shadow-xs ring-1 ring-emerald-500/30'
+                                  : 'bg-slate-500/5 border-slate-200 dark:border-slate-800 text-slate-500 hover:border-slate-400'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {}}
+                                  className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                                />
+                                <div className="truncate">
+                                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100 block truncate">{ft.nom}</span>
+                                  <span className={`inline-block mt-0.5 text-[9px] font-black px-2 py-0.5 rounded-md border ${prio.badgeBg}`}>
+                                    {prio.code} • {prio.label.split('·')[1]?.trim() || prio.label}
+                                  </span>
+                                </div>
+                              </div>
+                              <span className="text-xs font-black shrink-0 ml-2 text-emerald-700 dark:text-emerald-300">
+                                {ft.montant} {ft.devise || systemCurrency}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tableau de Saisie Séparée des Paiements par Type de Frais */}
+                  {formData.payerMaintenant && allocatedFeeLines.length > 0 && (
+                    <div className="p-4 rounded-xl border space-y-3" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          <span>Saisie Séparée des Montants Encaissements par Frais</span>
+                        </h4>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const full: Record<string, number> = {};
+                              allocatedFeeLines.forEach(l => { full[l.feeTypeId] = l.montant; });
+                              setCustomFeePayments(prev => ({ ...prev, ...full }));
+                            }}
+                            className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 transition-all cursor-pointer"
+                          >
+                            Payer Tout en Intégralité
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p1Only: Record<string, number> = {};
+                              allocatedFeeLines.forEach(l => {
+                                p1Only[l.feeTypeId] = l.prioInfo.priority === 1 ? l.montant : 0;
+                              });
+                              setCustomFeePayments(prev => ({ ...prev, ...p1Only }));
+                            }}
+                            className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 transition-all cursor-pointer"
+                          >
+                            Obligatoires Seuls (P1)
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b text-[10px] font-black text-slate-400 uppercase" style={{ borderColor: 'var(--border)' }}>
+                              <th className="py-2 px-2">Priorité</th>
+                              <th className="py-2 px-2">Type de Frais</th>
+                              <th className="py-2 px-2 text-right">Montant Dû</th>
+                              <th className="py-2 px-2 text-right">Montant Payé Séparément</th>
+                              <th className="py-2 px-2 text-right">Solde Restant</th>
+                              <th className="py-2 px-2 text-center">Statut</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                            {allocatedFeeLines.map((ligne) => (
+                              <tr key={ligne.id} className="font-medium text-xs">
+                                <td className="py-2 px-2 whitespace-nowrap">
+                                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border ${ligne.prioInfo.badgeBg}`}>
+                                    {ligne.prioInfo.code}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-2 font-bold text-slate-800 dark:text-slate-200">
+                                  {ligne.nom}
+                                </td>
+                                <td className="py-2 px-2 text-right font-mono font-bold text-slate-600 dark:text-slate-400">
+                                  {formatCurrency(ligne.montant, ligne.devise, ligne.devise, exchangeRate)}
+                                </td>
+                                <td className="py-2 px-2 text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <NumberInput
+                                      value={customFeePayments[ligne.feeTypeId] ?? 0}
+                                      onChange={v => setCustomFeePayments(prev => ({ ...prev, [ligne.feeTypeId]: Math.max(0, v) }))}
+                                      min={0}
+                                      max={ligne.montant}
+                                      integer
+                                      placeholder="0"
+                                      className="w-24 px-2 py-1 text-right text-xs font-mono font-black border rounded-lg"
+                                      style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                                    />
+                                    <button
+                                      type="button"
+                                      title="Payer la totalité de ce frais"
+                                      onClick={() => setCustomFeePayments(prev => ({ ...prev, [ligne.feeTypeId]: ligne.montant }))}
+                                      className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                                    >
+                                      Max
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Effacer ce versement"
+                                      onClick={() => setCustomFeePayments(prev => ({ ...prev, [ligne.feeTypeId]: 0 }))}
+                                      className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                                    >
+                                      0
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className="py-2 px-2 text-right font-mono font-bold text-rose-600 dark:text-rose-400">
+                                  {formatCurrency(ligne.soldeRestant, ligne.devise, ligne.devise, exchangeRate)}
+                                </td>
+                                <td className="py-2 px-2 text-center whitespace-nowrap">
+                                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                                    ligne.isCovered
+                                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                                      : ligne.isPartial
+                                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                                        : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30'
+                                  }`}>
+                                    {ligne.isCovered ? 'SOLDÉ' : ligne.isPartial ? 'PARTIEL' : 'EN ATTENTE'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Mode de paiement & Référence + Récap Total */}
+                  {formData.payerMaintenant && (
+                    <div className="p-4 rounded-xl border space-y-4" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                        <CreditCard className="w-4 h-4 text-emerald-500" />
+                        <span>Mode de Règlement & Référence Transaction</span>
+                      </h4>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                            Mode de Paiement
+                            Mode de Règlement
                           </label>
                           <CustomSelect
                             options={MOYEN_PAIEMENT_OPTIONS}
@@ -1747,18 +2052,83 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
 
                         <div>
                           <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                            N° Référence / Trans.
+                            N° Bordereau / Référence Transaction
                           </label>
                           <input
                             type="text"
                             value={formData.referencePaiement}
                             onChange={(e) => setFormData({ ...formData, referencePaiement: e.target.value })}
-                            placeholder="N° Bordereau / Ref Mobile"
+                            placeholder="N° Bordereau / Mobile Money / Référence"
                             className="w-full px-3.5 py-2 rounded-lg text-xs font-mono font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                            style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                           />
                         </div>
                       </div>
+
+                      {/* Récapitulatif Caisse : Total Facturé vs Total Encaissé vs Solde Restant */}
+                      <div className="grid grid-cols-3 gap-3 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+                        <div className="p-3 rounded-xl border bg-slate-500/5" style={{ borderColor: 'var(--border)' }}>
+                          <p className="text-[10px] font-bold uppercase text-slate-400 mb-1">Total Facturé</p>
+                          <p className="text-sm font-black text-slate-900 dark:text-slate-100">
+                            {formatCurrency(totalFacture, formData.devise, formData.devise, exchangeRate)}
+                          </p>
+                        </div>
+                        <div className="p-3 rounded-xl border bg-emerald-500/5 border-emerald-500/20">
+                          <p className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400 mb-1">Encaissé Séparément</p>
+                          <p className="text-sm font-black text-emerald-700 dark:text-emerald-300">
+                            {formatCurrency(totalPaidCalculated, formData.devise, formData.devise, exchangeRate)}
+                          </p>
+                        </div>
+                        <div className={`p-3 rounded-xl border ${totalFacture - totalPaidCalculated > 0.001 ? 'bg-rose-500/5 border-rose-500/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
+                          <p className={`text-[10px] font-bold uppercase mb-1 ${totalFacture - totalPaidCalculated > 0.001 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                            Solde Restant
+                          </p>
+                          <p className={`text-sm font-black ${totalFacture - totalPaidCalculated > 0.001 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
+                            {formatCurrency(Math.max(0, totalFacture - totalPaidCalculated), formData.devise, formData.devise, exchangeRate)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Alerte Dérogation si frais obligatoires (P1) non totalement soldés */}
+                  {formData.payerMaintenant && !mandatoryFeesCovered && (
+                    <div className="p-4 rounded-xl border border-amber-500/40 bg-amber-500/10 space-y-3 animate-fade-in">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                        <div className="space-y-1 text-xs">
+                          <h4 className="font-extrabold text-amber-900 dark:text-amber-200">
+                            ⚠️ Attention : Les frais d'inscription obligatoires (P1) ne sont pas entièrement soldés par le versement actuel.
+                          </h4>
+                          <p className="text-slate-600 dark:text-slate-300">
+                            Par défaut, un élève ne peut être inscrit sans s'acquitter des frais obligatoires. 
+                            Si un versement partiel (ex: acompte motard de 50$) est autorisé par la Direction, cochez la case <strong>Dérogation / Inscription Temporaire</strong> pour valider le dossier.
+                          </p>
+                        </div>
+                      </div>
+
+                      <label className="flex items-center gap-3 p-3 rounded-xl border border-amber-500/40 bg-amber-500/15 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.derogationActive}
+                          onChange={e => setFormData({ ...formData, derogationActive: e.target.checked })}
+                          className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
+                        />
+                        <span className="text-xs font-black text-amber-900 dark:text-amber-100">
+                          Activer la Dérogation / Inscription Temporaire (Règlement partiel accordé)
+                        </span>
+                      </label>
+
+                      {formData.derogationActive && (
+                        <input
+                          type="text"
+                          value={formData.derogationMotif}
+                          onChange={e => setFormData({ ...formData, derogationMotif: e.target.value })}
+                          placeholder="Motif de dérogation (ex: Motard a versé 50$, solde d'ici le 15 du mois)"
+                          className="w-full px-3.5 py-2 rounded-lg text-xs border border-amber-500/40 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
+                        />
+                      )}
                     </div>
                   )}
                 </div>
@@ -1767,12 +2137,12 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                 <div className="flex items-center justify-between pt-6 border-t" style={{ borderColor: 'var(--border)' }}>
                   <button
                     type="button"
-                    onClick={() => setStep(3)}
+                    onClick={() => setStep(2)}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl border text-xs font-bold transition-all hover:bg-slate-500/10"
                     style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                   >
                     <ChevronLeft className="w-4 h-4" />
-                    <span>Retour à l’Étape 3</span>
+                    <span>Retour à l’Étape 2 (Scolarité)</span>
                   </button>
 
                   <button
@@ -2151,6 +2521,98 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
           setIsWebcamOpen(false);
         }}
       />
+
+      {/* MODALE DE CONFIRMATION SUCCÈS & CHOIX SUITE D'INSCRIPTION */}
+      {showSuccessPrompt && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200 select-none">
+          <div
+            className="w-full max-w-md p-6 sm:p-8 rounded-2xl border shadow-2xl space-y-6 text-center animate-in zoom-in-95 duration-200"
+            style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+          >
+            {/* Icone Succès & Badge */}
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center shadow-lg shadow-emerald-500/10">
+              <CheckCircle2 className="w-9 h-9 text-emerald-500" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                Élève Inscrit avec Succès !
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Le dossier élève a été enregistré dans le registre national certifié et SQLite.
+              </p>
+            </div>
+
+            {/* Récapitulatif rapide de l'élève inscrit */}
+            {justRegisteredStudent && (
+              <div
+                className="p-4 rounded-xl border text-left space-y-1.5 text-xs"
+                style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-sm" style={{ color: 'var(--text-primary)' }}>
+                    {justRegisteredStudent.prenom} {justRegisteredStudent.nom} {justRegisteredStudent.postnom || ''}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full font-black text-[10px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                    {justRegisteredStudent.sexe === 'F' ? 'Fille' : 'Garçon'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 font-mono text-[11px] pt-1">
+                  <span>Matricule : <strong className="text-indigo-600 dark:text-indigo-400">{justRegisteredStudent.registrationNumber}</strong></span>
+                  {justRegisteredStudent.nomClasse && (
+                    <span className="font-bold text-slate-700 dark:text-slate-300">{justRegisteredStudent.nomClasse}</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Prompt & Boutons d'Action */}
+            <div className="space-y-3 pt-2">
+              {lastSavedPayment && (
+                <button
+                  type="button"
+                  onClick={() => setShowReceiptModal(true)}
+                  className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-black text-xs shadow-md shadow-emerald-500/25 flex items-center justify-center gap-2.5 transition-all cursor-pointer border border-emerald-500/40"
+                >
+                  <Printer className="w-4.5 h-4.5 text-white" />
+                  <span>Imprimer le Reçu de Caisse / Facture</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleContinueNewRegistration}
+                className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-black text-xs shadow-md shadow-indigo-500/25 flex items-center justify-center gap-2.5 transition-all cursor-pointer border border-indigo-500/40"
+              >
+                <UserPlus className="w-4.5 h-4.5 text-white" />
+                <span>Inscrire un autre élève</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleFinishRegistration}
+                className="w-full py-3 px-4 rounded-xl border font-bold text-xs hover:bg-slate-500/10 active:scale-[0.98] flex items-center justify-center gap-2.5 transition-all cursor-pointer"
+                style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+              >
+                <ArrowLeft className="w-4 h-4 text-indigo-500" />
+                <span>Terminer & Retourner à la liste</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODALE D'IMPRESSION DU REÇU / TICKET DE CAISSE */}
+      {showReceiptModal && lastSavedPayment && (
+        <ReceiptModal
+          isOpen={showReceiptModal}
+          onClose={() => setShowReceiptModal(false)}
+          payment={lastSavedPayment}
+          invoice={lastSavedInvoice || undefined}
+          feeTypes={feeTypes}
+        />
+      )}
     </div>
   );
 };

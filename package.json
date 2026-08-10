@@ -16,6 +16,7 @@
     "better-sqlite3": "^13.0.2",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
+    "core-js": "^3.50.0",
     "drizzle-orm": "^0.45.2",
     "html2pdf.js": "^0.14.0",
     "lucide-react": "^0.469.0",

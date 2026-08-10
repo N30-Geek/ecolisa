@@ -11,6 +11,7 @@ import {
   getNomOption,
 } from '../../../data/referentielEPST';
 import { CustomSelect } from '../../common/CustomSelect';
+import { NumberInput } from '../../common/NumberInput';
 
 const STORAGE_KEY = 'ecolisa_matieres_actives';
 
@@ -209,13 +210,14 @@ export const MatieresCurriculumTab: React.FC = () => {
               <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                 Coefficient *
               </label>
-              <input
-                type="number"
+              <NumberInput
+                value={newCoef}
+                onChange={setNewCoef}
                 min={1}
                 max={10}
-                value={newCoef}
-                onChange={e => setNewCoef(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg text-xs border font-medium focus:outline-none focus:border-indigo-500"
+                integer
+                placeholder="Coef"
+                className="w-full px-3 py-2 rounded-lg text-xs border font-medium"
                 style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               />
             </div>
@@ -305,13 +307,14 @@ export const MatieresCurriculumTab: React.FC = () => {
                 {/* Modificateur de Coefficient */}
                 <div className="flex items-center gap-1 bg-slate-500/10 px-2 py-1 rounded-lg">
                   <span className="text-[10px] font-bold text-slate-400">Coef:</span>
-                  <input
-                    type="number"
+                  <NumberInput
+                    value={matiere.coefficientDefaut}
+                    onChange={v => handleCoefChange(matiere.id, v)}
                     min={1}
                     max={10}
-                    value={matiere.coefficientDefaut}
-                    onChange={e => handleCoefChange(matiere.id, Number(e.target.value))}
-                    className="w-8 text-center text-xs font-bold bg-transparent border-b border-indigo-500 focus:outline-none"
+                    integer
+                    placeholder="1"
+                    className="w-8 text-center text-xs font-bold bg-transparent border-b border-indigo-500"
                     style={{ color: 'var(--text-primary)' }}
                   />
                 </div>

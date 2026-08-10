@@ -9,6 +9,7 @@ import { StaffFormPage } from './StaffFormPage';
 
 interface TeacherManagerProps {
   targetCategory?: 'ENSEIGNANT' | 'STAFF';
+  activeSchoolYear?: string;
 }
 
 type ManagerTab = 'repertoire' | 'conges' | 'statistiques';

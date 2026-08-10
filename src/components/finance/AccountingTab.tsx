@@ -1,8 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { BookOpen, Plus, X, Trash2, Loader2, Save, FileText, Search, Eye, Filter, Calendar, Printer, Download } from 'lucide-react';
+import { Pagination } from '../common/Pagination';
+import { usePagination } from '../../hooks/usePagination';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { formatCurrency } from '../../utils/currency';
+import { DatePicker } from '../common/DatePicker';
+import { NumberInput } from '../common/NumberInput';
 import type { CompteComptable, JournalComptable, EcritureComptable, LigneEcriture } from '../../types';
 
 const uuid = () => {
@@ -15,7 +20,11 @@ const uuid = () => {
 const TYPES_COMPTE = ['ACTIF', 'PASSIF', 'CAPITAUX', 'CHARGE', 'PRODUIT'];
 const TYPES_JOURNAL = ['ACHATS', 'VENTES', 'CAISSE', 'BANQUE', 'OD', 'PAYE'];
 
-export const AccountingTab: React.FC = () => {
+interface AccountingTabProps {
+  activeSchoolYear?: string;
+}
+
+export const AccountingTab: React.FC<AccountingTabProps> = ({ activeSchoolYear }) => {
   const { currency, exchangeRate } = useSchoolConfig();
   const fmt = (n: number, source?: string) => formatCurrency(n, currency, source || currency, exchangeRate);
 
@@ -111,6 +120,15 @@ export const AccountingTab: React.FC = () => {
       .map(([id, data]) => ({ id, ...data }))
       .sort((a, b) => a.code.localeCompare(b.code));
   }, [ecritures, comptes]);
+
+  const displayBalance = useMemo(() => (selectedCompte ? balance.filter(b => b.id === selectedCompte) : balance), [balance, selectedCompte]);
+  const displayLedger = useMemo(() => (selectedCompte ? ledgerByCompte.filter(c => c.id === selectedCompte) : ledgerByCompte), [ledgerByCompte, selectedCompte]);
+
+  const comptesPagination = usePagination(comptes, { defaultPageSize: 15 });
+  const journauxPagination = usePagination(journaux, { defaultPageSize: 15 });
+  const ecrituresPagination = usePagination(filteredEcritures, { defaultPageSize: 10 });
+  const balancePagination = usePagination(displayBalance, { defaultPageSize: 15 });
+  const ledgerPagination = usePagination(displayLedger, { defaultPageSize: 5 });
 
   const handleDelete = async (type: 'compte' | 'journal' | 'ecriture', id: string) => {
     if (!window.confirm('Supprimer cet element ?')) return;
@@ -243,8 +261,8 @@ export const AccountingTab: React.FC = () => {
 
           {(view === 'ecritures' || view === 'balance' || view === 'ledger') && (
             <>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="input text-xs w-36" />
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="input text-xs w-36" />
+              <DatePicker value={dateFrom} onChange={setDateFrom} className="w-36" />
+              <DatePicker value={dateTo} onChange={setDateTo} className="w-36" />
             </>
           )}
 
@@ -286,7 +304,7 @@ export const AccountingTab: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {comptes.map(c => {
+              {comptesPagination.paginated.map(c => {
                 const solde = soldes.get(c.id) || 0;
                 return (
                   <tr key={c.id}>
@@ -310,6 +328,16 @@ export const AccountingTab: React.FC = () => {
               )}
             </tbody>
           </table>
+          <Pagination
+            currentPage={comptesPagination.page}
+            totalPages={comptesPagination.totalPages}
+            total={comptesPagination.total}
+            pageSize={comptesPagination.pageSize}
+            start={comptesPagination.start}
+            end={comptesPagination.end}
+            onPageChange={comptesPagination.setPage}
+            onPageSizeChange={comptesPagination.setPageSize}
+          />
         </div>
       )}
 
@@ -320,7 +348,7 @@ export const AccountingTab: React.FC = () => {
               <tr><th>Code</th><th>Nom</th><th>Type</th><th>Actif</th><th>Actions</th></tr>
             </thead>
             <tbody>
-              {journaux.map(j => (
+              {journauxPagination.paginated.map(j => (
                 <tr key={j.id}>
                   <td className="font-mono text-[11px] font-bold text-indigo-600">{j.code}</td>
                   <td className="font-bold text-[12px]">{j.nom}</td>
@@ -334,14 +362,27 @@ export const AccountingTab: React.FC = () => {
                   </td>
                 </tr>
               ))}
+              {journaux.length === 0 && !loading && (
+                <tr><td colSpan={5} className="text-center py-8 text-sm" style={{ color: 'var(--text-muted)' }}>Aucun journal.</td></tr>
+              )}
             </tbody>
           </table>
+          <Pagination
+            currentPage={journauxPagination.page}
+            totalPages={journauxPagination.totalPages}
+            total={journauxPagination.total}
+            pageSize={journauxPagination.pageSize}
+            start={journauxPagination.start}
+            end={journauxPagination.end}
+            onPageChange={journauxPagination.setPage}
+            onPageSizeChange={journauxPagination.setPageSize}
+          />
         </div>
       )}
 
       {view === 'ecritures' && (
         <div className="space-y-3">
-          {filteredEcritures.map(e => (
+          {ecrituresPagination.paginated.map(e => (
             <div
               key={e.id}
               onClick={() => setPreviewEcriture(e)}
@@ -388,6 +429,16 @@ export const AccountingTab: React.FC = () => {
           {filteredEcritures.length === 0 && !loading && (
             <div className="text-center py-8 text-sm" style={{ color: 'var(--text-muted)' }}>Aucune écriture correspondante.</div>
           )}
+          <Pagination
+            currentPage={ecrituresPagination.page}
+            totalPages={ecrituresPagination.totalPages}
+            total={ecrituresPagination.total}
+            pageSize={ecrituresPagination.pageSize}
+            start={ecrituresPagination.start}
+            end={ecrituresPagination.end}
+            onPageChange={ecrituresPagination.setPage}
+            onPageSizeChange={ecrituresPagination.setPageSize}
+          />
         </div>
       )}
 
@@ -405,7 +456,7 @@ export const AccountingTab: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {(selectedCompte ? balance.filter(b => b.id === selectedCompte) : balance).map(b => (
+              {balancePagination.paginated.map(b => (
                 <tr key={b.id}>
                   <td className="font-mono text-[11px] font-bold text-indigo-600">{b.code}</td>
                   <td className="font-bold text-[12px]">{b.nom}</td>
@@ -420,12 +471,22 @@ export const AccountingTab: React.FC = () => {
               )}
             </tbody>
           </table>
+          <Pagination
+            currentPage={balancePagination.page}
+            totalPages={balancePagination.totalPages}
+            total={balancePagination.total}
+            pageSize={balancePagination.pageSize}
+            start={balancePagination.start}
+            end={balancePagination.end}
+            onPageChange={balancePagination.setPage}
+            onPageSizeChange={balancePagination.setPageSize}
+          />
         </div>
       )}
 
       {view === 'ledger' && (
         <div className="space-y-5">
-          {(selectedCompte ? ledgerByCompte.filter(c => c.id === selectedCompte) : ledgerByCompte).map(c => (
+          {ledgerPagination.paginated.map(c => (
             <div key={c.id} className="section-card overflow-x-auto">
               <div className="p-4 border-b" style={{ borderColor: 'var(--border)' }}>
                 <div className="flex items-center gap-2.5">
@@ -469,6 +530,16 @@ export const AccountingTab: React.FC = () => {
           {ledgerByCompte.length === 0 && !loading && (
             <div className="text-center py-8 text-sm" style={{ color: 'var(--text-muted)' }}>Aucun compte mouvementé.</div>
           )}
+          <Pagination
+            currentPage={ledgerPagination.page}
+            totalPages={ledgerPagination.totalPages}
+            total={ledgerPagination.total}
+            pageSize={ledgerPagination.pageSize}
+            start={ledgerPagination.start}
+            end={ledgerPagination.end}
+            onPageChange={ledgerPagination.setPage}
+            onPageSizeChange={ledgerPagination.setPageSize}
+          />
         </div>
       )}
 
@@ -518,9 +589,15 @@ const EcriturePreviewModal: React.FC<{
 
   const handlePrint = () => window.print();
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="w-full max-w-2xl rounded-3xl border shadow-2xl p-6 max-h-[90vh] overflow-y-auto" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-3xl border shadow-2xl p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-indigo-500/15 text-indigo-500">
@@ -582,7 +659,8 @@ const EcriturePreviewModal: React.FC<{
           {Math.abs(totalDebit - totalCredit) < 0.001 ? 'Écriture équilibrée' : 'Écriture déséquilibrée'}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -595,9 +673,15 @@ const CompteJournalModal: React.FC<{
 }> = ({ type, item, comptes, onClose, onSave }) => {
   const [form, setForm] = useState<any>({ ...item });
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="w-full max-w-md rounded-3xl border shadow-2xl p-6" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md rounded-3xl border shadow-2xl p-6" onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold">{type === 'compte' ? 'Compte' : 'Journal'} comptable</h3>
           <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--bg-sunken)' }}><X className="w-4 h-4" /></button>
@@ -637,7 +721,8 @@ const CompteJournalModal: React.FC<{
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -654,6 +739,12 @@ const EcritureModal: React.FC<{
     lignes: ecriture.lignes?.length ? ecriture.lignes : [{ id: uuid(), compteId: '', debit: 0, credit: 0 }],
   });
 
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const totalDebit = form.lignes.reduce((a, l) => a + (l.debit || 0), 0);
   const totalCredit = form.lignes.reduce((a, l) => a + (l.credit || 0), 0);
   const balanced = Math.abs(totalDebit - totalCredit) < 0.001;
@@ -667,9 +758,9 @@ const EcritureModal: React.FC<{
   const addLigne = () => setForm({ ...form, lignes: [...form.lignes, { id: uuid(), compteId: '', debit: 0, credit: 0 }] });
   const removeLigne = (i: number) => setForm({ ...form, lignes: form.lignes.filter((_, idx) => idx !== i) });
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="w-full max-w-2xl rounded-3xl border shadow-2xl p-6 max-h-[90vh] overflow-y-auto" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-3xl border shadow-2xl p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold">Nouvelle ecriture comptable</h3>
           <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--bg-sunken)' }}><X className="w-4 h-4" /></button>
@@ -678,7 +769,7 @@ const EcritureModal: React.FC<{
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-muted)' }}>Date</label>
-              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input w-full text-sm" />
+              <DatePicker value={form.date} onChange={val => setForm({ ...form, date: val })} />
             </div>
             <div>
               <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-muted)' }}>Journal</label>
@@ -713,10 +804,10 @@ const EcritureModal: React.FC<{
                     </select>
                   </div>
                   <div className="col-span-3">
-                    <input type="number" value={l.debit} onChange={e => updateLigne(i, 'debit', Number(e.target.value))} placeholder="Debit" className="input w-full text-xs" />
+                    <NumberInput value={l.debit} onChange={v => updateLigne(i, 'debit', v)} min={0} placeholder="Débit" className="input w-full text-xs" />
                   </div>
                   <div className="col-span-3">
-                    <input type="number" value={l.credit} onChange={e => updateLigne(i, 'credit', Number(e.target.value))} placeholder="Credit" className="input w-full text-xs" />
+                    <NumberInput value={l.credit} onChange={v => updateLigne(i, 'credit', v)} min={0} placeholder="Crédit" className="input w-full text-xs" />
                   </div>
                   <div className="col-span-1 flex justify-end">
                     <button onClick={() => removeLigne(i)} className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-rose-50"><Trash2 className="w-3.5 h-3.5 text-rose-400" /></button>
@@ -736,6 +827,7 @@ const EcritureModal: React.FC<{
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

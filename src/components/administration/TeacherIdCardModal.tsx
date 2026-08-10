@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Printer, Download, School, CheckCircle2, Layers } from 'lucide-react';
 import { TeacherIdCardRenderer } from './TeacherIdCardRenderer';
 import { MembrePersonnel } from '../../types';
@@ -17,6 +18,13 @@ export const TeacherIdCardModal: React.FC<TeacherIdCardModalProps> = ({
 }) => {
   const { config } = useSchoolConfig();
   const [face, setFace] = useState<'both' | 'front' | 'back'>('both');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -55,10 +63,10 @@ export const TeacherIdCardModal: React.FC<TeacherIdCardModalProps> = ({
     link.click();
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 backdrop-blur-md animate-fade-in overflow-y-auto"
-      style={{ background: 'rgba(15, 23, 42, 0.75)' }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm"
+      onClick={onClose}
     >
       <style>{`
         @media print {
@@ -181,6 +189,7 @@ export const TeacherIdCardModal: React.FC<TeacherIdCardModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

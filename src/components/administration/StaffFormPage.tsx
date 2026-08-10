@@ -8,6 +8,7 @@ import {
 import { MembrePersonnel, TypeContratPersonnel, GradeEnseignant } from '../../types';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
+import { NumberInput } from '../common/NumberInput';
 import { WebcamCaptureModal } from '../common/WebcamCaptureModal';
 
 interface StaffFormPageProps {
@@ -729,12 +730,13 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Nombre d'Enfants à Charge Total
                       </label>
-                      <input
-                        type="number"
-                        min="0"
+                      <NumberInput
                         value={formData.nombreEnfantsACharge || 0}
-                        onChange={(e) => setFormData({ ...formData, nombreEnfantsACharge: Number(e.target.value) })}
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        onChange={v => setFormData({ ...formData, nombreEnfantsACharge: v })}
+                        min={0}
+                        integer
+                        placeholder="0"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all"
                         style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                       />
                     </div>
@@ -743,12 +745,13 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Enfants Scolarisés dans cet Établissement
                       </label>
-                      <input
-                        type="number"
-                        min="0"
+                      <NumberInput
                         value={formData.nombreEnfantsEtablissement || 0}
-                        onChange={(e) => setFormData({ ...formData, nombreEnfantsEtablissement: Number(e.target.value) })}
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        onChange={v => setFormData({ ...formData, nombreEnfantsEtablissement: v })}
+                        min={0}
+                        integer
+                        placeholder="0"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all"
                         style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                       />
                     </div>
@@ -917,12 +920,12 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Salaire de Base Mensuel
                       </label>
-                      <input
-                        type="number"
-                        min="0"
+                      <NumberInput
                         value={formData.salaireBase || 0}
-                        onChange={(e) => setFormData({ ...formData, salaireBase: Number(e.target.value) })}
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        onChange={v => setFormData({ ...formData, salaireBase: v })}
+                        min={0}
+                        placeholder="Salaire"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all"
                         style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                       />
                     </div>

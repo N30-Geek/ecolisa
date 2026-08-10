@@ -20,7 +20,7 @@ export const CYCLES_EPST: CycleScolaire[] = [
 // ─── Classes Standard par Cycle ──────────────────────────────────────────────
 
 export const CLASSES_PAR_CYCLE: Record<string, string[]> = {
-  PRESCHOOL: ['Maternelle 1', 'Maternelle 2'],
+  PRESCHOOL: ['Maternelle 1', 'Maternelle 2', 'Maternelle 3'],
   PRIMAIRE:  ['1ère Primaire','2ème Primaire','3ème Primaire','4ème Primaire','5ème Primaire','6ème Primaire'],
   CTEB:      ['7ème CTEB', '8ème CTEB'],
 };
@@ -489,43 +489,43 @@ export function getClassStructureOfficialEPST(cycleId: string, optionCode: strin
   const ts = Date.now();
   if (cycleId === 'PRESCHOOL') {
     return [
-      { id: `cls-mat1-${ts}`, nom: '1ère Maternelle (Petite Section)', cycleId: 'PRESCHOOL', salle: 'Salle M-01', capacite: 30, professeurTitulaire: 'Mme Claire Mukendi' },
-      { id: `cls-mat2-${ts}`, nom: '2ème Maternelle (Moyenne Section)', cycleId: 'PRESCHOOL', salle: 'Salle M-02', capacite: 35, professeurTitulaire: 'Mme Beatrice Kabamba' },
-      { id: `cls-mat3-${ts}`, nom: '3ème Maternelle (Grande Section)', cycleId: 'PRESCHOOL', salle: 'Salle M-03', capacite: 35, professeurTitulaire: 'Mme Sophie Tshimanga' },
+      { id: `cls-mat1-${ts}`, nom: '1ère Maternelle (Petite Section)', cycleId: 'PRESCHOOL', salle: 'Salle M-01', capacite: 30, professeurTitulaire: '' },
+      { id: `cls-mat2-${ts}`, nom: '2ème Maternelle (Moyenne Section)', cycleId: 'PRESCHOOL', salle: 'Salle M-02', capacite: 35, professeurTitulaire: '' },
+      { id: `cls-mat3-${ts}`, nom: '3ème Maternelle (Grande Section)', cycleId: 'PRESCHOOL', salle: 'Salle M-03', capacite: 35, professeurTitulaire: '' },
     ];
   }
 
   if (cycleId === 'PRIMAIRE') {
     return [
-      { id: `cls-prim1a-${ts}`, nom: '1ère Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-101', capacite: 45, professeurTitulaire: 'M. Joseph Kalala' },
-      { id: `cls-prim1b-${ts}`, nom: '1ère Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-102', capacite: 45, professeurTitulaire: 'Mme Helene Masengu' },
-      { id: `cls-prim2a-${ts}`, nom: '2ème Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-201', capacite: 45, professeurTitulaire: 'M. Dieudonné Kande' },
-      { id: `cls-prim2b-${ts}`, nom: '2ème Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-202', capacite: 45, professeurTitulaire: 'Mme Rose Badibanga' },
-      { id: `cls-prim3a-${ts}`, nom: '3ème Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-301', capacite: 45, professeurTitulaire: 'M. Francois Ilunga' },
-      { id: `cls-prim3b-${ts}`, nom: '3ème Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-302', capacite: 45, professeurTitulaire: 'Mme Grace Kazadi' },
-      { id: `cls-prim4a-${ts}`, nom: '4ème Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-401', capacite: 40, professeurTitulaire: 'M. Alphonse Tshilombo' },
-      { id: `cls-prim4b-${ts}`, nom: '4ème Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-402', capacite: 40, professeurTitulaire: 'Mme Therese Ngalula' },
-      { id: `cls-prim5a-${ts}`, nom: '5ème Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-501', capacite: 40, professeurTitulaire: 'M. Patrick Mulamba' },
-      { id: `cls-prim5b-${ts}`, nom: '5ème Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-502', capacite: 40, professeurTitulaire: 'Mme Chantal Tshiyamba' },
-      { id: `cls-prim6a-${ts}`, nom: '6ème Primaire A (TENAFEP)', cycleId: 'PRIMAIRE', salle: 'Local P-601', capacite: 40, professeurTitulaire: 'M. Celestin Bukasa' },
-      { id: `cls-prim6b-${ts}`, nom: '6ème Primaire B (TENAFEP)', cycleId: 'PRIMAIRE', salle: 'Local P-602', capacite: 40, professeurTitulaire: 'Mme Pauline Mwamba' },
+      { id: `cls-prim1a-${ts}`, nom: '1ère Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-101', capacite: 45, professeurTitulaire: '' },
+      { id: `cls-prim1b-${ts}`, nom: '1ère Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-102', capacite: 45, professeurTitulaire: '' },
+      { id: `cls-prim2a-${ts}`, nom: '2ème Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-201', capacite: 45, professeurTitulaire: '' },
+      { id: `cls-prim2b-${ts}`, nom: '2ème Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-202', capacite: 45, professeurTitulaire: '' },
+      { id: `cls-prim3a-${ts}`, nom: '3ème Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-301', capacite: 45, professeurTitulaire: '' },
+      { id: `cls-prim3b-${ts}`, nom: '3ème Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-302', capacite: 45, professeurTitulaire: '' },
+      { id: `cls-prim4a-${ts}`, nom: '4ème Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-401', capacite: 40, professeurTitulaire: '' },
+      { id: `cls-prim4b-${ts}`, nom: '4ème Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-402', capacite: 40, professeurTitulaire: '' },
+      { id: `cls-prim5a-${ts}`, nom: '5ème Primaire A', cycleId: 'PRIMAIRE', salle: 'Local P-501', capacite: 40, professeurTitulaire: '' },
+      { id: `cls-prim5b-${ts}`, nom: '5ème Primaire B', cycleId: 'PRIMAIRE', salle: 'Local P-502', capacite: 40, professeurTitulaire: '' },
+      { id: `cls-prim6a-${ts}`, nom: '6ème Primaire A (TENAFEP)', cycleId: 'PRIMAIRE', salle: 'Local P-601', capacite: 40, professeurTitulaire: '' },
+      { id: `cls-prim6b-${ts}`, nom: '6ème Primaire B (TENAFEP)', cycleId: 'PRIMAIRE', salle: 'Local P-602', capacite: 40, professeurTitulaire: '' },
     ];
   }
 
   if (cycleId === 'CTEB') {
     return [
-      { id: `cls-cteb7a-${ts}`, nom: '7ème Éducation de Base A (7è CTEB)', cycleId: 'CTEB', salle: 'Pavillon EB-01', capacite: 45, professeurTitulaire: 'M. Emmanuel Kibambe' },
-      { id: `cls-cteb7b-${ts}`, nom: '7ème Éducation de Base B (7è CTEB)', cycleId: 'CTEB', salle: 'Pavillon EB-02', capacite: 45, professeurTitulaire: 'Mme Marie Mbuyi' },
-      { id: `cls-cteb8a-${ts}`, nom: '8ème Éducation de Base A (ENAFEP)', cycleId: 'CTEB', salle: 'Pavillon EB-03', capacite: 45, professeurTitulaire: 'M. Jean-Paul Mbayo' },
-      { id: `cls-cteb8b-${ts}`, nom: '8ème Éducation de Base B (ENAFEP)', cycleId: 'CTEB', salle: 'Pavillon EB-04', capacite: 45, professeurTitulaire: 'Mme Antoinette Kasongo' },
+      { id: `cls-cteb7a-${ts}`, nom: '7ème Éducation de Base A (7è CTEB)', cycleId: 'CTEB', salle: 'Pavillon EB-01', capacite: 45, professeurTitulaire: '' },
+      { id: `cls-cteb7b-${ts}`, nom: '7ème Éducation de Base B (7è CTEB)', cycleId: 'CTEB', salle: 'Pavillon EB-02', capacite: 45, professeurTitulaire: '' },
+      { id: `cls-cteb8a-${ts}`, nom: '8ème Éducation de Base A (ENAFEP)', cycleId: 'CTEB', salle: 'Pavillon EB-03', capacite: 45, professeurTitulaire: '' },
+      { id: `cls-cteb8b-${ts}`, nom: '8ème Éducation de Base B (ENAFEP)', cycleId: 'CTEB', salle: 'Pavillon EB-04', capacite: 45, professeurTitulaire: '' },
     ];
   }
 
   const optName = OPTIONS_EPST.find(o => o.code === optionCode)?.nom || optionCode;
   return [
-    { id: `cls-hum1-${ts}`, nom: `1ère (3è) Humanités ${optName}`, cycleId: 'HUMANITES', optionCode, salle: 'Aile H-101', capacite: 40, professeurTitulaire: 'M. Sylvain Tshisekedi' },
-    { id: `cls-hum2-${ts}`, nom: `2ème (4è) Humanités ${optName}`, cycleId: 'HUMANITES', optionCode, salle: 'Aile H-102', capacite: 40, professeurTitulaire: 'Mme Veronique Lumpungu' },
-    { id: `cls-hum3-${ts}`, nom: `3ème (5è) Humanités ${optName}`, cycleId: 'HUMANITES', optionCode, salle: 'Aile H-201', capacite: 40, professeurTitulaire: 'M. Desire Kabwe' },
-    { id: `cls-hum4-${ts}`, nom: `4ème (6è) Humanités ${optName} (EXAMEN D'ÉTAT)`, cycleId: 'HUMANITES', optionCode, salle: 'Aile H-202', capacite: 40, professeurTitulaire: 'Mme Christine Banza' },
+    { id: `cls-hum1-${ts}`, nom: `1ère (3è) Humanités ${optName}`, cycleId: 'HUMANITES', optionCode, salle: 'Aile H-101', capacite: 40, professeurTitulaire: '' },
+    { id: `cls-hum2-${ts}`, nom: `2ème (4è) Humanités ${optName}`, cycleId: 'HUMANITES', optionCode, salle: 'Aile H-102', capacite: 40, professeurTitulaire: '' },
+    { id: `cls-hum3-${ts}`, nom: `3ème (5è) Humanités ${optName}`, cycleId: 'HUMANITES', optionCode, salle: 'Aile H-201', capacite: 40, professeurTitulaire: '' },
+    { id: `cls-hum4-${ts}`, nom: `4ème (6è) Humanités ${optName} (EXAMEN D'ÉTAT)`, cycleId: 'HUMANITES', optionCode, salle: 'Aile H-202', capacite: 40, professeurTitulaire: '' },
   ];
 }

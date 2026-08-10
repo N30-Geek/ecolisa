@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar, Plus, CheckCircle2, XCircle, Clock, FileText, Search, UserCheck, AlertCircle, Filter, Download } from 'lucide-react';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { MembrePersonnel } from '../../types';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
 import { DocumentScanTool } from '../common/DocumentScanTool';
+import { Pagination } from '../common/Pagination';
+import { usePagination } from '../../hooks/usePagination';
 
 export interface CongePersonnel {
   id: string;
@@ -79,6 +82,13 @@ export const LeavesManager: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!isNewModalOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isNewModalOpen]);
 
   const saveLeavesToDb = async (updated: CongePersonnel[]) => {
     setLeaves(updated);
@@ -156,6 +166,8 @@ export const LeavesManager: React.FC = () => {
     });
   }, [leaves, searchTerm, selectedStatusFilter]);
 
+  const { paginated: paginatedLeaves, ...leavesPagination } = usePagination(filteredLeaves, { defaultPageSize: 12 });
+
   const staffSelectOptions: SelectOption[] = useMemo(() => {
     return staffList.map((s) => ({
       value: s.id,
@@ -223,7 +235,7 @@ export const LeavesManager: React.FC = () => {
       {/* Liste des Demandes de Congé */}
       {loading ? (
         <div className="p-8 text-center text-xs font-bold text-slate-400">Chargement du registre des congés...</div>
-      ) : filteredLeaves.length === 0 ? (
+      ) : !filteredLeaves.length ? (
         <div
           className="p-8 rounded-2xl border text-center space-y-2 transition-colors"
           style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
@@ -237,7 +249,7 @@ export const LeavesManager: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredLeaves.map((leave) => {
+          {paginatedLeaves.map((leave) => {
             const isApproved = leave.statut === 'APPROUVE';
             const isRejected = leave.statut === 'REFUSE';
 
@@ -335,14 +347,25 @@ export const LeavesManager: React.FC = () => {
               </div>
             );
           })}
+          <Pagination
+            currentPage={leavesPagination.page}
+            totalPages={leavesPagination.totalPages}
+            total={leavesPagination.total}
+            pageSize={leavesPagination.pageSize}
+            start={leavesPagination.start}
+            end={leavesPagination.end}
+            onPageChange={leavesPagination.setPage}
+            onPageSizeChange={leavesPagination.setPageSize}
+          />
         </div>
       )}
 
       {/* Modale de Création de Demande de Congé */}
-      {isNewModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
+      {isNewModalOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={() => setIsNewModalOpen(false)}>
           <div
             className="w-full max-w-lg rounded-2xl border shadow-2xl overflow-hidden flex flex-col transition-colors"
+            onClick={e => e.stopPropagation()}
             style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
           >
             <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--border)' }}>
@@ -445,7 +468,8 @@ export const LeavesManager: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

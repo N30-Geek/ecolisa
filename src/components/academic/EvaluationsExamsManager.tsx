@@ -1,8 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Award, Calendar, Download, Edit3, GraduationCap, Plus, Save, Search, Trash2, Users, X, TrendingUp, FileText } from 'lucide-react';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import type { Cote, ClasseScolaire, Discipline, Eleve, TypeEvaluation } from '../../types';
 import { CustomSelect } from '../common/CustomSelect';
+import { CustomDatePicker } from '../common/CustomDatePicker';
+import { NumberInput } from '../common/NumberInput';
+import { Pagination } from '../common/Pagination';
+import { usePagination } from '../../hooks/usePagination';
 
 const uuid = () => {
   if (typeof window !== 'undefined' && (window as any).crypto?.randomUUID) {
@@ -53,6 +58,13 @@ export const EvaluationsExamsManager: React.FC = () => {
 
   const [showModal, setShowModal] = useState(false);
   const [editingEvaluation, setEditingEvaluation] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!showModal) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [showModal]);
 
   const [form, setForm] = useState({
     titre: '',
@@ -120,6 +132,8 @@ export const EvaluationsExamsManager: React.FC = () => {
       return true;
     }).sort((a, b) => (b.dateCote || '').localeCompare(a.dateCote || ''));
   }, [allCotes, classFilter, subjectFilter, periodFilter, typeFilter, search]);
+
+  const { paginated: paginatedEvaluations, ...evaluationsPagination } = usePagination(evaluations, { defaultPageSize: 10 });
 
   const stats = useMemo(() => {
     const totalEvals = evaluations.length;
@@ -215,9 +229,8 @@ export const EvaluationsExamsManager: React.FC = () => {
     load();
   };
 
-  const handleScoreChange = (studentId: string, value: string) => {
-    const num = value === '' ? 0 : Math.max(0, Number(value) || 0);
-    setScoreMap(prev => ({ ...prev, [studentId]: num }));
+  const handleScoreChange = (studentId: string, value: number) => {
+    setScoreMap(prev => ({ ...prev, [studentId]: Math.max(0, value) }));
   };
 
   const exportCSV = () => {
@@ -310,7 +323,7 @@ export const EvaluationsExamsManager: React.FC = () => {
         <div className="text-center py-12 text-sm font-bold text-slate-400">Chargement...</div>
       ) : (
         <div className="space-y-3">
-          {evaluations.map(ev => {
+          {paginatedEvaluations.map(ev => {
             const cls = classes.find(c => c.id === ev.classeId);
             const subj = subjects.find(s => s.id === ev.matiereId);
             const avg = ev.cotes.length > 0 ? ev.cotes.reduce((a, c) => a + (c.score || 0), 0) / ev.cotes.length : 0;
@@ -355,12 +368,24 @@ export const EvaluationsExamsManager: React.FC = () => {
               <p className="text-sm font-bold text-slate-400">Aucune évaluation. Créez la première avec le bouton ci-dessus.</p>
             </div>
           )}
+          {!loading && evaluations.length > 0 && (
+            <Pagination
+              currentPage={evaluationsPagination.page}
+              totalPages={evaluationsPagination.totalPages}
+              total={evaluationsPagination.total}
+              pageSize={evaluationsPagination.pageSize}
+              start={evaluationsPagination.start}
+              end={evaluationsPagination.end}
+              onPageChange={evaluationsPagination.setPage}
+              onPageSizeChange={evaluationsPagination.setPageSize}
+            />
+          )}
         </div>
       )}
 
-      {showModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl border shadow-2xl p-6" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+      {showModal && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={() => { setShowModal(false); setEditingEvaluation(null); }}>
+          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl border shadow-2xl p-6" onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-indigo-500/15 text-indigo-500">
@@ -385,12 +410,11 @@ export const EvaluationsExamsManager: React.FC = () => {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
               <CustomSelect options={periodOptions} value={form.periode} onChange={val => setForm({ ...form, periode: val })} placeholder="Période" />
-              <input type="date" value={form.dateCote} onChange={e => setForm({ ...form, dateCote: e.target.value })} className="input-field text-xs font-bold" style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }} />
-              <input
-                type="number"
-                min={1}
+              <CustomDatePicker value={form.dateCote} onChange={dateStr => setForm({ ...form, dateCote: dateStr })} placeholder="Date" className="w-full" />
+              <NumberInput
                 value={form.maxScore}
-                onChange={e => setForm({ ...form, maxScore: Number(e.target.value) })}
+                onChange={v => setForm({ ...form, maxScore: v })}
+                min={1}
                 placeholder="Barème (max)"
                 className="input-field text-xs font-bold"
                 style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
@@ -412,12 +436,12 @@ export const EvaluationsExamsManager: React.FC = () => {
                       <td className="p-3 font-bold">{st.nom} {st.prenom}</td>
                       <td className="p-3 text-slate-400 font-mono">{st.registrationNumber}</td>
                       <td className="p-3 text-right">
-                        <input
-                          type="number"
+                        <NumberInput
+                          value={scoreMap[st.id] ?? 0}
+                          onChange={v => handleScoreChange(st.id, v)}
                           min={0}
                           max={form.maxScore}
-                          value={scoreMap[st.id] ?? ''}
-                          onChange={e => handleScoreChange(st.id, e.target.value)}
+                          placeholder="0"
                           onKeyDown={e => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
@@ -460,7 +484,8 @@ export const EvaluationsExamsManager: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

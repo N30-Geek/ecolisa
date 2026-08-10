@@ -53,9 +53,15 @@ import { LocalDatabaseService } from '../../services/localDatabase';
 import { StudentRegistrationModal } from './StudentRegistrationModal';
 import { ClassesPromotionsManager } from './ClassesPromotionsManager';
 import { StudentsManager } from './StudentsManager';
+import { SchoolYearsTab } from './SchoolYearsTab';
+import { SubjectsManager } from './SubjectsManager';
+import { ScheduleManager } from './ScheduleManager';
+import { GradesManager } from './GradesManager';
+import { TeacherManager } from '../administration/TeacherManager';
 
 interface AcademicManagerProps {
   activeSubTab?: string;
+  activeSchoolYear?: string;
 }
 
 // â”€â”€â”€ Modèle Année Scolaire â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -104,84 +110,7 @@ interface AnneeScolaireConfig {
   periodes: { id: string; nom: string; debut: string; fin: string; type: 'PERIOD' | 'EXAM' }[];
 }
 
-const mockSchoolYears: AnneeScolaireConfig[] = [
-  {
-    id: 'ay-1',
-    nom: '2025–2026',
-    statut: 'EN_COURS',
-    debut: '01 Septembre 2025',
-    fin: '02 Juillet 2026',
-    nombreElevesTotal: 14295,
-    fraisInscription: 50,
-    fraisConnexion: 15,
-    fraisReinscription: 30,
-    fraisCarte: 10,
-    fraisAnnexes: [
-      { id: 'fa-1', intitule: 'Kit Scolaire & Uniforme Officiel', montant: 25, devise: 'USD', obligatoire: true, typeFrais: 'KIT' },
-      { id: 'fa-2', intitule: 'Frais de Plateforme Système & SMS', montant: 15, devise: 'USD', obligatoire: true, typeFrais: 'CONNEXION' },
-      { id: 'fa-3', intitule: 'Assurance Scolaire & Infirmerie', montant: 10, devise: 'USD', obligatoire: true, typeFrais: 'AUTRE' },
-    ],
-    cycles: [
-      { id: 'cyc-1', code: 'MATERNELLE', nom: 'Cycle Maternelle (3–5 ans)', actif: true, classesCount: 6, sallesCount: 6 },
-      { id: 'cyc-2', code: 'PRIMAIRE', nom: 'Cycle Primaire (1ère–6ème)', actif: true, classesCount: 18, sallesCount: 18 },
-      { id: 'cyc-3', code: 'SECONDAIRE_CTEB', nom: 'Cycle Terminal d’Éducation de Base (7ème–8ème CTEB)', actif: true, classesCount: 8, sallesCount: 8 },
-      { id: 'cyc-4', code: 'HUMANITES', nom: 'Humanités Générales & Techniques (1ère–4ème H)', actif: true, classesCount: 16, sallesCount: 16 },
-    ],
-    salles: [
-      { id: 'sal-1', codeSalle: 'M-101', nomSalle: 'Pavillon Maternelle A — Petite Section', capacite: 35, cycleCode: 'MATERNELLE' },
-      { id: 'sal-2', codeSalle: 'P-201', nomSalle: 'Bâtiment Principal — Salle 1ère Primaire A', capacite: 45, cycleCode: 'PRIMAIRE' },
-      { id: 'sal-3', codeSalle: 'C-301', nomSalle: 'Aile Scientifique — Salle 7ème CTEB A', capacite: 40, cycleCode: 'SECONDAIRE_CTEB' },
-      { id: 'sal-4', codeSalle: 'H-401', nomSalle: 'Bâtiment Humanités — Labo Math-Physique A', capacite: 40, cycleCode: 'HUMANITES' },
-      { id: 'sal-5', codeSalle: 'H-402', nomSalle: 'Bâtiment Humanités — Salle Biologie-Chimie B', capacite: 40, cycleCode: 'HUMANITES' },
-    ],
-    semestres: [
-      { id: 's1', nom: '1er Semestre (S1)', statut: 'EN_COURS', fin: '17 Février 2026' },
-      { id: 's2', nom: '2ème Semestre (S2)', statut: 'PLANIFIE', fin: '02 Juillet 2026' },
-    ],
-    periodes: [
-      { id: 'p1', nom: '1ère Période', debut: '01 Sept', fin: '04 Nov 2025', type: 'PERIOD' },
-      { id: 'p2', nom: '2ème Période & Examens S1', debut: '09 Nov', fin: '17 Fév 2026', type: 'EXAM' },
-      { id: 'p3', nom: '3ème Période', debut: '22 Fév', fin: '24 Avr 2026', type: 'PERIOD' },
-      { id: 'p4', nom: '4ème Période & EXETAT', debut: '26 Avr', fin: '02 Jul 2026', type: 'EXAM' },
-    ],
-  },
-  {
-    id: 'ay-0',
-    nom: '2024–2025',
-    statut: 'CLOTUREE',
-    debut: '02 Septembre 2024',
-    fin: '04 Juillet 2025',
-    nombreElevesTotal: 13800,
-    fraisInscription: 45,
-    fraisConnexion: 12,
-    fraisReinscription: 25,
-    fraisCarte: 10,
-    fraisAnnexes: [
-      { id: 'fa-01', intitule: 'Kit Scolaire 2024', montant: 20, devise: 'USD', obligatoire: true, typeFrais: 'KIT' },
-    ],
-    cycles: [
-      { id: 'cyc-01', code: 'MATERNELLE', nom: 'Cycle Maternelle', actif: true, classesCount: 6, sallesCount: 6 },
-      { id: 'cyc-02', code: 'PRIMAIRE', nom: 'Cycle Primaire', actif: true, classesCount: 18, sallesCount: 18 },
-      { id: 'cyc-03', code: 'SECONDAIRE_CTEB', nom: 'CTEB 7-8', actif: true, classesCount: 8, sallesCount: 8 },
-      { id: 'cyc-04', code: 'HUMANITES', nom: 'Humanités', actif: true, classesCount: 16, sallesCount: 16 },
-    ],
-    salles: [
-      { id: 'sal-01', codeSalle: 'M-101', nomSalle: 'Salle Maternelle 2024', capacite: 35, cycleCode: 'MATERNELLE' },
-    ],
-    semestres: [
-      { id: 's1-24', nom: '1er Semestre (S1)', statut: 'CLOTURE', fin: '31 Jan 2025' },
-      { id: 's2-24', nom: '2ème Semestre (S2)', statut: 'CLOTURE', fin: '04 Jul 2025' },
-    ],
-    periodes: [
-      { id: 'p1-24', nom: '1ère Période', debut: '02 Sept', fin: '04 Nov 2024', type: 'PERIOD' },
-      { id: 'p2-24', nom: '2ème Période', debut: '09 Nov', fin: '31 Jan 2025', type: 'PERIOD' },
-      { id: 'p3-24', nom: '3ème Période', debut: '15 Fév', fin: '20 Avr 2025', type: 'PERIOD' },
-      { id: 'p4-24', nom: '4ème Période', debut: '25 Avr', fin: '04 Jul 2025', type: 'EXAM' },
-    ],
-  },
-];
-
-// â”€â”€â”€ Composant de Pagination Réutilisable Haute Lisibilité â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——— Composant de Pagination Réutilisable Haute Lisibilité —————————————————————
 interface PaginationBarProps {
   totalItems: number;
   currentPage: number;
@@ -815,13 +744,13 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                     </div>
                     <div>
                       <h4 className="text-sm font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                        {student.nomPere || student.nomParent || 'M. Jean-Baptiste Mukendi'}
+                        {student.nomPere || student.nomParent || '—'}
                       </h4>
                       <p className="text-xs font-extrabold text-indigo-500">Père / Tuteur Principal Légal</p>
                     </div>
                   </div>
                   <span className="text-[10px] font-black px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-500 border border-indigo-500/30">
-                    {student.professionPere || 'Ingénieur BTP'}
+                    {student.professionPere || '—'}
                   </span>
                 </div>
 
@@ -831,7 +760,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                       <Phone className="w-3.5 h-3.5 text-indigo-500" /> WhatsApp / Tél :
                     </span>
                     <a href={`tel:${student.telephonePere || student.telephoneParent}`} className="font-mono font-black text-indigo-500 hover:underline text-xs">
-                      {student.telephonePere || student.telephoneParent || '+243 81 555 0192'}
+                      {student.telephonePere || student.telephoneParent || '—'}
                     </a>
                   </div>
                   <div className="flex items-center justify-between py-1.5 px-3 rounded-xl hover:bg-slate-500/5 transition-all">
@@ -839,7 +768,7 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                       <Mail className="w-3.5 h-3.5 text-indigo-500" /> Email Direct :
                     </span>
                     <a href={`mailto:${student.emailPere || student.emailParent}`} className="font-mono font-black text-indigo-500 hover:underline text-xs">
-                      {student.emailPere || student.emailParent || 'j.mukendi@gmail.com'}
+                      {student.emailPere || student.emailParent || '—'}
                     </a>
                   </div>
                 </div>
@@ -854,13 +783,13 @@ const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ s
                     </div>
                     <div>
                       <h4 className="text-sm font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                        {student.nomMere || 'Mme Chantal Bakamba'}
+                        {student.nomMere || '—'}
                       </h4>
                       <p className="text-xs font-extrabold text-pink-500">Mère / Tuteur Secondaire</p>
                     </div>
                   </div>
                   <span className="text-[10px] font-black px-3 py-1 rounded-full bg-pink-500/15 text-pink-500 border border-pink-500/30">
-                    {student.professionMere || 'Médecin Généraliste'}
+                    {student.professionMere || '—'}
                   </span>
                 </div>
 
@@ -1431,9 +1360,9 @@ const SubjectsTab: React.FC = () => {
 
 // â”€â”€â”€ ONGLET 4 : GESTION DE L'ANNÉE SCOLAIRE, TARIFICATION & STRUCTURE EPST â”€â”€
 
-const SchoolYearsTab: React.FC = () => {
-  const [years, setYears] = useState<AnneeScolaireConfig[]>(mockSchoolYears);
-  const [selectedYearId, setSelectedYearId] = useState<string>('ay-1');
+const LegacySchoolYearsTab: React.FC = () => {
+  const [years, setYears] = useState<AnneeScolaireConfig[]>([]);
+  const [selectedYearId, setSelectedYearId] = useState<string>('');
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<'frais' | 'cycles_salles' | 'periodes' | 'rapports'>('frais');
@@ -1755,31 +1684,7 @@ const SchoolYearsTab: React.FC = () => {
           {/* CONTENU DU SOUS-ONGLET SÉLECTIONNÉ */}
           {activeDetailTab === 'frais' && (
             <div className="space-y-4 animate-fade-in">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                  <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais d'Inscription</span>
-                  <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">${selectedYear.fraisInscription || 50}</p>
-                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Payable à la confirmation du dossier</p>
-                </div>
 
-                <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                  <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais de Connexion Système</span>
-                  <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">${selectedYear.fraisConnexion || 15}</p>
-                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Accès ECOLISA PRO & SMS Parents</p>
-                </div>
-
-                <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                  <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais de Réinscription</span>
-                  <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">${selectedYear.fraisReinscription || 30}</p>
-                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Anciens élèves reconduits</p>
-                </div>
-
-                <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                  <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Frais Carte d'Élève & Badge</span>
-                  <p className="text-2xl font-black text-amber-600 dark:text-amber-400">${selectedYear.fraisCarte || 10}</p>
-                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400">Carte QR Code sécurisée EPST</p>
-                </div>
-              </div>
 
               {/* TABLEAU DES FRAIS ANNEXES & OPTIONNELS */}
               <div className="p-4 rounded-2xl border shadow-xs space-y-3" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
@@ -2565,7 +2470,7 @@ const GradesTab: React.FC = () => (
 
 // â”€â”€â”€ MAIN MANAGER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export const AcademicManager: React.FC<AcademicManagerProps> = ({ activeSubTab = 'students' }) => {
+export const AcademicManager: React.FC<AcademicManagerProps> = ({ activeSubTab = 'students', activeSchoolYear }) => {
   const tabs = [
     { id: 'students', label: 'Élèves & Inscriptions', icon: GraduationCap },
     { id: 'classes', label: 'Classes & Local', icon: BookOpen },
@@ -2584,14 +2489,14 @@ export const AcademicManager: React.FC<AcademicManagerProps> = ({ activeSubTab =
 
   const renderTab = () => {
     switch (localTab) {
-      case 'students': return <StudentsManager />;
-      case 'classes':  return <ClassesPromotionsManager onNavigateToStudents={(clsId) => setLocalTab('students')} />;
-      case 'subjects': return <SubjectsTab />;
-      case 'years':    return <SchoolYearsTab />;
-      case 'teachers': return <TeachersTab />;
-      case 'schedule': return <ScheduleTab />;
-      case 'grades':   return <GradesTab />;
-      default:         return <StudentsManager />;
+      case 'students': return <StudentsManager activeSchoolYear={activeSchoolYear} />;
+      case 'classes':  return <ClassesPromotionsManager activeSchoolYear={activeSchoolYear} onNavigateToStudents={(clsId) => setLocalTab('students')} />;
+      case 'subjects': return <SubjectsManager activeSchoolYear={activeSchoolYear} />;
+      case 'years':    return <SchoolYearsTab activeSchoolYear={activeSchoolYear} />;
+      case 'teachers': return <TeacherManager activeSchoolYear={activeSchoolYear} />;
+      case 'schedule': return <ScheduleManager activeSchoolYear={activeSchoolYear} />;
+      case 'grades':   return <GradesManager activeSchoolYear={activeSchoolYear} />;
+      default:         return <StudentsManager activeSchoolYear={activeSchoolYear} />;
     }
   };
 

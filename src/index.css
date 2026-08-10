@@ -457,18 +457,18 @@ button:hover .icon-animated,
   background: var(--bg-surface);
   border-radius: var(--radius-2xl);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   transition: var(--transition-base);
 }
 
 .kpi-card:hover {
   border-color: rgba(99,102,241,0.30);
-  box-shadow: var(--shadow-md), 0 0 0 1px rgba(99,102,241,0.08);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(99,102,241,0.08);
   transform: translateY(-2px);
 }
 
 .section-card:hover {
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg);
 }
 
 /* =====================================================
@@ -512,7 +512,8 @@ button:hover .icon-animated,
    FORM INPUTS — FOCUS GLOW
    ===================================================== */
 
-.input-field {
+.input-field,
+.input {
   width: 100%;
   padding: 9px 14px;
   border: 1px solid var(--border);
@@ -520,17 +521,40 @@ button:hover .icon-animated,
   font-size: 13px;
   font-family: var(--font-sans);
   color: var(--text-primary);
-  background: var(--bg-sunken);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  background: var(--bg-surface);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
   outline: none;
 }
 
-.input-field:focus {
+.input-field:focus,
+.input:focus {
   border-color: var(--border-focus);
+  background: var(--bg-surface);
   box-shadow: 0 0 0 3px rgba(99,102,241,0.18);
 }
 
-.input-field::placeholder { color: var(--text-disabled); }
+.input-field::placeholder,
+.input::placeholder { color: var(--text-disabled); }
+
+/* hide native date picker indicator inside our custom DatePicker trigger */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.5;
+  cursor: pointer;
+  filter: invert(0.4);
+}
+
+input[type="date"]:focus::-webkit-calendar-picker-indicator {
+  filter: invert(0.6);
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
+}
 
 /* =====================================================
    BUTTONS — BTN SYSTEM
@@ -1018,6 +1042,23 @@ button:hover .icon-animated,
   background: #ffffff;
   color: #0f172a;
 }
+
+/* ── Animations ── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-scale-in { animation: scale-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-slide-up { animation: slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
 @media print {
   @page {

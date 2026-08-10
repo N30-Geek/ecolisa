@@ -3,8 +3,10 @@ import { QRCode } from 'react-qr-code';
 import { User, School, Shield, Phone, Mail, MapPin, Calendar } from 'lucide-react';
 import { Eleve, CodeCycle } from '../../types';
 import { SchoolConfig, CardCustomization, CardFieldOverride } from '../onboarding/OnboardingWizard';
+import { useSchoolConfig } from '../../hooks/useSchoolConfig';
+import { LOGO_EPST_RDC_BASE64 } from '../../assets/logoEPSTData';
 
-type CardTheme = 'blue' | 'indigo' | 'emerald' | 'gold';
+type CardTheme = 'blue' | 'indigo' | 'emerald' | 'gold' | 'burgundy' | 'violet' | 'light_rdc';
 type CardLayout = 'portrait' | 'landscape';
 
 const ALL_FIELDS: { key: string; label: string; get: (s: Eleve) => React.ReactNode }[] = [
@@ -85,10 +87,13 @@ export const defaultCardCustomization: CardCustomization = {
 };
 
 const themeMeta: Record<CardTheme, { primary: string; secondary: string; accent: string; border: string; watermark: string; light: string }> = {
-  blue:    { primary: '#0369a1', secondary: '#0ea5e9', accent: '#f59e0b', border: '#bae6fd', watermark: 'rgba(14,165,233,0.08)', light: '#e0f2fe' },
-  indigo:  { primary: '#4338ca', secondary: '#6366f1', accent: '#f59e0b', border: '#c7d2fe', watermark: 'rgba(99,102,241,0.08)', light: '#e0e7ff' },
-  emerald: { primary: '#047857', secondary: '#10b981', accent: '#f59e0b', border: '#a7f3d0', watermark: 'rgba(16,185,129,0.08)', light: '#d1fae5' },
-  gold:    { primary: '#b45309', secondary: '#f59e0b', accent: '#dc2626', border: '#fde68a', watermark: 'rgba(245,158,11,0.08)', light: '#fef3c7' },
+  blue:      { primary: '#0369a1', secondary: '#0ea5e9', accent: '#f59e0b', border: '#bae6fd', watermark: 'rgba(14,165,233,0.08)', light: '#e0f2fe' },
+  indigo:    { primary: '#4338ca', secondary: '#6366f1', accent: '#f59e0b', border: '#c7d2fe', watermark: 'rgba(99,102,241,0.08)', light: '#e0e7ff' },
+  emerald:   { primary: '#047857', secondary: '#10b981', accent: '#f59e0b', border: '#a7f3d0', watermark: 'rgba(16,185,129,0.08)', light: '#d1fae5' },
+  gold:      { primary: '#b45309', secondary: '#f59e0b', accent: '#dc2626', border: '#fde68a', watermark: 'rgba(245,158,11,0.08)', light: '#fef3c7' },
+  burgundy:  { primary: '#7f1d1d', secondary: '#991b1b', accent: '#f59e0b', border: '#fecaca', watermark: 'rgba(153,27,27,0.08)', light: '#fef2f2' },
+  violet:    { primary: '#6b21a8', secondary: '#8b5cf6', accent: '#f59e0b', border: '#ddd6fe', watermark: 'rgba(139,92,246,0.08)', light: '#f3e8ff' },
+  light_rdc: { primary: '#0f172a', secondary: '#1e40af', accent: '#ef4444', border: '#bfdbfe', watermark: 'rgba(30,64,175,0.08)', light: '#eff6ff' },
 };
 
 function formatDate(d?: string) {
@@ -186,12 +191,14 @@ const MiniLogo: React.FC<{ name: string }> = ({ name }) => (
 
 export const IdCardRenderer: React.FC<IdCardRendererProps> = ({
   student,
-  schoolConfig,
+  schoolConfig: propSchoolConfig,
   cardConfig,
   face = 'front',
   className = '',
   style,
 }) => {
+  const { config: hookSchoolConfig } = useSchoolConfig();
+  const schoolConfig = propSchoolConfig || hookSchoolConfig;
   const cycle = detectCycle(student.nomClasse);
   const cfg = resolveCardConfig(schoolConfig, cardConfig, cycle);
   const t = themeMeta[cfg.cardTheme];
@@ -341,24 +348,34 @@ export const IdCardRenderer: React.FC<IdCardRendererProps> = ({
   const headerTextAlign = { left: 'left', center: 'center', right: 'right' }[cfg.headerAlign];
 
   const FrontHeader = ({ compact = false, subtitle }: { compact?: boolean; subtitle?: string }) => (
-    <div className={`relative z-10 ${compact ? 'pt-3 pb-1.5 px-3' : 'pt-4 pb-1.5 px-3'} border-b`} style={{ borderColor: t.border, background: `linear-gradient(180deg, ${t.light} 0%, #fff 100%)`, textAlign: headerTextAlign as any }}>
-      <div className={`flex items-center gap-2 mb-0.5 ${headerJustify}`}>
-        {schoolLogo ? (
-          <img src={schoolLogo} alt="logo" className={`${compact ? 'w-8 h-8' : 'w-10 h-10'} object-contain rounded`} />
-        ) : (
-          <School className={`${compact ? 'w-7 h-7' : 'w-8 h-8'}`} style={{ color: t.primary }} />
-        )}
-        <div className="leading-tight" style={{ textAlign: 'inherit' }}>
-          <div className={`flex items-center gap-1 ${cfg.headerAlign === 'center' ? 'justify-center' : cfg.headerAlign === 'right' ? 'justify-end' : ''}`}>
-            {cfg.showCountryFlag && <DRCFlag size={compact ? 12 : 14} className="rounded-full" />}
-            {cfg.showCoatOfArms && <CoatOfArms size={compact ? 12 : 14} color={t.primary} />}
-            <p className="font-black uppercase tracking-wider truncate" style={{ color: t.primary, fontSize: compact ? 7 : 8 }}>République Démocratique du Congo</p>
+    <div className={`relative z-10 ${compact ? 'pt-2 pb-1 px-3' : 'pt-3 pb-1.5 px-3'} border-b`} style={{ borderColor: t.border, background: `linear-gradient(180deg, ${t.light} 0%, #fff 100%)` }}>
+      <div className="flex items-center justify-between gap-2">
+        {/* LOGO GAUCHE : SCEAU OFFICIEL EPST RDC (input_file_1.png) */}
+        {cfg.showOfficialEpstLogo !== false && (
+          <div className={`${compact ? 'w-7 h-7' : 'w-9 h-9'} rounded-full bg-white p-0.5 border border-slate-300 shrink-0 shadow-2xs flex items-center justify-center`}>
+            <img src={LOGO_EPST_RDC_BASE64} alt="EPST Logo" className="w-full h-full object-contain" />
           </div>
-          <p className="font-black uppercase tracking-wide text-slate-500 truncate" style={{ fontSize: compact ? 6 : 7 }}>Ministère de l'EPST</p>
+        )}
+
+        {/* CENTRE : INFORMATIONS DU HEADER EN-TÊTE RDC ET ÉCOLE */}
+        <div className="flex-1 text-center min-w-0 leading-tight">
+          <p className="font-black uppercase tracking-wider truncate text-slate-900" style={{ color: t.primary, fontSize: compact ? 7 : 8 }}>République Démocratique du Congo</p>
+          <p className="font-bold uppercase tracking-wide text-slate-500 truncate" style={{ fontSize: compact ? 6 : 7 }}>Ministère de l'EPST</p>
+          <h3 className={`font-black uppercase tracking-tight truncate ${compact ? 'text-[10px]' : 'text-[12px]'} mt-0.5`} style={{ color: t.primary }}>{schoolName}</h3>
+          {subtitle && <p className={`font-black uppercase tracking-wider truncate ${compact ? 'text-[6px]' : 'text-[7px]'}`} style={{ color: t.secondary }}>{subtitle}</p>}
         </div>
+
+        {/* LOGO DROITE : LOGO DE L'ÉTABLISSEMENT */}
+        {cfg.showSchoolLogo !== false && (
+          <div className={`${compact ? 'w-7 h-7' : 'w-9 h-9'} rounded-md bg-white p-0.5 border border-slate-300 shrink-0 shadow-2xs flex items-center justify-center`}>
+            {schoolLogo ? (
+              <img src={schoolLogo} alt="logo" className="w-full h-full object-contain rounded" />
+            ) : (
+              <School className={`${compact ? 'w-5 h-5' : 'w-6 h-6'}`} style={{ color: t.primary }} />
+            )}
+          </div>
+        )}
       </div>
-      <h3 className={`font-black uppercase tracking-tight truncate ${compact ? 'text-[11px]' : 'text-[13px]'}`} style={{ color: t.primary }}>{schoolName}</h3>
-      {subtitle && <p className={`font-black uppercase tracking-wider truncate ${compact ? 'text-[6px]' : 'text-[7px]'}`} style={{ color: t.secondary }}>{subtitle}</p>}
     </div>
   );
 

@@ -30,6 +30,7 @@ export interface ClasseScolaire {
   id: string;
   schoolYearId?: string;
   cycleId: string;
+  cycleCode?: string;
   nom: string; // ex: "7ème CTEB", "3ème Math-Physique", "6ème Primaire"
   salle: string;
   salleCode?: string;   // code de la salle physique liée
@@ -130,7 +131,9 @@ export interface Discipline {
   maxSemestre?: number; // Max Semestre = Max Période * 4
   maxAnnuel?: number; // Max Annuel = Max Période * 8
   isOptionMajora?: boolean;
-  categorie: 'SCIENCES' | 'LANGUES' | 'CULTURE_GENERALE' | 'PRATIQUE' | 'OPTION';
+  categorie: 'SCIENCES' | 'LANGUES' | 'CULTURE_GENERALE' | 'PRATIQUE' | 'OPTION' | string;
+  cycleCode?: string;
+  optionCode?: string;
 }
 
 export type TypeEvaluation =
@@ -154,6 +157,7 @@ export interface Cote {
   type: TypeEvaluation;
   score: number;
   maxScore: number;
+  poids?: number;
   dateCote?: string;
   titre?: string;
   libelle?: string;
@@ -515,7 +519,7 @@ export interface AnneeScolaireConfig {
   fraisCarte: number;
   fraisAnnexes: FraisAnnexeConfig[];
   cycles: CycleConfig[];
-  options: OptionConfig[];
+  options?: OptionConfig[];
   salles: SalleConfig[];
   semestres: { id: string; nom: string; statut: string; fin: string }[];
   periodes: { id: string; nom: string; debut: string; fin: string; type: 'PERIOD' | 'EXAM' }[];
@@ -606,6 +610,7 @@ export interface OperationCaisse {
   caissier: string;
   validePar?: string;
   pieceJustificative?: string;
+  beneficiaire?: string;
   anneeScolaireId?: string;
   schoolYearId?: string;
   origine?: 'PAYMENT' | 'EXPENSE' | 'MANUAL' | 'PAYROLL';

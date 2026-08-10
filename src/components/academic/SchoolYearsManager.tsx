@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar, Plus, CheckCircle2, Clock, Lock, Trash2, Edit3, School, Users, AlertTriangle, ShieldCheck, X } from 'lucide-react';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { AnneeScolaireConfig, StatutAnnéeScolaire } from '../../types';
@@ -20,6 +21,13 @@ export const SchoolYearsManager: React.FC<SchoolYearsManagerProps> = ({ onYearCh
   const [loading, setLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingYear, setEditingYear] = useState<AnneeScolaireConfig | null>(null);
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isModalOpen]);
 
   const [formData, setFormData] = useState<Partial<AnneeScolaireConfig>>({
     nom: '2026–2027',
@@ -263,10 +271,11 @@ export const SchoolYearsManager: React.FC<SchoolYearsManagerProps> = ({ onYearCh
       )}
 
       {/* Modale d'Édition / Création */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
+      {isModalOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}>
           <div
             className="w-full max-w-md rounded-2xl border shadow-2xl overflow-hidden flex flex-col transition-colors"
+            onClick={e => e.stopPropagation()}
             style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
           >
             <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--border)' }}>
@@ -344,7 +353,8 @@ export const SchoolYearsManager: React.FC<SchoolYearsManagerProps> = ({ onYearCh
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -208,8 +208,8 @@ export class LocalDatabaseService {
       }
     } catch (e) {}
 
-    // 2. Initialiser le seeding mémoire si en mode Web (hors Electron) ou si la base est vide
-    if (!isElectron() || (memoryDb.eleves && memoryDb.eleves.length === 0)) {
+    // 2. Initialiser les structures mémoire vides (mode Web hors Electron uniquement)
+    if (!isElectron()) {
       this.seedMemoryStore();
     }
 
@@ -225,179 +225,21 @@ export class LocalDatabaseService {
   }
 
   public static seedMemoryStore(): void {
-    console.log('[ECOLISA Memory Seeder] Initialisation des 1 125+ élèves, du staff et des classes en mémoire...');
-    const syId = 'sy_2026_2027';
+    console.log('[ECOLISA] Base propre initialisée — aucune donnée de démonstration.');
 
-    // Année Scolaire
-    memoryDb.schoolYears = [
-      {
-        id: syId,
-        nom: '2026–2027',
-        statut: 'EN_COURS',
-        debut: '2026-09-01',
-        fin: '2027-07-02',
-        nombreElevesTotal: 1125,
-        fraisInscription: 50,
-        fraisConnexion: 10,
-        fraisReinscription: 35,
-        fraisCarte: 10,
-      }
-    ];
-
-    // Classes
-    const classesDefs = [
-      { id: 'cls_mat_ps', nom: 'Petite Section Maternelle', cycleId: 'MATERNELLE', optionCode: '', salle: 'Salle A-01', ageBase: 3 },
-      { id: 'cls_mat_ms', nom: 'Moyenne Section Maternelle', cycleId: 'MATERNELLE', optionCode: '', salle: 'Salle A-02', ageBase: 4 },
-      { id: 'cls_mat_gs', nom: 'Grande Section Maternelle', cycleId: 'MATERNELLE', optionCode: '', salle: 'Salle A-03', ageBase: 5 },
-
-      { id: 'cls_prim_1p', nom: '1ère Année Primaire', cycleId: 'PRIMAIRE', optionCode: '', salle: 'Salle B-01', ageBase: 6 },
-      { id: 'cls_prim_2p', nom: '2ème Année Primaire', cycleId: 'PRIMAIRE', optionCode: '', salle: 'Salle B-02', ageBase: 7 },
-      { id: 'cls_prim_3p', nom: '3ème Année Primaire', cycleId: 'PRIMAIRE', optionCode: '', salle: 'Salle B-03', ageBase: 8 },
-      { id: 'cls_prim_4p', nom: '4ème Année Primaire', cycleId: 'PRIMAIRE', optionCode: '', salle: 'Salle B-04', ageBase: 9 },
-      { id: 'cls_prim_5p', nom: '5ème Année Primaire', cycleId: 'PRIMAIRE', optionCode: '', salle: 'Salle B-05', ageBase: 10 },
-      { id: 'cls_prim_6p', nom: '6ème Année Primaire', cycleId: 'PRIMAIRE', optionCode: '', salle: 'Salle B-06', ageBase: 11 },
-
-      { id: 'cls_cteb_7c', nom: '7ème Année CTEB (Tronc Commun)', cycleId: 'SECONDAIRE_CTEB', optionCode: '', salle: 'Salle C-01', ageBase: 12 },
-      { id: 'cls_cteb_8c', nom: '8ème Année CTEB (Tronc Commun)', cycleId: 'SECONDAIRE_CTEB', optionCode: '', salle: 'Salle C-02', ageBase: 13 },
-
-      { id: 'cls_mp_3h', nom: '1ère Math-Physique (3e Humanités)', cycleId: 'HUMANITES', optionCode: 'Math-Physique', salle: 'Salle D-01', ageBase: 14 },
-      { id: 'cls_mp_4h', nom: '2ème Math-Physique (4e Humanités)', cycleId: 'HUMANITES', optionCode: 'Math-Physique', salle: 'Salle D-02', ageBase: 15 },
-      { id: 'cls_mp_5h', nom: '3ème Math-Physique (5e Humanités)', cycleId: 'HUMANITES', optionCode: 'Math-Physique', salle: 'Salle D-03', ageBase: 16 },
-      { id: 'cls_mp_6h', nom: '4ème Math-Physique (6e Humanités EXETAT)', cycleId: 'HUMANITES', optionCode: 'Math-Physique', salle: 'Salle D-04', ageBase: 17 },
-
-      { id: 'cls_bc_3h', nom: '1ère Biologie-Chimie (3e Humanités)', cycleId: 'HUMANITES', optionCode: 'Biologie-Chimie', salle: 'Salle E-01', ageBase: 14 },
-      { id: 'cls_bc_4h', nom: '2ème Biologie-Chimie (4e Humanités)', cycleId: 'HUMANITES', optionCode: 'Biologie-Chimie', salle: 'Salle E-02', ageBase: 15 },
-      { id: 'cls_bc_5h', nom: '3ème Biologie-Chimie (5e Humanités)', cycleId: 'HUMANITES', optionCode: 'Biologie-Chimie', salle: 'Salle E-03', ageBase: 16 },
-      { id: 'cls_bc_6h', nom: '4ème Biologie-Chimie (6e Humanités EXETAT)', cycleId: 'HUMANITES', optionCode: 'Biologie-Chimie', salle: 'Salle E-04', ageBase: 17 },
-
-      { id: 'cls_cg_3h', nom: '1ère Commerciale & Gestion (3e Hum)', cycleId: 'HUMANITES', optionCode: 'Commerciale', salle: 'Salle F-01', ageBase: 14 },
-      { id: 'cls_cg_4h', nom: '2ème Commerciale & Gestion (4e Hum)', cycleId: 'HUMANITES', optionCode: 'Commerciale', salle: 'Salle F-02', ageBase: 15 },
-      { id: 'cls_cg_5h', nom: '3ème Commerciale & Gestion (5e Hum)', cycleId: 'HUMANITES', optionCode: 'Commerciale', salle: 'Salle F-03', ageBase: 16 },
-      { id: 'cls_cg_6h', nom: '4ème Commerciale & Gestion (6e Hum EXETAT)', cycleId: 'HUMANITES', optionCode: 'Commerciale', salle: 'Salle F-04', ageBase: 17 },
-
-      { id: 'cls_ped_3h', nom: '1ère Pédagogie Générale (3e Hum)', cycleId: 'HUMANITES', optionCode: 'Pédagogie', salle: 'Salle G-01', ageBase: 14 },
-      { id: 'cls_ped_4h', nom: '2ème Pédagogie Générale (4e Hum)', cycleId: 'HUMANITES', optionCode: 'Pédagogie', salle: 'Salle G-02', ageBase: 15 },
-      { id: 'cls_ped_5h', nom: '3ème Pédagogie Générale (5e Hum)', cycleId: 'HUMANITES', optionCode: 'Pédagogie', salle: 'Salle G-03', ageBase: 16 },
-      { id: 'cls_ped_6h', nom: '4ème Pédagogie Générale (6e Hum EXETAT)', cycleId: 'HUMANITES', optionCode: 'Pédagogie', salle: 'Salle G-04', ageBase: 17 },
-    ];
-
-    memoryDb.classes = classesDefs.map(c => ({
-      id: c.id,
-      nom: c.nom,
-      cycleId: c.cycleId,
-      optionCode: c.optionCode,
-      schoolYearId: syId,
-      salle: c.salle,
-      nombreEleves: 47,
-      professeurTitulaire: 'Prof. ' + c.nom,
-    }));
-
-    // Salles physiques
-    memoryDb.salles = [
-      { id: 'sal_a01', codeSalle: 'SALLE-A01', nomSalle: 'Salle A-01 (Maternelle)', capacite: 35, cycleCode: 'MATERNELLE', batiment: 'Pavillon Éveil A', statut: 'DISPONIBLE' },
-      { id: 'sal_a02', codeSalle: 'SALLE-A02', nomSalle: 'Salle A-02 (Maternelle)', capacite: 35, cycleCode: 'MATERNELLE', batiment: 'Pavillon Éveil A', statut: 'DISPONIBLE' },
-      { id: 'sal_a03', codeSalle: 'SALLE-A03', nomSalle: 'Salle A-03 (Maternelle)', capacite: 35, cycleCode: 'MATERNELLE', batiment: 'Pavillon Éveil A', statut: 'DISPONIBLE' },
-      { id: 'sal_b01', codeSalle: 'SALLE-B01', nomSalle: 'Salle B-01 (1er Prim)', capacite: 50, cycleCode: 'PRIMAIRE', batiment: 'Bloc Primaire B', statut: 'DISPONIBLE' },
-      { id: 'sal_b02', codeSalle: 'SALLE-B02', nomSalle: 'Salle B-02 (2e Prim)', capacite: 50, cycleCode: 'PRIMAIRE', batiment: 'Bloc Primaire B', statut: 'DISPONIBLE' },
-      { id: 'sal_b03', codeSalle: 'SALLE-B03', nomSalle: 'Salle B-03 (3e Prim)', capacite: 50, cycleCode: 'PRIMAIRE', batiment: 'Bloc Primaire B', statut: 'DISPONIBLE' },
-      { id: 'sal_c01', codeSalle: 'SALLE-C01', nomSalle: 'Salle C-01 (CTEB 7c)', capacite: 55, cycleCode: 'SECONDAIRE_CTEB', batiment: 'Bâtiment Central C', statut: 'DISPONIBLE' },
-      { id: 'sal_d01', codeSalle: 'SALLE-D01', nomSalle: 'Salle D-01 (Math-Phys)', capacite: 45, cycleCode: 'HUMANITES', batiment: 'Pavillon Humanités D', statut: 'DISPONIBLE' },
-      { id: 'sal_e01', codeSalle: 'SALLE-E01', nomSalle: 'Salle E-01 (Bio-Chim)', capacite: 45, cycleCode: 'HUMANITES', batiment: 'Pavillon Humanités E', statut: 'DISPONIBLE' },
-      { id: 'sal_f01', codeSalle: 'SALLE-F01', nomSalle: 'Salle F-01 (Commerces)', capacite: 45, cycleCode: 'HUMANITES', batiment: 'Pavillon Humanités F', statut: 'DISPONIBLE' },
-      { id: 'sal_lab', codeSalle: 'LAB-INFO', nomSalle: 'Laboratoire Informatique PRO', capacite: 40, cycleCode: 'HUMANITES', batiment: 'Bloc Scientifique & Labo', statut: 'DISPONIBLE' },
-    ];
-
-    // Matières
-    memoryDb.subjects = [
-      { id: 'sub_math', code: 'MATH', nom: 'Mathématiques Générales', coefficient: 4, maxScore: 100, categorie: 'SCIENCES' },
-      { id: 'sub_phys', code: 'PHYS', nom: 'Physique Appliquée', coefficient: 3, maxScore: 100, categorie: 'SCIENCES' },
-      { id: 'sub_chim', code: 'CHIM', nom: 'Chimie Générale & Organique', coefficient: 3, maxScore: 100, categorie: 'SCIENCES' },
-      { id: 'sub_bio', code: 'BIO', nom: 'Biologie & Écologie', coefficient: 2, maxScore: 100, categorie: 'SCIENCES' },
-      { id: 'sub_fran', code: 'FRAN', nom: 'Langue Française & Littérature', coefficient: 4, maxScore: 100, categorie: 'LANGUES' },
-      { id: 'sub_angl', code: 'ANGL', nom: 'Langue Anglaise (English)', coefficient: 2, maxScore: 100, categorie: 'LANGUES' },
-      { id: 'sub_hist', code: 'HIST', nom: 'Histoire de la RDC & du Monde', coefficient: 2, maxScore: 100, categorie: 'CULTURE_GENERALE' },
-      { id: 'sub_geo', code: 'GEO', nom: 'Géographie Physique & Humaine', coefficient: 2, maxScore: 100, categorie: 'CULTURE_GENERALE' },
-      { id: 'sub_info', code: 'INFO', nom: 'Informatique & Technologies', coefficient: 2, maxScore: 100, categorie: 'PRATIQUE' },
-      { id: 'sub_ped', code: 'PED', nom: 'Pédagogie Générale', coefficient: 4, maxScore: 100, categorie: 'OPTION' },
-      { id: 'sub_compt', code: 'COMPT', nom: 'Comptabilité Générale', coefficient: 4, maxScore: 100, categorie: 'OPTION' },
-    ];
-
-    // Staff
-    const noms = ['KABAMBA', 'MBUYI', 'MUKENDI', 'TSHISEKEDI', 'LUKUSA', 'NTUMBA', 'ILUNGA', 'KASONGO', 'MUTEBA', 'KAPINGA'];
-    const prenomsM = ['Jean-Paul', 'Emmanuel', 'Daniel', 'Samuel', 'David', 'Jonathan', 'Nathan', 'Gédéon'];
-    const prenomsF = ['Sarah', 'Grace', 'Esther', 'Ruth', 'Rachel', 'Naomie', 'Deborah', 'Dorcas'];
-
-    const staffList: MembrePersonnel[] = [
-      { id: 'stf_1', matricule: 'STF-101', numeroMatriculeEPST: 'EPST-101', prenom: 'Joseph', nom: 'MUKADI', genre: 'M', sexe: 'M', role: 'PREFET', telephone: '+243 81 555 01 01', email: 'prefet.mukadi@ecolisa.edu', qualification: 'Doctorat en Gestion', dateEmbauche: '2020-09-01', salaireBase: 1200, devise: 'USD', statut: 'ACTIF' },
-      { id: 'stf_2', matricule: 'STF-102', numeroMatriculeEPST: 'EPST-102', prenom: 'Antoine', nom: 'KABILA', genre: 'M', sexe: 'M', role: 'DE', telephone: '+243 81 555 01 02', email: 'de.kabila@ecolisa.edu', qualification: 'Master Pédagogie', dateEmbauche: '2020-09-01', salaireBase: 950, devise: 'USD', statut: 'ACTIF' },
-      { id: 'stf_3', matricule: 'STF-103', numeroMatriculeEPST: 'EPST-103', prenom: 'Robert', nom: 'NGANDU', genre: 'M', sexe: 'M', role: 'SURVEILLANT', telephone: '+243 81 555 01 03', email: 'discipline.ngandu@ecolisa.edu', qualification: 'Licence Discipline', dateEmbauche: '2020-09-01', salaireBase: 750, devise: 'USD', statut: 'ACTIF' },
-      { id: 'stf_4', matricule: 'STF-104', numeroMatriculeEPST: 'EPST-104', prenom: 'Hélène', nom: 'KASONGO', genre: 'F', sexe: 'F', role: 'COMPTABLE', telephone: '+243 81 555 01 04', email: 'compta.kasongo@ecolisa.edu', qualification: 'Licence Finance', dateEmbauche: '2020-09-01', salaireBase: 850, devise: 'USD', statut: 'ACTIF' },
-      { id: 'stf_5', matricule: 'STF-105', numeroMatriculeEPST: 'EPST-105', prenom: 'Chantal', nom: 'TSHIBOLA', genre: 'F', sexe: 'F', role: 'ADMIN', telephone: '+243 81 555 01 05', email: 'sec.tshibola@ecolisa.edu', qualification: 'Secrétariat EPST', dateEmbauche: '2020-09-01', salaireBase: 600, devise: 'USD', statut: 'ACTIF' },
-    ];
-
-    // Professeurs
-    for (let i = 1; i <= 15; i++) {
-      const isM = i % 2 === 0;
-      const nom = noms[i % noms.length];
-      const prenom = isM ? prenomsM[i % prenomsM.length] : prenomsF[i % prenomsF.length];
-      staffList.push({
-        id: `prof_${i}`,
-        matricule: `PROF-20${i}`,
-        numeroMatriculeEPST: `EPST-PROF-20${i}`,
-        prenom,
-        nom,
-        genre: isM ? 'M' : 'F',
-        sexe: isM ? 'M' : 'F',
-        role: 'ENSEIGNANT',
-        telephone: `+243 81 777 00 ${i}`,
-        email: `prof.${nom.toLowerCase()}@ecolisa.edu`,
-        qualification: 'Licence en Pédagogie & Didactique',
-        specialite: i % 2 === 0 ? 'Mathématiques & Physique' : 'Français & Anglais',
-        dateEmbauche: '2021-09-01',
-        salaireBase: 650,
-        devise: 'USD',
-        statut: 'ACTIF',
-      });
-    }
-
-    memoryDb.staff = staffList;
-
-    // 1 128 Élèves
-    const elevesList: Eleve[] = [];
-    let counter = 1;
-
-    classesDefs.forEach((c) => {
-      for (let i = 0; i < 47; i++) {
-        const isBoy = counter % 2 === 0;
-        const nom = noms[counter % noms.length];
-        const postnom = noms[(counter + 3) % noms.length];
-        const prenom = isBoy ? prenomsM[counter % prenomsM.length] : prenomsF[counter % prenomsF.length];
-
-        elevesList.push({
-          id: `eleve_${counter}`,
-          registrationNumber: `2026-EPST-${String(counter).padStart(4, '0')}`,
-          prenom,
-          nom,
-          postnom,
-          sexe: isBoy ? 'M' : 'F',
-          dateNaissance: `${2026 - c.ageBase}-05-15`,
-          lieuNaissance: 'Kinshasa',
-          schoolYearId: syId,
-          classId: c.id,
-          nomClasse: c.nom,
-          statut: 'ACTIF',
-          nomParent: `Parent ${nom} ${postnom}`,
-          telephoneParent: `+243 81 ${100 + (counter % 800)} ${10 + (counter % 80)} ${10 + (counter % 80)}`,
-          adresse: `N° ${counter}, Av. ${nom}, Kinshasa`,
-          nationalite: 'Congolaise (RDC)',
-        } as Eleve);
-
-        counter++;
-      }
-    });
-
-    memoryDb.eleves = elevesList;
-    console.log(`[ECOLISA Memory Seeder] Succès ! ${elevesList.length} élèves, ${staffList.length} membres du staff et ${classesDefs.length} classes ont été chargés en mémoire.`);
+    // Base 100% vide — toutes les collections initialisées à zéro
+    memoryDb.schoolYears = [];
+    memoryDb.classes = [];
+    memoryDb.salles = [];
+    memoryDb.subjects = [];
+    memoryDb.staff = [];
+    memoryDb.eleves = [];
+    memoryDb.invoices = [];
+    memoryDb.payments = [];
+    memoryDb.cotes = [];
+    memoryDb.presences = [];
+    memoryDb.expenses = [];
+    console.log('[ECOLISA] ✅ Base de données initialisée à propre (0 élèves, 0 enseignants, 0 classes).');
   }
 
   public static async resetDatabase(): Promise<void> {
@@ -602,6 +444,12 @@ export class LocalDatabaseService {
     return memAdd('subjects', fromDb || s);
   }
 
+  public static async updateSubject(id: string, updates: Partial<Discipline>): Promise<Discipline | null> {
+    const fromDb = await safeElectronCall<Discipline | null>(() => api()?.updateSubject?.(id, updates));
+    if (fromDb) return memUpdate<Discipline>('subjects', id, fromDb);
+    return memUpdate<Discipline>('subjects', id, updates);
+  }
+
   public static async deleteSubject(id: string): Promise<void> {
     await safeElectronCall(() => api()?.deleteSubject(id));
     memDelete('subjects', id);
@@ -617,23 +465,41 @@ export class LocalDatabaseService {
     return memAdd('grades', fromDb || g);
   }
 
+  public static async saveCotes(cotes: Cote[]): Promise<void> {
+    for (const c of cotes) {
+      await safeElectronCall(() => api()?.addGrade?.(c));
+      memAdd('grades', c);
+    }
+  }
+
   // ── ELEVES (SQLITE EXCLUSIF) ──────────────────────────────────────────────
   public static async getEleves(filters?: { classId?: string; schoolYearId?: string }): Promise<Eleve[]> {
     const merged = await safeElectronCall<Eleve[]>(() => api()?.getEleves(filters), 'eleves');
+    if (!filters || (filters.schoolYearId === 'ALL' && !filters.classId)) {
+      return merged;
+    }
+
     const years = await this.getSchoolYears();
-    if (years.length === 0) return []; // Aucune année scolaire -> 0 élève
-
-    const validYearIds = new Set(years.map(y => y.id));
     const activeYear = years.find(y => y.statut === 'EN_COURS') || years[0];
-    const targetYearId = filters?.schoolYearId || activeYear?.id;
+    const targetYearId = filters?.schoolYearId;
 
-    const validMerged = merged.filter(e => {
-      if (e.schoolYearId && !validYearIds.has(e.schoolYearId)) return false;
-      if (targetYearId && e.schoolYearId && e.schoolYearId !== targetYearId) return false;
-      return true;
-    });
+    let result = merged;
+    if (targetYearId && targetYearId !== 'ALL') {
+      result = result.filter(e => {
+        if (!e.schoolYearId) return true;
+        if (e.schoolYearId === targetYearId) return true;
+        if (activeYear && (e.schoolYearId === activeYear.nom || e.schoolYearId === activeYear.id)) return true;
+        const targetYearConfig = years.find(y => y.id === targetYearId || y.nom === targetYearId);
+        if (targetYearConfig && (e.schoolYearId === targetYearConfig.id || e.schoolYearId === targetYearConfig.nom)) return true;
+        return false;
+      });
+    }
 
-    return memFilter(validMerged, filters);
+    if (filters.classId) {
+      result = result.filter(e => e.classId === filters.classId || e.nomClasse === filters.classId);
+    }
+
+    return result;
   }
 
   public static async addEleve(eleve: Eleve): Promise<Eleve | null> {
@@ -679,11 +545,13 @@ export class LocalDatabaseService {
     const years = await this.getSchoolYears();
     if (years.length === 0) return []; // Aucune année scolaire -> 0 facture
 
-    const activeYear = years.find(y => y.statut === 'EN_COURS') || years[0];
-    const targetYearId = yearId || activeYear?.id;
+    const targetYearId = yearId;
 
     const invoices = await safeElectronCall<FactureEleve[]>(() => api()?.getInvoices(targetYearId), 'invoices');
-    return targetYearId ? invoices.filter(inv => inv.anneeScolaireId === targetYearId || inv.anneeScolaire === targetYearId || inv.anneeScolaire === activeYear?.nom) : invoices;
+    if (!targetYearId) return invoices;
+
+    const activeYear = years.find(y => y.statut === 'EN_COURS') || years[0];
+    return invoices.filter(inv => inv.anneeScolaireId === targetYearId || inv.anneeScolaire === targetYearId || inv.anneeScolaire === activeYear?.nom);
   }
 
   public static async addInvoice(inv: FactureEleve): Promise<FactureEleve | null> {
@@ -840,7 +708,11 @@ export class LocalDatabaseService {
         type: 'SORTIE',
         categorie: e.categorie,
         modePaiement: e.modePaiement,
+        reference: e.reference,
         caissier: e.caissier,
+        beneficiaire: e.beneficiaire,
+        pieceJustificative: e.pieceJustificative,
+        schoolYearId: e.schoolYearId || e.anneeScolaireId,
         origine: 'EXPENSE',
         origineId: e.id,
       };
@@ -1163,6 +1035,27 @@ export class LocalDatabaseService {
       }
     }
     return { success: false, error: 'Environnement Electron requis.' };
+  }
+
+  public static async cleanMockData(): Promise<{ success: boolean; message?: string; error?: string }> {
+    if (isElectron() && (window as any).electronAPI?.cleanMockData) {
+      try {
+        return await (window as any).electronAPI.cleanMockData();
+      } catch (err: any) {
+        return { success: false, error: err.message };
+      }
+    }
+    // Mode Web / Mémoire
+    memoryDb.eleves = [];
+    memoryDb.staff = [];
+    memoryDb.invoices = [];
+    memoryDb.payments = [];
+    memoryDb.cotes = [];
+    memoryDb.presences = [];
+    memoryDb.expenses = [];
+    memoryDb.classes.forEach(c => c.nombreEleves = 0);
+    memoryDb.schoolYears.forEach(y => y.nombreElevesTotal = 0);
+    return { success: true, message: 'Base de données nettoyée avec succès (0 élève, 0 enseignant).' };
   }
 
   // ── RÔLES & PERMISSIONS SYSTEME ──────────────────────────────────────────

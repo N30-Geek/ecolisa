@@ -47,6 +47,14 @@ export const EtablissementTab: React.FC = () => {
     setSavedSuccess(false);
   };
 
+  const handleLogoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => handleChange('logoUrl', reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
@@ -170,15 +178,26 @@ export const EtablissementTab: React.FC = () => {
                 <ImageIcon className="w-8 h-8 text-slate-400" />
               </div>
             )}
+            <label className="w-full cursor-pointer">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleLogoFile}
+                className="hidden"
+              />
+              <div className="w-full py-1.5 px-2 rounded-lg text-[11px] font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-all text-center">
+                Importer un logo
+              </div>
+            </label>
             <input
               type="text"
               value={config.logoUrl || ''}
               onChange={e => handleChange('logoUrl', e.target.value)}
-              placeholder="URL du logo (ex: https://...)"
-              className="w-full px-2 py-1 text-[11px] rounded-lg border font-medium text-center focus:outline-none focus:border-indigo-500"
+              placeholder="Ou collez l'URL du logo"
+              className="w-full px-2 py-1 mt-2 text-[11px] rounded-lg border font-medium text-center focus:outline-none focus:border-indigo-500"
               style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
             />
-            <span className="text-[10px] text-slate-400 mt-1">Collez l'URL de l'image du logo</span>
+            <span className="text-[10px] text-slate-400 mt-1">PNG, JPG, WEBP acceptés</span>
           </div>
         </div>
       </div>

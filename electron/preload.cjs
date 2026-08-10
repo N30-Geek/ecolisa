@@ -127,4 +127,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Scanner matériel (WIA)
   listWiaDevices: ()  => ipcRenderer.invoke('wia-list-devices'),
   wiaScan:        ()  => ipcRenderer.invoke('wia-scan'),
+
+  // Nettoyage de la base de données
+  cleanMockData:  ()  => ipcRenderer.invoke('db:clean-mock-data'),
 });

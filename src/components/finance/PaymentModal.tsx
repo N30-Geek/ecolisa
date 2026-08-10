@@ -1,23 +1,38 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { X, CreditCard, Check, Loader2 } from 'lucide-react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  X,
+  CreditCard,
+  Check,
+  Loader2,
+  Banknote,
+  Smartphone,
+  Wallet,
+  User,
+  AlertTriangle,
+  ReceiptText,
+  ChevronRight,
+} from 'lucide-react';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { LocalDatabaseService } from '../../services/localDatabase';
-import type { FactureEleve, LigneFacture, TransactionPaiement } from '../../types';
-import { convertCurrency } from '../../utils/currency';
+import type { FactureEleve, TransactionPaiement } from '../../types';
+import { convertCurrency, formatCurrency } from '../../utils/currency';
+import { CustomSelect } from '../common/CustomSelect';
+import { NumberInput } from '../common/NumberInput';
 
 interface PaymentModalProps {
   invoice: FactureEleve;
   onClose: () => void;
-  onSaved?: () => void;
+  onSaved?: (payment: TransactionPaiement) => void;
 }
 
-const METHODS = [
-  { value: 'CASH', label: 'Cash' },
-  { value: 'BANK', label: 'Virement bancaire' },
-  { value: 'FLEXPAY_MPESA', label: 'M-Pesa' },
-  { value: 'FLEXPAY_ORANGE', label: 'Orange Money' },
-  { value: 'FLEXPAY_AIRTEL', label: 'Airtel Money' },
-  { value: 'FLUTTERWAVE_CARTE', label: 'Carte bancaire' },
+const METHOD_OPTIONS = [
+  { value: 'CASH',              label: 'Espèces (Cash)' },
+  { value: 'BANK',              label: 'Virement Bancaire' },
+  { value: 'FLEXPAY_MPESA',     label: 'M-Pesa (FlexPay)' },
+  { value: 'FLEXPAY_ORANGE',    label: 'Orange Money' },
+  { value: 'FLEXPAY_AIRTEL',    label: 'Airtel Money' },
+  { value: 'FLUTTERWAVE_CARTE', label: 'Carte Bancaire' },
 ];
 
 const uuid = () => {
@@ -27,39 +42,35 @@ const uuid = () => {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 };
 
-export const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose, onSaved }) => {
-  const { currency, exchangeRate, format } = useSchoolConfig();
-  const remaining = useMemo(
-    () => Math.max(0, convertCurrency((invoice.montantTotal || 0) - (invoice.montantPaye || 0), invoice.devise, currency, exchangeRate)),
-    [invoice, currency, exchangeRate]
-  );
+const getFeePriority = (categorie: string) => {
+  if (['FRAIS_INSCRIPTION','FRAIS_REINSCRIPTION','FRAIS_CARTE','FRAIS_CONNEXION','FRAIS_CONNEXES'].includes(categorie)) {
+    return { code: 'P1', bg: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30' };
+  }
+  if (categorie === 'FRAIS_MINERVAL') {
+    return { code: 'P2', bg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30' };
+  }
+  if (['FRAIS_KITS_EQUIPEMENTS','FRAIS_UNIFORME','FRAIS_BUS','FRAIS_ACTIVITE','FRAIS_EXAMEN'].includes(categorie)) {
+    return { code: 'P3', bg: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30' };
+  }
+  return { code: 'P4', bg: 'bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30' };
+};
 
-  const [amount, setAmount] = useState<number>(remaining);
+export const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose, onSaved }) => {
+  const { currency, exchangeRate } = useSchoolConfig();
+  const fmt = (n: number, src?: string) => formatCurrency(n, currency, src || currency, exchangeRate);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const [method, setMethod] = useState<string>('CASH');
   const [reference, setReference] = useState('');
   const [caissier, setCaissier] = useState('Caissier');
   const [loading, setLoading] = useState(false);
-  const [allocations, setAllocations] = useState<{ feeTypeId: string; montant: number }[]>([]);
-
-  useEffect(() => {
-    setAmount(remaining);
-    if (invoice.lignes?.length) {
-      const allocs: { feeTypeId: string; montant: number }[] = [];
-      let left = remaining;
-      const lignesUSD = invoice.lignes.map(l => ({
-        ...l,
-        dueUSD: convertCurrency(Math.max(0, (l.montant || 0) - (l.montantPaye || 0)), invoice.devise, currency, exchangeRate),
-      }));
-      for (const l of lignesUSD) {
-        const alloc = Math.min(l.dueUSD, left);
-        if (alloc > 0.001) allocs.push({ feeTypeId: l.feeTypeId, montant: convertCurrency(alloc, currency, invoice.devise, exchangeRate) });
-        left -= alloc;
-      }
-      setAllocations(allocs);
-    } else {
-      setAllocations([{ feeTypeId: '', montant: convertCurrency(remaining, currency, invoice.devise, exchangeRate) }]);
-    }
-  }, [remaining, invoice, currency, exchangeRate]);
+  const [error, setError] = useState<string | null>(null);
+  const [linePayments, setLinePayments] = useState<Record<string, number>>({});
 
   useEffect(() => {
     (window as any).electronAPI?.getCurrentSession?.().then((s: any) => {
@@ -67,156 +78,361 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose, on
     }).catch(() => {});
   }, []);
 
-  const onAmountChange = (val: number) => {
-    setAmount(val);
-    if (!invoice.lignes?.length) {
-      setAllocations([{ feeTypeId: '', montant: convertCurrency(val, currency, invoice.devise, exchangeRate) }]);
-      return;
+  const enrichedLines = useMemo(() => {
+    if (!invoice.lignes?.length) return [];
+    return invoice.lignes.map(l => {
+      const montantDu = convertCurrency(
+        Math.max(0, (l.montant || 0) - (l.montantPaye || 0)),
+        invoice.devise, currency, exchangeRate
+      );
+      return { ...l, montantDu, prio: getFeePriority(l.categorie || '') };
+    });
+  }, [invoice, currency, exchangeRate]);
+
+  useEffect(() => {
+    if (enrichedLines.length > 0) {
+      const init: Record<string, number> = {};
+      enrichedLines.forEach(l => { init[l.feeTypeId] = Math.round(l.montantDu * 100) / 100; });
+      setLinePayments(init);
     }
-    // redistribute proportionally
-    const totalDue = invoice.lignes.reduce((a, l) => a + convertCurrency(Math.max(0, (l.montant || 0) - (l.montantPaye || 0)), invoice.devise, currency, exchangeRate), 0);
-    if (totalDue === 0) return;
-    let left = val;
-    const allocs: { feeTypeId: string; montant: number }[] = [];
-    const sorted = [...invoice.lignes];
-    for (let i = 0; i < sorted.length; i++) {
-      const l = sorted[i];
-      const due = convertCurrency(Math.max(0, (l.montant || 0) - (l.montantPaye || 0)), invoice.devise, currency, exchangeRate);
-      const share = i === sorted.length - 1 ? left : Math.min(due, Math.max(0, Math.round((val * due) / totalDue)));
-      const alloc = Math.min(share, left);
-      if (alloc > 0.001) allocs.push({ feeTypeId: l.feeTypeId, montant: convertCurrency(alloc, currency, invoice.devise, exchangeRate) });
-      left -= alloc;
-    }
-    setAllocations(allocs);
+  }, [enrichedLines]);
+
+  const totalDu = useMemo(() =>
+    enrichedLines.reduce((a, l) => a + l.montantDu, 0),
+    [enrichedLines]
+  );
+
+  const totalPaidByLines = useMemo(() => {
+    if (enrichedLines.length === 0) return linePayments['__global'] ?? 0;
+    return enrichedLines.reduce((a, l) => a + (linePayments[l.feeTypeId] ?? 0), 0);
+  }, [enrichedLines, linePayments]);
+
+  const soldeRestant = Math.max(0, totalDu - totalPaidByLines);
+  const hasLines = enrichedLines.length > 0;
+
+  const setAll = () => {
+    const all: Record<string, number> = {};
+    enrichedLines.forEach(l => { all[l.feeTypeId] = Math.round(l.montantDu * 100) / 100; });
+    setLinePayments(all);
   };
 
+  const setP1Only = () => {
+    const p1: Record<string, number> = {};
+    enrichedLines.forEach(l => {
+      p1[l.feeTypeId] = l.prio.code === 'P1' ? Math.round(l.montantDu * 100) / 100 : 0;
+    });
+    setLinePayments(p1);
+  };
+
+  const clearAll = () => {
+    const none: Record<string, number> = {};
+    enrichedLines.forEach(l => { none[l.feeTypeId] = 0; });
+    setLinePayments(none);
+  };
+
+  const mandatoryP1Covered = enrichedLines
+    .filter(l => l.prio.code === 'P1')
+    .every(l => (linePayments[l.feeTypeId] || 0) >= l.montantDu - 0.001);
+
   const handleSubmit = async () => {
-    if (!amount || amount <= 0) return;
+    if (totalPaidByLines <= 0) {
+      setError('Veuillez saisir au moins un montant de paiement.');
+      return;
+    }
+    setError(null);
     setLoading(true);
+
+    const allocations = hasLines
+      ? enrichedLines
+          .filter(l => (linePayments[l.feeTypeId] || 0) > 0.001)
+          .map(l => ({
+            feeTypeId: l.feeTypeId,
+            montant: convertCurrency(linePayments[l.feeTypeId] || 0, currency, invoice.devise, exchangeRate),
+          }))
+      : [{ feeTypeId: '', montant: convertCurrency(totalPaidByLines, currency, invoice.devise, exchangeRate) }];
+
     const payment: TransactionPaiement = {
       id: uuid(),
       anneeScolaireId: invoice.anneeScolaireId,
       invoiceId: invoice.id,
       nomEleve: invoice.nomEleve,
       registrationNumber: invoice.studentId,
-      montantPaye: convertCurrency(amount, currency, invoice.devise, exchangeRate),
+      montantPaye: convertCurrency(totalPaidByLines, currency, invoice.devise, exchangeRate),
       devise: invoice.devise || 'USD',
       moyenPaiement: method as any,
       reference,
       numeroRecu: `R-${Date.now()}`,
       dateCreation: new Date().toISOString(),
       nomCaissier: caissier,
-      jetonQrCode: '',
-      allocations: allocations.filter(a => a.montant > 0),
+      jetonQrCode: `qr-${invoice.studentId}-${Date.now()}`,
+      allocations,
     };
+
     await LocalDatabaseService.addPayment(payment);
     setLoading(false);
-    onSaved?.();
+    onSaved?.(payment);
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="w-full max-w-xl rounded-3xl border shadow-2xl p-6 max-h-[90vh] overflow-y-auto" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
-        <div className="flex items-center justify-between mb-4">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl rounded-2xl border shadow-2xl flex flex-col max-h-[92vh] animate-scale-in"
+        onClick={e => e.stopPropagation()}
+        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)', boxShadow: 'var(--shadow-2xl)' }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(16,185,129,0.10)' }}>
-              <CreditCard className="w-5 h-5 text-emerald-600" />
+            <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+              <ReceiptText className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold">Paiement</h3>
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{invoice.nomEleve} · {invoice.numeroFacture}</p>
+              <h3 className="text-base font-black" style={{ color: 'var(--text-primary)' }}>Encaissement — Paiement de Frais</h3>
+              <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                {invoice.nomEleve}
+                {invoice.nomClasse && <span> · {invoice.nomClasse}</span>}
+                <span className="ml-1.5 font-mono text-indigo-500">#{invoice.numeroFacture}</span>
+              </p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:opacity-80 flex items-center justify-center" style={{ background: 'var(--bg-sunken)' }}>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl hover:bg-slate-500/10 text-slate-400 hover:text-rose-500 transition-all"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-4 rounded-2xl mb-5" style={{ background: 'var(--bg-sunken)', border: '1px solid var(--border)' }}>
-          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Reste à payer</p>
-          <p className="text-2xl font-black mt-1" style={{ color: 'var(--text-primary)' }}>{format(remaining, currency)}</p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="col-span-2 sm:col-span-1">
-            <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-muted)' }}>Montant reçu ({currency})</label>
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={amount}
-              onChange={e => onAmountChange(Number(e.target.value))}
-              className="w-full rounded-xl border px-3 py-2.5 text-sm font-bold outline-none focus:ring-2"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-            />
-          </div>
-          <div className="col-span-2 sm:col-span-1">
-            <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-muted)' }}>Moyen de paiement</label>
-            <select
-              value={method}
-              onChange={e => setMethod(e.target.value)}
-              className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-            >
-              {METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-muted)' }}>Référence</label>
-            <input
-              type="text"
-              value={reference}
-              onChange={e => setReference(e.target.value)}
-              className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-              placeholder="N° transaction"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-muted)' }}>Caissier</label>
-            <input
-              type="text"
-              value={caissier}
-              onChange={e => setCaissier(e.target.value)}
-              className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-            />
-          </div>
-        </div>
-
-        {invoice.lignes && invoice.lignes.length > 0 && (
-          <div className="mb-5">
-            <label className="block text-xs font-semibold mb-2" style={{ color: 'var(--text-muted)' }}>Répartition par type de frais</label>
-            <div className="space-y-2">
-              {invoice.lignes.map(l => {
-                const due = convertCurrency(Math.max(0, (l.montant || 0) - (l.montantPaye || 0)), invoice.devise, currency, exchangeRate);
-                const alloc = allocations.find(a => a.feeTypeId === l.feeTypeId)?.montant || 0;
-                const allocDisplay = convertCurrency(alloc, invoice.devise, currency, exchangeRate);
-                return (
-                  <div key={l.id} className="flex items-center justify-between p-3 rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}>
-                    <div>
-                      <p className="text-sm font-bold">{l.nom}</p>
-                      <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Reste: {format(due, currency)}</p>
-                    </div>
-                    <p className="text-sm font-black text-emerald-600">{format(allocDisplay, currency)}</p>
-                  </div>
-                );
-              })}
+        <div className="overflow-y-auto flex-1 p-5 space-y-5">
+          {/* KPI Récap Facture */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="p-3.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+              <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Total Facturé</p>
+              <p className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>
+                {fmt(convertCurrency(invoice.montantTotal || 0, invoice.devise, currency, exchangeRate))}
+              </p>
+            </div>
+            <div className="p-3.5 rounded-xl border bg-emerald-500/5 border-emerald-500/20">
+              <p className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 mb-1">Déjà  Encaissé</p>
+              <p className="text-sm font-black text-emerald-700 dark:text-emerald-300">
+                {fmt(convertCurrency(invoice.montantPaye || 0, invoice.devise, currency, exchangeRate))}
+              </p>
+            </div>
+            <div className="p-3.5 rounded-xl border bg-rose-500/5 border-rose-500/20">
+              <p className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 mb-1">Reste à  Payer</p>
+              <p className="text-sm font-black text-rose-700 dark:text-rose-300">{fmt(totalDu)}</p>
             </div>
           </div>
-        )}
 
-        <button
-          onClick={handleSubmit}
-          disabled={loading || amount <= 0}
-          className="w-full rounded-xl py-3 text-sm font-bold flex items-center justify-center gap-2 transition-opacity"
-          style={{ background: '#10b981', color: 'white', opacity: loading || amount <= 0 ? 0.6 : 1 }}
-        >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-          {loading ? 'Enregistrement...' : 'Valider le paiement'}
-        </button>
+          {/* Tableau individuel par ligne */}
+          {hasLines && (
+            <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 border-b" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>
+                    Saisie Individuelle par Type de Frais
+                  </p>
+                  <p className="text-[10.5px] text-slate-500 dark:text-slate-400 mt-0.5">Saisissez le montant encaissé pour chaque frais séparément.</p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button type="button" onClick={setAll}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 transition-all cursor-pointer">
+                    Solder Tout
+                  </button>
+                  <button type="button" onClick={setP1Only}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25 transition-all cursor-pointer">
+                    P1 Seuls
+                  </button>
+                  <button type="button" onClick={clearAll}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/25 transition-all cursor-pointer">
+                    Tout à  0
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[11px]">
+                  <thead>
+                    <tr className="border-b text-[10px] font-black uppercase tracking-wider text-slate-400" style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}>
+                      <th className="py-2 px-3">Prio.</th>
+                      <th className="py-2 px-3">Type de Frais</th>
+                      <th className="py-2 px-3 text-right">Dû</th>
+                      <th className="py-2 px-3 text-right">Montant Payé</th>
+                      <th className="py-2 px-3 text-right">Solde</th>
+                      <th className="py-2 px-3 text-center">Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                    {enrichedLines.map(l => {
+                      const paid = linePayments[l.feeTypeId] ?? 0;
+                      const solde = Math.max(0, l.montantDu - paid);
+                      const isCovered = paid >= l.montantDu - 0.001;
+                      const isPartial = paid > 0 && !isCovered;
+                      return (
+                        <tr key={l.id} className="transition-colors hover:bg-slate-500/5">
+                          <td className="py-2.5 px-3">
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border ${l.prio.bg}`}>{l.prio.code}</span>
+                          </td>
+                          <td className="py-2.5 px-3 font-bold" style={{ color: 'var(--text-primary)' }}>{l.nom}</td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-500 dark:text-slate-400">{fmt(l.montantDu)}</td>
+                          <td className="py-2.5 px-3 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <NumberInput
+                                value={paid}
+                                onChange={v => setLinePayments(prev => ({ ...prev, [l.feeTypeId]: Math.max(0, v) }))}
+                                min={0}
+                                max={l.montantDu}
+                                integer
+                                placeholder="0"
+                                className="w-24 px-2 py-1 text-right text-xs font-mono font-black border rounded-lg"
+                                style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                              />
+                              <button type="button"
+                                onClick={() => setLinePayments(prev => ({ ...prev, [l.feeTypeId]: Math.round(l.montantDu * 100) / 100 }))}
+                                className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 border border-emerald-500/20 cursor-pointer">
+                                Max
+                              </button>
+                              <button type="button"
+                                onClick={() => setLinePayments(prev => ({ ...prev, [l.feeTypeId]: 0 }))}
+                                className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 border border-rose-500/20 cursor-pointer">
+                                0
+                              </button>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-rose-600 dark:text-rose-400">
+                            {solde > 0.001 ? fmt(solde) : <span className="text-emerald-600">—</span>}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                              isCovered ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                              : isPartial ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                              : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30'
+                            }`}>
+                              {isCovered ? 'âœ“ SOLDÉ' : isPartial ? 'â—‘ PARTIEL' : 'âœ— ATTENTE'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Récap 3 colonnes */}
+              <div className="grid grid-cols-3 gap-3 p-3 border-t" style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}>
+                <div className="p-2.5 rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}>
+                  <p className="text-[9.5px] font-black uppercase text-slate-400">Total Dû</p>
+                  <p className="text-sm font-black mt-0.5" style={{ color: 'var(--text-primary)' }}>{fmt(totalDu)}</p>
+                </div>
+                <div className="p-2.5 rounded-xl border bg-emerald-500/5 border-emerald-500/20">
+                  <p className="text-[9.5px] font-black uppercase text-emerald-600 dark:text-emerald-400">Encaissé</p>
+                  <p className="text-sm font-black mt-0.5 text-emerald-700 dark:text-emerald-300">{fmt(totalPaidByLines)}</p>
+                </div>
+                <div className={`p-2.5 rounded-xl border ${soldeRestant > 0.001 ? 'bg-rose-500/5 border-rose-500/20' : 'bg-emerald-500/5 border-emerald-500/20'}`}>
+                  <p className={`text-[9.5px] font-black uppercase ${soldeRestant > 0.001 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>Solde Restant</p>
+                  <p className={`text-sm font-black mt-0.5 ${soldeRestant > 0.001 ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300'}`}>{fmt(soldeRestant)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Fallback sans lignes */}
+          {!hasLines && (
+            <div className="p-4 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+              <label className="block text-xs font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Montant Encaissé ({currency})</label>
+              <NumberInput
+                value={linePayments['__global'] ?? totalDu}
+                onChange={v => setLinePayments({ __global: Math.max(0, v) })}
+                min={0}
+                integer
+                placeholder="0"
+                className="w-full px-3.5 py-2.5 rounded-xl border text-sm font-black"
+                style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+              />
+            </div>
+          )}
+
+          {/* Mode + Référence + Caissier */}
+          <div className="p-4 rounded-xl border space-y-4" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+            <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <CreditCard className="w-3.5 h-3.5 text-indigo-500" />Mode de Règlement & Caissier
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>Mode de Paiement</label>
+                <CustomSelect options={METHOD_OPTIONS} value={method} onChange={setMethod} />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>NÂ° Référence / Bordereau</label>
+                <input
+                  type="text" value={reference} onChange={e => setReference(e.target.value)}
+                  placeholder="NÂ° Transaction / Bordereau"
+                  className="w-full px-3 py-2 rounded-lg border text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                  <User className="w-3 h-3 inline mr-1 text-slate-400" />Nom Caissier
+                </label>
+                <input
+                  type="text" value={caissier} onChange={e => setCaissier(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Alerte P1 non couverts */}
+          {hasLines && totalPaidByLines > 0 && !mandatoryP1Covered && (
+            <div className="flex items-start gap-3 p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/8">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">
+                Les frais prioritaires (P1) ne sont pas entièrement soldés. Le paiement partiel sera enregistré.
+              </p>
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/25 text-xs font-bold">
+              <AlertTriangle className="w-4 h-4 shrink-0" />{error}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-5 border-t shrink-0 flex items-center justify-between gap-3" style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}>
+          <button
+            onClick={onClose}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border text-xs font-bold transition-all hover:bg-slate-500/10"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+          >
+            <X className="w-3.5 h-3.5" />Annuler
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-[10px] text-slate-400 uppercase font-bold">Total à  encaisser</p>
+              <p className="text-lg font-black text-emerald-700 dark:text-emerald-300">{fmt(totalPaidByLines)}</p>
+            </div>
+            <button
+              onClick={handleSubmit}
+              disabled={loading || totalPaidByLines <= 0}
+              className="flex items-center gap-2 px-7 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              {loading ? 'Enregistrement...' : 'Valider & Générer Reçu'}
+              {!loading && <ChevronRight className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
+

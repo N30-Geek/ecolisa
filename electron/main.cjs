@@ -67,6 +67,14 @@ const initDatabase = () => {
         console.log(`[ECOLISA Migration] ${deleted.changes} ancien(s) compte(s) sans mot de passe supprime(s).`);
       }
     } catch (e) {}
+    // Migration : ajout de la colonne capacite sur classes si absente
+    try {
+      const classCols = db.prepare('PRAGMA table_info(classes)').all().map(c => c.name);
+      if (classCols.length > 0 && !classCols.includes('capacite')) {
+        db.exec('ALTER TABLE classes ADD COLUMN capacite INTEGER DEFAULT 45;');
+        console.log('[ECOLISA Migration] Colonne capacite ajoutee a classes.');
+      }
+    } catch (e) {}
 
     // 2. Creation des tables relationnelles
     db.exec(`
@@ -467,18 +475,30 @@ const initDatabase = () => {
 
     console.log('✅ [ECOLISA] SQLite relationnel pret :', dbPath);
 
-    // 4. Auto-Seeding massif (1 125+ Élèves, Staff et Matières)
+    // 4. Verification & Purge automatique des données de test (Base Propre)
     try {
-      const studentCount = db.prepare('SELECT COUNT(*) as cnt FROM eleves').get().cnt;
-      if (studentCount < 500) {
-        console.log(`[ECOLISA Seeder] Base avec ${studentCount} élèves < 500. Déclenchement du seeding massif...`);
-        const { seedDatabase } = require('./seedData.cjs');
-        seedDatabase(db);
+      const mockCount = db.prepare("SELECT COUNT(*) as cnt FROM eleves WHERE id LIKE 'eleve_%' OR registration_number LIKE '2026-EPST-%'").get().cnt;
+      if (mockCount > 0) {
+        console.log(`[ECOLISA Seeder] Purge automatique de ${mockCount} élèves de test en cours...`);
+        const cleanTx = db.transaction(() => {
+          db.prepare("DELETE FROM eleves WHERE id LIKE 'eleve_%' OR registration_number LIKE '2026-EPST-%'").run();
+          db.prepare("DELETE FROM staff WHERE id LIKE 'stf_%' OR id LIKE 'prof_%'").run();
+          db.prepare("DELETE FROM invoices WHERE id LIKE 'inv_%'").run();
+          db.prepare("DELETE FROM payments WHERE id LIKE 'pay_%'").run();
+          db.prepare("DELETE FROM cotes WHERE id LIKE 'cote_%'").run();
+          db.prepare("DELETE FROM presences WHERE id LIKE 'pres_%'").run();
+          db.prepare("DELETE FROM cash_operations WHERE id LIKE 'op_%'").run();
+          db.prepare('UPDATE classes SET nombre_eleves = 0').run();
+          db.prepare('UPDATE school_years SET nombre_eleves_total = 0').run();
+        });
+        cleanTx();
+        console.log('✅ [ECOLISA Seeder] Base nettoyée avec succès. L’application est 100% propre.');
       } else {
-        console.log(`[ECOLISA SQLite] Base de données prête avec ${studentCount} élèves enregistrés.`);
+        const studentCount = db.prepare('SELECT COUNT(*) as cnt FROM eleves').get().cnt;
+        console.log(`[ECOLISA SQLite] Base de données prête et propre avec ${studentCount} élève(s) enregistré(s).`);
       }
     } catch (err) {
-      console.warn('[ECOLISA Seeder] Avertissement seeding auto :', err);
+      console.warn('[ECOLISA Seeder] Remarque vérification DB :', err);
     }
 
     return true;
@@ -496,11 +516,11 @@ const jp = (v, fb='[]') => { try { return JSON.parse(v||fb); } catch { return JS
 
 function mapUser(r) { return { id:r.id, email:r.email, nom:r.nom, prenom:r.prenom, role:r.role, pinCode:r.pin_code, avatarUrl:r.avatar_url, statut:r.statut, telephone:r.telephone, creeLe:r.cree_le, derniereConnexion:r.derniere_connexion }; }
 function mapYear(r) { return { id:r.id, nom:r.nom, statut:r.statut, debut:r.debut, fin:r.fin, nombreElevesTotal:r.nombre_eleves_total||0, fraisInscription:r.frais_inscription||0, fraisConnexion:r.frais_connexion||0, fraisReinscription:r.frais_reinscription||0, fraisCarte:r.frais_carte||0, fraisAnnexes:jp(r.frais_annexes_json), cycles:jp(r.cycles_json), options:jp(r.options_json), salles:jp(r.salles_json), semestres:jp(r.semestres_json), periodes:jp(r.periodes_json) }; }
-function mapClass(r) { return { id:r.id, cycleId:r.cycle_id, schoolYearId:r.school_year_id, optionCode:r.option_code, salleCode:r.salle_code, nom:r.nom, salle:r.salle, nombreEleves:r.nombre_eleves||0, professeurTitulaire:r.professeur_titulaire }; }
+function mapClass(r) { return { id:r.id, cycleId:r.cycle_id, schoolYearId:r.school_year_id, optionCode:r.option_code, salleCode:r.salle_code, nom:r.nom, salle:r.salle, nombreEleves:r.nombre_eleves||0, capacite:r.capacite||45, professeurTitulaire:r.professeur_titulaire }; }
 function mapEleve(r) { const b={id:r.id,registrationNumber:r.registration_number,prenom:r.prenom,nom:r.nom,postnom:r.postnom,sexe:r.sexe,dateNaissance:r.date_naissance,lieuNaissance:r.lieu_naissance,classId:r.class_id,schoolYearId:r.school_year_id,statut:r.statut,photoUrl:r.photo_url,nomParent:r.nom_parent,contactParent:r.contact_parent,adresse:r.adresse}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
 function mapInvoice(r) { const b={id:r.id,eleveId:r.eleve_id,schoolYearId:r.school_year_id,montantTotal:r.montant_total,montantPaye:r.montant_paye,statut:r.statut,dateEcheance:r.date_echeance}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
 function mapPayment(r) { const b={id:r.id,invoiceId:r.invoice_id,eleveId:r.eleve_id,montant:r.montant,methode:r.methode,datePaiement:r.date_paiement,recuNumero:r.recu_numero,encaissePar:r.encaisse_par}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
-function mapExpense(r) { return {id:r.id,motif:r.motif,montant:r.montant,devise:r.devise||'USD',categorie:r.categorie,validePar:r.valide_par,date:r.date_depense,modePaiement:r.mode_paiement,pieceJustificative:r.piece_justificative}; }
+function mapExpense(r) { const b={id:r.id,motif:r.motif,montant:r.montant,devise:r.devise||'USD',categorie:r.categorie,validePar:r.valide_par,date:r.date_depense,modePaiement:r.mode_paiement,pieceJustificative:r.piece_justificative,caissier:r.valide_par}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
 function mapStaff(r) { const b={id:r.id,nom:r.nom,prenom:r.prenom,role:r.role,telephone:r.telephone,email:r.email,salaireBase:r.salaire_base,devise:r.devise,statut:r.statut}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
 function mapCote(r) { const b={id:r.id,eleveId:r.eleve_id,matiereId:r.matiere_id,classeId:r.classe_id,periode:r.periode,type:r.type,score:r.score,maxScore:r.max_score,dateCote:r.date_cote}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
 function mapPresence(r) { const b={id:r.id,eleveId:r.eleve_id,classeId:r.classe_id,dateJour:r.date_jour,statut:r.statut,motif:r.motif}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
@@ -761,8 +781,8 @@ function registerIpcHandlers() {
 
   // Classes
   ipcMain.handle('db-get-classes', (_, yearId) => { if (!db) return []; if (yearId) return db.prepare('SELECT * FROM classes WHERE school_year_id=? ORDER BY nom').all(yearId).map(mapClass); return db.prepare('SELECT * FROM classes ORDER BY nom').all().map(mapClass); });
-  ipcMain.handle('db-add-class', (_, c) => { if (!db) return null; db.prepare('INSERT OR REPLACE INTO classes (id,cycle_id,school_year_id,option_code,salle_code,nom,salle,nombre_eleves,professeur_titulaire) VALUES (?,?,?,?,?,?,?,?,?)').run(c.id,c.cycleId||null,c.schoolYearId||null,c.optionCode||null,c.salleCode||null,c.nom,c.salle||null,c.nombreEleves||0,c.professeurTitulaire||null); return mapClass(db.prepare('SELECT * FROM classes WHERE id=?').get(c.id)); });
-  ipcMain.handle('db-update-class', (_, id, upd) => { if (!db) return null; const f=[],v=[]; if(upd.nom!==undefined){f.push('nom=?');v.push(upd.nom);} if(upd.salle!==undefined){f.push('salle=?');v.push(upd.salle);} if(upd.salleCode!==undefined){f.push('salle_code=?');v.push(upd.salleCode);} if(upd.optionCode!==undefined){f.push('option_code=?');v.push(upd.optionCode);} if(upd.cycleId!==undefined){f.push('cycle_id=?');v.push(upd.cycleId);} if(upd.schoolYearId!==undefined){f.push('school_year_id=?');v.push(upd.schoolYearId);} if(upd.nombreEleves!==undefined){f.push('nombre_eleves=?');v.push(upd.nombreEleves);} if(upd.professeurTitulaire!==undefined){f.push('professeur_titulaire=?');v.push(upd.professeurTitulaire);} if(!f.length) return null; v.push(id); db.prepare(`UPDATE classes SET ${f.join(',')} WHERE id=?`).run(...v); return mapClass(db.prepare('SELECT * FROM classes WHERE id=?').get(id)); });
+  ipcMain.handle('db-add-class', (_, c) => { if (!db) return null; db.prepare('INSERT OR REPLACE INTO classes (id,cycle_id,school_year_id,option_code,salle_code,nom,salle,nombre_eleves,capacite,professeur_titulaire) VALUES (?,?,?,?,?,?,?,?,?,?)').run(c.id,c.cycleId||null,c.schoolYearId||null,c.optionCode||null,c.salleCode||null,c.nom,c.salle||null,c.nombreEleves||0,c.capacite||45,c.professeurTitulaire||null); return mapClass(db.prepare('SELECT * FROM classes WHERE id=?').get(c.id)); });
+  ipcMain.handle('db-update-class', (_, id, upd) => { if (!db) return null; const f=[],v=[]; if(upd.nom!==undefined){f.push('nom=?');v.push(upd.nom);} if(upd.salle!==undefined){f.push('salle=?');v.push(upd.salle);} if(upd.salleCode!==undefined){f.push('salle_code=?');v.push(upd.salleCode);} if(upd.optionCode!==undefined){f.push('option_code=?');v.push(upd.optionCode);} if(upd.cycleId!==undefined){f.push('cycle_id=?');v.push(upd.cycleId);} if(upd.schoolYearId!==undefined){f.push('school_year_id=?');v.push(upd.schoolYearId);} if(upd.nombreEleves!==undefined){f.push('nombre_eleves=?');v.push(upd.nombreEleves);} if(upd.capacite!==undefined){f.push('capacite=?');v.push(upd.capacite);} if(upd.professeurTitulaire!==undefined){f.push('professeur_titulaire=?');v.push(upd.professeurTitulaire);} if(!f.length) return null; v.push(id); db.prepare(`UPDATE classes SET ${f.join(',')} WHERE id=?`).run(...v); return mapClass(db.prepare('SELECT * FROM classes WHERE id=?').get(id)); });
   ipcMain.handle('db-delete-class', (_, id) => { if (!db) return false; db.prepare('DELETE FROM classes WHERE id=?').run(id); return true; });
 
   // Subjects
@@ -915,7 +935,11 @@ function registerIpcHandlers() {
       type: 'SORTIE',
       categorie: e.categorie || 'GENERAL',
       modePaiement: e.modePaiement || 'CASH',
+      reference: e.reference || null,
       caissier: validePar,
+      beneficiaire: e.beneficiaire || null,
+      pieceJustificative: e.pieceJustificative || null,
+      schoolYearId: e.schoolYearId || null,
       origine: 'EXPENSE',
       origineId: e.id,
     };
@@ -1233,16 +1257,31 @@ function registerIpcHandlers() {
     }
   });
 
-  // Seeding de données de test massives (1 125+ Élèves, Staff, Classes, Matières)
-  ipcMain.handle('db:seed-data', () => {
+  // Nettoyage de la base de données (Suppression des données de test)
+  ipcMain.handle('db:clean-mock-data', () => {
     try {
-      const { seedDatabase } = require('./seedData.cjs');
-      seedDatabase(db);
-      return { success: true, count: 1125 };
+      const cleanTx = db.transaction(() => {
+        db.prepare('DELETE FROM eleves').run();
+        db.prepare('DELETE FROM staff').run();
+        db.prepare('DELETE FROM invoices').run();
+        db.prepare('DELETE FROM payments').run();
+        db.prepare('DELETE FROM cotes').run();
+        db.prepare('DELETE FROM presences').run();
+        db.prepare('DELETE FROM cash_operations').run();
+        db.prepare('UPDATE classes SET nombre_eleves = 0').run();
+        db.prepare('UPDATE school_years SET nombre_eleves_total = 0').run();
+      });
+      cleanTx();
+      return { success: true, message: 'Base de données nettoyée avec succès. 0 élève et 0 membre du personnel.' };
     } catch (err) {
-      console.error('[ECOLISA IPC] Erreur db:seed-data :', err);
+      console.error('[ECOLISA IPC] Erreur db:clean-mock-data :', err);
       return { success: false, error: err.message };
     }
+  });
+
+  // Seeding de données de test massives (Désactivé pour garder la base propre)
+  ipcMain.handle('db:seed-data', () => {
+    return { success: true, count: 0, message: 'Seeding désactivé. Application en mode propre.' };
   });
 
   // Fallbacks pour retrocompatibilite IPC (ex: db-load, db-save)

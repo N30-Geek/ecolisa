@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, User, Briefcase, FileText, ChevronRight, ChevronLeft, Check } from 'lucide-react';
 import { MembrePersonnel, GradeEnseignant, TypeContratPersonnel } from '../../types';
 import { CustomSelect } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
+import { NumberInput } from '../common/NumberInput';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,6 +71,13 @@ export const TeacherFormModal: React.FC<TeacherFormModalProps> = ({
   const [disciplineInput, setDisciplineInput] = useState('');
 
   const isEdit = !!teacher;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -437,14 +446,13 @@ export const TeacherFormModal: React.FC<TeacherFormModalProps> = ({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelCls} style={labelStyle}>Salaire de base <span className="text-red-500">*</span></label>
-          <input
+          <NumberInput
+            value={form.salaireBase || 0}
+            onChange={v => set('salaireBase', v)}
+            min={0}
+            placeholder="0"
             className={inputCls}
             style={inputStyle}
-            type="number"
-            min={0}
-            value={form.salaireBase || ''}
-            onChange={e => set('salaireBase', parseFloat(e.target.value) || 0)}
-            placeholder="0"
           />
         </div>
         <div>
@@ -500,18 +508,11 @@ export const TeacherFormModal: React.FC<TeacherFormModalProps> = ({
     return form.salaireBase >= 0;
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
-      {/* Overlay */}
-      <div
-        className="absolute inset-0"
-        style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
-        onClick={onClose}
-      />
-
-      {/* Modal */}
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={onClose}>
       <div
         className="relative w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-scale-in"
+        onClick={e => e.stopPropagation()}
         style={{
           background: 'var(--bg-surface)',
           border: '1px solid var(--border)',
@@ -634,6 +635,7 @@ export const TeacherFormModal: React.FC<TeacherFormModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

@@ -1,4 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Pagination } from '../common/Pagination';
+import { usePagination } from '../../hooks/usePagination';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -18,6 +21,9 @@ import {
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { convertCurrency, formatCurrency } from '../../utils/currency';
+import { CustomSelect } from '../common/CustomSelect';
+import { DatePicker } from '../common/DatePicker';
+import { NumberInput } from '../common/NumberInput';
 import type { OperationCaisse, AnneeScolaireConfig } from '../../types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 
@@ -32,14 +38,44 @@ const CASH_CATEGORIES = [
   'MINERVAL', 'INSCRIPTION', 'FRAIS_KITS', 'SALAIRES', 'FOURNITURES', 'CHARGES', 'MAINTENANCE', 'ACTIVITES', 'BUS', 'AUTRE',
 ];
 
-export const CashTab: React.FC = () => {
+interface CashTabProps {
+  activeSchoolYear?: string;
+  autoOpenForm?: boolean;
+  onActionConsumed?: () => void;
+}
+
+export const CashTab: React.FC<CashTabProps> = ({ activeSchoolYear, autoOpenForm, onActionConsumed }) => {
   const { currency, exchangeRate } = useSchoolConfig();
   const fmt = (n: number, source?: string) => formatCurrency(n, currency, source || currency, exchangeRate);
+
+  const CashTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="glass-card p-3 rounded-xl text-xs" style={{ minWidth: 150, border: '1px solid var(--border)' }}>
+        <p className="font-bold mb-1" style={{ color: 'var(--text-primary)' }}>{label}</p>
+        <p className="font-mono font-black" style={{ color: payload[0].value >= 0 ? '#10b981' : '#ef4444' }}>{fmt(payload[0].value)}</p>
+      </div>
+    );
+  };
 
   const [ops, setOps] = useState<OperationCaisse[]>([]);
   const [years, setYears] = useState<AnneeScolaireConfig[]>([]);
   const [loading, setLoading] = useState(true);
-  const [yearFilter, setYearFilter] = useState<string>('');
+  const [yearFilter, setYearFilter] = useState<string>(activeSchoolYear || '');
+
+  useEffect(() => {
+    if (activeSchoolYear) {
+      setYearFilter(activeSchoolYear);
+    }
+  }, [activeSchoolYear]);
+
+  useEffect(() => {
+    if (autoOpenForm) {
+      setShowForm(true);
+      onActionConsumed?.();
+    }
+  }, [autoOpenForm, onActionConsumed]);
+
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ENTREE' | 'SORTIE' | ''>('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -68,7 +104,7 @@ export const CashTab: React.FC = () => {
       if (modeFilter && o.modePaiement !== modeFilter) return false;
       if (search) {
         const q = search.toLowerCase();
-        const hay = [o.libelle, o.caissier, o.reference, o.categorie, o.modePaiement].filter(Boolean).join(' ').toLowerCase();
+        const hay = [o.libelle, o.caissier, o.beneficiaire, o.reference, o.categorie, o.modePaiement, o.pieceJustificative].filter(Boolean).join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
       const day = o.date?.split('T')[0];
@@ -77,6 +113,8 @@ export const CashTab: React.FC = () => {
       return true;
     });
   }, [ops, typeFilter, categoryFilter, modeFilter, search, dateFrom, dateTo]);
+
+  const { paginated: paginatedOps, ...opsPagination } = usePagination(filteredOps, { defaultPageSize: 15 });
 
   const { totalEntrees, totalSorties, solde } = useMemo(() => {
     const entrees = filteredOps.filter(o => o.type === 'ENTREE').reduce((a, o) => a + convertCurrency(o.montant, o.devise, currency, exchangeRate), 0);
@@ -110,8 +148,8 @@ export const CashTab: React.FC = () => {
   };
 
   const exportCSV = () => {
-    const header = 'Date,Type,Categorie,Libelle,Montant,Devise,Reference,Caissier\n';
-    const rows = filteredOps.map(o => `${o.date},${o.type},${o.categorie},${o.libelle},${o.montant},${o.devise},${o.reference || ''},${o.caissier || ''}`).join('\n');
+    const header = 'Date,Type,Categorie,Libelle,Montant,Devise,Reference,Beneficiaire,Piece,Caissier\n';
+    const rows = filteredOps.map(o => `"${o.date?.split('T')[0]}",${o.type},${o.categorie},"${o.libelle || ''}",${o.montant},${o.devise},${o.reference || ''},${o.beneficiaire || ''},${o.pieceJustificative || ''},${o.caissier || ''}`).join('\n');
     const blob = new Blob([header + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -129,10 +167,12 @@ export const CashTab: React.FC = () => {
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Journal chronologique, filtres avancés et suivi de la trésorerie</p>
         </div>
         <div className="flex items-center gap-2">
-          <select value={yearFilter} onChange={e => setYearFilter(e.target.value)} className="input text-sm w-40">
-            <option value="">Toutes années</option>
-            {years.map(y => <option key={y.id} value={y.id}>{y.nom}</option>)}
-          </select>
+          <CustomSelect
+            options={[{ value: '', label: 'Toutes années' }, ...years.map(y => ({ value: y.id, label: y.nom }))]}
+            value={yearFilter}
+            onChange={setYearFilter}
+            className="w-44"
+          />
           <button onClick={exportCSV} className="btn-secondary flex items-center gap-2" style={{ fontSize: '12px' }}>
             <Download className="w-3.5 h-3.5" /> Exporter CSV
           </button>
@@ -142,14 +182,14 @@ export const CashTab: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: 'Entrées', val: fmt(totalEntrees), color: '#10b981', icon: TrendingUp, desc: `${filteredOps.filter(o => o.type === 'ENTREE').length} opérations` },
           { label: 'Sorties', val: fmt(totalSorties), color: '#ef4444', icon: TrendingDown, desc: `${filteredOps.filter(o => o.type === 'SORTIE').length} opérations` },
           { label: 'Solde de caisse', val: fmt(solde), color: solde >= 0 ? '#6366f1' : '#ef4444', icon: DollarSign, desc: 'Bilan filtré' },
           { label: 'Transactions', val: String(filteredOps.length), color: '#8b5cf6', icon: Filter, desc: 'Opérations affichées' },
         ].map(s => (
-          <div key={s.label} className="p-4 rounded-2xl border shadow-xs" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+          <div key={s.label} className="kpi-card p-4">
             <div className="flex items-center gap-2.5 mb-2.5">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${s.color}15` }}>
                 <s.icon className="w-4.5 h-4.5" style={{ color: s.color }} />
@@ -174,23 +214,28 @@ export const CashTab: React.FC = () => {
               style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
             />
           </div>
-          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as any)} className="input text-xs w-36">
-            <option value="">Tous types</option>
-            <option value="ENTREE">Entrées</option>
-            <option value="SORTIE">Sorties</option>
-          </select>
-          <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="input text-xs w-40">
-            <option value="">Toutes catégories</option>
-            {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <select value={modeFilter} onChange={e => setModeFilter(e.target.value)} className="input text-xs w-40">
-            <option value="">Tous modes</option>
-            {uniqueModes.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
+          <CustomSelect
+            options={[{ value: '', label: 'Tous types' }, { value: 'ENTREE', label: 'Entrées' }, { value: 'SORTIE', label: 'Sorties' }]}
+            value={typeFilter}
+            onChange={val => setTypeFilter(val as any)}
+            className="w-36"
+          />
+          <CustomSelect
+            options={[{ value: '', label: 'Toutes catégories' }, ...uniqueCategories.map(c => ({ value: c, label: c }))]}
+            value={categoryFilter}
+            onChange={setCategoryFilter}
+            className="w-40"
+          />
+          <CustomSelect
+            options={[{ value: '', label: 'Tous modes' }, ...uniqueModes.map(m => ({ value: m, label: m }))]}
+            value={modeFilter}
+            onChange={setModeFilter}
+            className="w-40"
+          />
           <div className="flex items-center gap-2">
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="input text-xs w-36" />
+            <DatePicker value={dateFrom} onChange={setDateFrom} className="w-36" />
             <span className="text-xs text-slate-400">à</span>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="input text-xs w-36" />
+            <DatePicker value={dateTo} onChange={setDateTo} className="w-36" />
           </div>
           <button
             onClick={() => { setSearch(''); setTypeFilter(''); setCategoryFilter(''); setModeFilter(''); setDateFrom(''); setDateTo(''); }}
@@ -210,7 +255,7 @@ export const CashTab: React.FC = () => {
               <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-slate-500/10 text-slate-500">{filteredOps.length} opérations</span>
             </div>
             <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
-              {filteredOps.map(o => (
+              {paginatedOps.map(o => (
                 <div key={o.id} className="flex items-center gap-4 p-4 hover:opacity-80 transition-opacity group">
                   <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: o.type === 'ENTREE' ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)' }}>
                     {o.type === 'ENTREE' ? <ArrowDownLeft className="w-4 h-4 text-emerald-500" /> : <ArrowUpRight className="w-4 h-4 text-red-500" />}
@@ -219,7 +264,8 @@ export const CashTab: React.FC = () => {
                     <p className="font-semibold text-[13px] truncate" style={{ color: 'var(--text-primary)' }}>{o.libelle}</p>
                     <div className="flex flex-wrap items-center gap-2 mt-1">
                       <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{o.date?.split('T')[0]}</span>
-                      <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{o.caissier || '—'}</span>
+                      <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{o.type === 'SORTIE' && o.beneficiaire ? `Payé à: ${o.beneficiaire}` : o.caissier || '—'}</span>
+                      {o.pieceJustificative && <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Pièce: {o.pieceJustificative}</span>}
                       <span className="px-1.5 py-0.5 rounded text-[9px] font-black border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>{o.categorie}</span>
                       <span className="px-1.5 py-0.5 rounded text-[9px] font-black border" style={{ background: o.type === 'ENTREE' ? 'rgba(16,185,129,0.10)' : 'rgba(239,68,68,0.10)', borderColor: o.type === 'ENTREE' ? 'rgba(16,185,129,0.30)' : 'rgba(239,68,68,0.30)', color: o.type === 'ENTREE' ? '#059669' : '#dc2626' }}>{o.modePaiement}</span>
                     </div>
@@ -245,6 +291,17 @@ export const CashTab: React.FC = () => {
               )}
             </div>
           </div>
+          <Pagination
+            currentPage={opsPagination.page}
+            totalPages={opsPagination.totalPages}
+            total={opsPagination.total}
+            pageSize={opsPagination.pageSize}
+            pageSizeOptions={[10, 15, 25, 50]}
+            start={opsPagination.start}
+            end={opsPagination.end}
+            onPageChange={opsPagination.setPage}
+            onPageSizeChange={opsPagination.setPageSize}
+          />
         </div>
 
         <div className="space-y-4">
@@ -262,7 +319,7 @@ export const CashTab: React.FC = () => {
                   </defs>
                   <XAxis dataKey="day" fontSize={9} stroke="#94a3b8" tickLine={false} axisLine={false} />
                   <YAxis fontSize={9} stroke="#94a3b8" tickLine={false} axisLine={false} />
-                  <Tooltip contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '10px', color: '#fff', fontSize: '11px' }} />
+                  <Tooltip content={<CashTooltip />} />
                   <Area type="monotone" dataKey="solde" stroke="#6366f1" strokeWidth={2} fill="url(#gradCash)" dot={{ r: 3, fill: '#6366f1' }} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -293,8 +350,11 @@ const CashOperationModal: React.FC<{
   const [montant, setMontant] = useState(0);
   const [categorie, setCategorie] = useState('MINERVAL');
   const [modePaiement, setModePaiement] = useState('CASH');
+  const [devise, setDevise] = useState<'USD' | 'CDF'>(currency);
   const [reference, setReference] = useState('');
   const [caissier, setCaissier] = useState('Caissier');
+  const [beneficiaire, setBeneficiaire] = useState('');
+  const [pieceJustificative, setPieceJustificative] = useState('');
   const [yearId, setYearId] = useState<string>(years.find(y => y.statut === 'EN_COURS')?.id || '');
   const [loading, setLoading] = useState(false);
 
@@ -312,12 +372,14 @@ const CashOperationModal: React.FC<{
       date: new Date().toISOString(),
       libelle,
       montant,
-      devise: currency,
+      devise,
       type,
       categorie,
       modePaiement,
       reference,
       caissier,
+      beneficiaire,
+      pieceJustificative,
       schoolYearId: yearId,
       origine: 'MANUAL',
     };
@@ -327,73 +389,119 @@ const CashOperationModal: React.FC<{
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="w-full max-w-lg rounded-3xl border shadow-2xl p-6" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold">Nouvelle operation de caisse</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--bg-sunken)' }}>
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  const categoryOptions = CASH_CATEGORIES.map(c => ({ value: c, label: c }));
+  const modeOptions = [
+    { value: 'CASH', label: 'Espèces (Cash)' },
+    { value: 'BANQUE', label: 'Virement / Banque' },
+    { value: 'MOBILE_MONEY', label: 'Mobile Money' },
+  ];
+  const yearOptions = years.map(y => ({ value: y.id, label: y.nom }));
+  const currencyOptions = [
+    { value: 'USD', label: 'USD ($)' },
+    { value: 'CDF', label: 'CDF (FC)' },
+  ];
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-2xl border shadow-2xl p-6 max-h-[92vh] overflow-y-auto animate-scale-in" onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)', boxShadow: 'var(--shadow-2xl)' }}>
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-xl ${type === 'ENTREE' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-rose-500/15 text-rose-600'}`}>
+              {type === 'ENTREE' ? <ArrowDownLeft className="w-5 h-5" /> : <ArrowUpRight className="w-5 h-5" />}
+            </div>
+            <div>
+              <h3 className="text-base font-black" style={{ color: 'var(--text-primary)' }}>Nouvelle opération de caisse</h3>
+              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Saisissez les détails de l'entrée ou de la sortie.</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-500/10 text-slate-400 hover:text-rose-500 transition-all">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <button onClick={() => setType('ENTREE')} className={`flex-1 py-2 rounded-xl text-sm font-bold border ${type === 'ENTREE' ? 'bg-emerald-500 text-white border-emerald-500' : ''}`} style={{ borderColor: 'var(--border)' }}>Entree</button>
-            <button onClick={() => setType('SORTIE')} className={`flex-1 py-2 rounded-xl text-sm font-bold border ${type === 'SORTIE' ? 'bg-rose-500 text-white border-rose-500' : ''}`} style={{ borderColor: 'var(--border)' }}>Sortie</button>
+
+        <div className="space-y-5">
+          <div className="flex gap-2 p-1 rounded-xl" style={{ background: 'var(--bg-sunken)', border: '1px solid var(--border)' }}>
+            <button onClick={() => setType('ENTREE')} className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${type === 'ENTREE' ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>Entrée</button>
+            <button onClick={() => setType('SORTIE')} className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${type === 'SORTIE' ? 'bg-rose-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>Sortie</button>
           </div>
-          <div>
-            <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-muted)' }}>Libelle</label>
-            <input value={libelle} onChange={e => setLibelle(e.target.value)} className="input w-full text-sm" />
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="col-span-2">
+              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Libellé</label>
+              <input value={libelle} onChange={e => setLibelle(e.target.value)} placeholder="Ex: Paiement frais scolaires..." className="input w-full text-sm py-2.5" />
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Catégorie</label>
+              <CustomSelect options={categoryOptions} value={categorie} onChange={setCategorie} />
+            </div>
           </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Montant</label>
+              <NumberInput value={montant} onChange={setMontant} min={0} placeholder="0" className="input w-full text-sm py-2.5" />
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Devise</label>
+              <CustomSelect options={currencyOptions} value={devise} onChange={val => setDevise(val as 'USD' | 'CDF')} />
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Mode de paiement</label>
+              <CustomSelect options={modeOptions} value={modePaiement} onChange={setModePaiement} />
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-muted)' }}>Montant</label>
-              <input type="number" value={montant} onChange={e => setMontant(Number(e.target.value))} className="input w-full text-sm" />
+              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Bénéficiaire {type === 'SORTIE' && <span className="text-rose-500">*</span>}</label>
+              <input value={beneficiaire} onChange={e => setBeneficiaire(e.target.value)} className="input w-full text-sm py-2.5" placeholder={type === 'SORTIE' ? 'Personne / Fournisseur payé' : 'Bénéficiaire (optionnel)'} />
             </div>
             <div>
-              <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-muted)' }}>Categorie</label>
-              <select value={categorie} onChange={e => setCategorie(e.target.value)} className="input w-full text-sm">
-                {CASH_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Pièce justificative</label>
+              <input value={pieceJustificative} onChange={e => setPieceJustificative(e.target.value)} className="input w-full text-sm py-2.5" placeholder="N° facture, bon de commande..." />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+
+          <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-muted)' }}>Mode de paiement</label>
-              <select value={modePaiement} onChange={e => setModePaiement(e.target.value)} className="input w-full text-sm">
-                <option value="CASH">Cash</option>
-                <option value="BANQUE">Banque</option>
-                <option value="MOBILE_MONEY">Mobile Money</option>
-              </select>
+              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Référence</label>
+              <input value={reference} onChange={e => setReference(e.target.value)} className="input w-full text-sm py-2.5" placeholder="N° transaction" />
             </div>
             <div>
-              <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-muted)' }}>Annee scolaire</label>
-              <select value={yearId} onChange={e => setYearId(e.target.value)} className="input w-full text-sm">
-                {years.map(y => <option key={y.id} value={y.id}>{y.nom}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-muted)' }}>Reference</label>
-              <input value={reference} onChange={e => setReference(e.target.value)} className="input w-full text-sm" />
+              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Année scolaire</label>
+              <CustomSelect options={yearOptions} value={yearId} onChange={setYearId} />
             </div>
             <div>
-              <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-muted)' }}>Caissier</label>
-              <input value={caissier} onChange={e => setCaissier(e.target.value)} className="input w-full text-sm" />
+              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Caissier</label>
+              <input value={caissier} onChange={e => setCaissier(e.target.value)} className="input w-full text-sm py-2.5" />
             </div>
           </div>
+
+          {type === 'SORTIE' && !beneficiaire && (
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 text-xs font-bold">
+              <span className="w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center text-[10px]">!</span>
+              Pour les sorties, renseigner le bénéficiaire permet de savoir qui a reçu l'argent.
+            </div>
+          )}
+
           <button
             onClick={handleSubmit}
             disabled={loading || !libelle || montant <= 0}
-            className="w-full rounded-xl py-3 text-sm font-bold flex items-center justify-center gap-2"
-            style={{ background: type === 'ENTREE' ? '#10b981' : '#ef4444', color: 'white', opacity: loading || !libelle || montant <= 0 ? 0.6 : 1 }}
+            className="w-full rounded-xl py-3.5 text-sm font-black flex items-center justify-center gap-2 transition-all"
+            style={{ background: type === 'ENTREE' ? '#10b981' : '#ef4444', color: 'white', opacity: loading || !libelle || montant <= 0 ? 0.5 : 1 }}
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            {loading ? 'Enregistrement...' : 'Enregistrer'}
+            {loading ? 'Enregistrement...' : 'Enregistrer l\'opération'}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

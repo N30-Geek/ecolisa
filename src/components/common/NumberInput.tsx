@@ -5,6 +5,7 @@ interface NumberInputProps {
   value: number;
   onChange: (value: number) => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onClick?: (e: React.MouseEvent<HTMLInputElement>) => void;
   min?: number;
   max?: number;
   step?: number;
@@ -13,6 +14,7 @@ interface NumberInputProps {
   className?: string;
   style?: React.CSSProperties;
   disabled?: boolean;
+  required?: boolean;
 }
 
 /**
@@ -25,6 +27,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   value,
   onChange,
   onKeyDown,
+  onClick,
   min,
   max,
   step,
@@ -33,6 +36,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   className = '',
   style,
   disabled,
+  required,
 }) => {
   const [raw, setRaw] = useState<string>(value === 0 ? '' : String(value));
 
@@ -84,9 +88,11 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       value={raw}
       onChange={handleChange}
       onKeyDown={onKeyDown}
+      onClick={onClick}
       onBlur={handleBlur}
       placeholder={placeholder}
       disabled={disabled}
+      required={required}
       className={`${className} focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all`.trim()}
       style={style}
     />

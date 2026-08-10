@@ -70,6 +70,7 @@ export interface DashboardStats {
     nom: string;
     code: string;
     isPresentInSchool: boolean;
+    hasPointage: boolean;
     effectifTotal: number;
     presentsTotal: number;
     fillesTotal: number;
@@ -139,7 +140,7 @@ const quarterName = (q: string, year: string) => {
   return q;
 };
 
-export const fetchDashboardData = async (): Promise<DashboardData> => {
+export const fetchDashboardData = async (targetSchoolYearId?: string): Promise<DashboardData> => {
   const [allStudents, allClasses, schoolYears, subjects, staff, allInvoices, allPayments, expenses, allCotes, allPresences, allSchoolEvents] =
     await Promise.all([
       LocalDatabaseService.getEleves(),
@@ -155,39 +156,46 @@ export const fetchDashboardData = async (): Promise<DashboardData> => {
       LocalDatabaseService.getSchoolEvents(),
     ]);
 
-  const selectedYear = schoolYears.find((y) => y.statut === 'EN_COURS') || schoolYears[0];
-  const activeYearId = selectedYear?.id;
+  let selectedYear: AnneeScolaireConfig | undefined;
+  if (targetSchoolYearId && targetSchoolYearId !== 'ALL') {
+    selectedYear = schoolYears.find(y => y.id === targetSchoolYearId || y.nom === targetSchoolYearId);
+  }
+  if (!selectedYear) {
+    selectedYear = schoolYears.find((y) => y.statut === 'EN_COURS') || schoolYears[0];
+  }
 
-  // Filtrage relationnel par année scolaire active (si configurée)
-  const classes = activeYearId
+  const activeYearId = selectedYear?.id;
+  const isAllYears = targetSchoolYearId === 'ALL';
+
+  const classes = (activeYearId && !isAllYears)
     ? allClasses.filter(c => c.schoolYearId === activeYearId || !c.schoolYearId)
     : allClasses;
 
   const activeClassIds = new Set(classes.map(c => c.id));
 
-  const students = activeYearId
-    ? allStudents.filter(s => s.schoolYearId === activeYearId || (s as any).anneeScolaireId === activeYearId || activeClassIds.has(s.classId))
+  const students = (activeYearId && !isAllYears)
+    ? allStudents.filter(s => s.schoolYearId === activeYearId || (s as any).anneeScolaireId === activeYearId || activeClassIds.has(s.classId) || !s.schoolYearId)
     : allStudents;
 
-  const invoices = activeYearId
-    ? allInvoices.filter(inv => inv.anneeScolaireId === activeYearId || inv.anneeScolaire === selectedYear?.nom)
+  const invoices = (activeYearId && !isAllYears)
+    ? allInvoices.filter(inv => inv.anneeScolaireId === activeYearId || inv.anneeScolaire === selectedYear?.nom || !inv.anneeScolaireId)
     : allInvoices;
 
   const activeInvoiceIds = new Set(invoices.map(inv => inv.id));
 
-  const payments = activeYearId
-    ? allPayments.filter(p => p.anneeScolaireId === activeYearId || activeInvoiceIds.has(p.invoiceId))
+  const payments = (activeYearId && !isAllYears)
+    ? allPayments.filter(p => p.anneeScolaireId === activeYearId || activeInvoiceIds.has(p.invoiceId) || !p.anneeScolaireId)
     : allPayments;
 
-  const cotes = activeYearId
-    ? allCotes.filter(c => c.anneeScolaireId === activeYearId || activeClassIds.has(c.classeId || ''))
+  const cotes = (activeYearId && !isAllYears)
+    ? allCotes.filter(c => c.anneeScolaireId === activeYearId || activeClassIds.has(c.classeId || '') || !c.anneeScolaireId)
     : allCotes;
 
-  const presences = activeYearId
-    ? allPresences.filter(p => p.anneeScolaireId === activeYearId || activeClassIds.has(p.classeId || ''))
+  const presences = (activeYearId && !isAllYears)
+    ? allPresences.filter(p => p.anneeScolaireId === activeYearId || activeClassIds.has(p.classeId || '') || !p.anneeScolaireId)
     : allPresences;
 
-  const schoolEvents = activeYearId
+  const schoolEvents = (activeYearId && !isAllYears)
     ? allSchoolEvents.filter(ev => ev.anneeScolaireId === activeYearId || !ev.anneeScolaireId)
     : allSchoolEvents;
 
@@ -238,7 +246,7 @@ export const computeDashboardStats = (
       : 0;
 
   const presentCount = presences.filter((p) => p.statut === 'PRESENT' || p.statut === 'RETARD').length;
-  const presenceRate = presences.length > 0 ? Math.round((presentCount / presences.length) * 1000) / 10 : 95.4;
+  const presenceRate = presences.length > 0 ? Math.round((presentCount / presences.length) * 1000) / 10 : 0;
 
   // Répartition des élèves par cycle
   const studentsByCycleMap = new Map<string, number>();
@@ -258,7 +266,6 @@ export const computeDashboardStats = (
 
   // Performance mensuelle
   const hasGlobalCotes = cotes.length > 0;
-  const hasGlobalPresences = presences.length > 0;
 
   const monthlyPerformance = MONTH_LABELS.map((mois, idx) => {
     const monthCotes = cotes.filter((c) => parseMonth(c.dateCote) === idx);
@@ -266,11 +273,11 @@ export const computeDashboardStats = (
     const moyenneCotes =
       monthCotes.length > 0
         ? Math.round((monthCotes.reduce((sum, c) => sum + (c.score / (c.maxScore || 100)) * 100, 0) / monthCotes.length) * 10) / 10
-        : (hasGlobalCotes ? 0 : 0);
+        : 0;
     const present = monthPresences.filter((p) => p.statut === 'PRESENT' || p.statut === 'RETARD').length;
     const tauxPresence = monthPresences.length > 0
       ? Math.round((present / monthPresences.length) * 1000) / 10
-      : (hasGlobalPresences ? 0 : 98);
+      : 0;
     return { mois, moyenneCotes, tauxPresence };
   });
 
@@ -383,25 +390,49 @@ export const computeDashboardStats = (
     .sort((a, b) => b.montant - a.montant)
     .slice(0, 5);
 
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayPresences = presences.filter(p => p.dateJour === todayStr || (p.dateJour && p.dateJour.startsWith(todayStr)));
+  const hasTodayPresences = todayPresences.length > 0;
+
   const attendanceByCycle = ['MATERNELLE', 'PRIMAIRE', 'CTEB', 'HUMANITES'].map((cycle) => {
-    const count = studentsByCycleMap.get(cycle) || 0;
-    const filles = activeStudentList.filter((s) => {
+    const cycleStudents = activeStudentList.filter((s) => {
       const cls = classes.find((c) => c.id === s.classId);
-      return normalizeCycle(cls?.cycleId, cls?.nom || s.nomClasse) === cycle && s.sexe === 'F';
-    }).length;
+      return normalizeCycle(cls?.cycleId, cls?.nom || s.nomClasse) === cycle;
+    });
+    const count = cycleStudents.length;
+    const filles = cycleStudents.filter((s) => s.sexe === 'F').length;
     const garcons = count - filles;
+
+    const cycleStudentIds = new Set(cycleStudents.map(s => s.id));
+    const cycleTodayPresences = todayPresences.filter(p => cycleStudentIds.has(p.eleveId));
+
+    const hasPointage = cycleTodayPresences.length > 0;
+    let presentsTotal = 0;
+    let fillesPresents = 0;
+    let garconsPresents = 0;
+
+    if (hasPointage) {
+      presentsTotal = cycleTodayPresences.filter(p => p.statut === 'PRESENT' || p.statut === 'RETARD').length;
+      fillesPresents = cycleTodayPresences.filter(p => {
+        if (p.statut !== 'PRESENT' && p.statut !== 'RETARD') return false;
+        const st = cycleStudents.find(s => s.id === p.eleveId);
+        return st?.sexe === 'F';
+      }).length;
+      garconsPresents = presentsTotal - fillesPresents;
+    }
 
     return {
       id: cycle.toLowerCase(),
       nom: `${cycleName(cycle)}`,
       code: cycle,
-      isPresentInSchool: true,
+      isPresentInSchool: count > 0,
+      hasPointage,
       effectifTotal: count,
-      presentsTotal: Math.round(count * 0.95),
+      presentsTotal,
       fillesTotal: filles,
-      fillesPresents: Math.round(filles * 0.95),
+      fillesPresents,
       garconsTotal: garcons,
-      garconsPresents: Math.round(garcons * 0.95),
+      garconsPresents,
     };
   });
 

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, User, Camera, Mail, Phone, Briefcase, Award, Calendar, DollarSign, ShieldCheck, Check, Upload } from 'lucide-react';
 import { MembrePersonnel, RôleSystème } from '../../types';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
+import { NumberInput } from '../common/NumberInput';
 import { WebcamCaptureModal } from '../common/WebcamCaptureModal';
 
 interface StaffModalProps {
@@ -64,6 +66,13 @@ export const StaffModal: React.FC<StaffModalProps> = ({
   const [isWebcamOpen, setIsWebcamOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isOpen]);
 
   useEffect(() => {
     if (staffToEdit) {
@@ -148,11 +157,12 @@ export const StaffModal: React.FC<StaffModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={onClose}>
         <div
           className="w-full max-w-3xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-colors"
+          onClick={e => e.stopPropagation()}
           style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
         >
           {/* En-tête de la Modale */}
@@ -422,13 +432,12 @@ export const StaffModal: React.FC<StaffModalProps> = ({
                   <label className="text-xs font-bold block mb-1.5" style={{ color: 'var(--text-primary)' }}>
                     Salaire de Base Mensuel
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="10"
+                  <NumberInput
                     value={formData.salaireBase || 0}
-                    onChange={(e) => setFormData({ ...formData, salaireBase: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg border text-xs font-bold transition-all focus:ring-2 focus:ring-indigo-500 outline-none"
+                    onChange={v => setFormData({ ...formData, salaireBase: v })}
+                    min={0}
+                    placeholder="Salaire"
+                    className="w-full px-3 py-2 rounded-lg border text-xs font-bold transition-all outline-none"
                     style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
@@ -476,6 +485,7 @@ export const StaffModal: React.FC<StaffModalProps> = ({
         onCapture={(img) => setFormData((prev) => ({ ...prev, photoUrl: img }))}
         title={`Prise de photo pour ${formData.prenom || ''} ${formData.nom || 'Personnel'}`}
       />
-    </>
+    </>,
+    document.body
   );
 };

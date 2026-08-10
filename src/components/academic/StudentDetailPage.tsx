@@ -31,15 +31,23 @@ import {
   Building2,
   FileSpreadsheet,
   BadgeCheck,
-  FolderOpen
+  FolderOpen,
+  Maximize2,
+  ZoomIn,
+  Edit3
 } from 'lucide-react';
 import { Eleve, ClasseScolaire, DocumentScolaire, FactureEleve, TransactionPaiement, Cote } from '../../types';
 import { IdCardRenderer } from './IdCardRenderer';
+import { RDCEleveCardTemplate } from './RDCEleveCardTemplate';
 import { StudentIdCardModal } from './StudentIdCardModal';
 import { StudentFullFileModal } from './StudentFullFileModal';
 import { StudentDocumentsModal } from './StudentDocumentsModal';
+import { PhotoLightboxModal } from '../common/PhotoLightboxModal';
 import { LocalDatabaseService } from '../../services/localDatabase';
+import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { formatCurrency } from '../../utils/currency';
+import { Pagination } from '../common/Pagination';
+import { usePagination } from '../../hooks/usePagination';
 
 interface StudentDetailPageProps {
   student: Eleve;
@@ -52,11 +60,13 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
   onBack,
   onEdit,
 }) => {
-  const [activeLeftTab, setActiveLeftTab] = useState<'identity' | 'finance' | 'grades' | 'medical' | 'discipline'>('identity');
+  const { config: schoolConfig } = useSchoolConfig();
+  const [activeLeftTab, setActiveLeftTab] = useState<'identity' | 'finance' | 'grades' | 'discipline'>('identity');
   const [cardFace, setCardFace] = useState<'front' | 'back'>('front');
   const [showCardModal, setShowCardModal] = useState(false);
   const [showFullFileModal, setShowFullFileModal] = useState(false);
   const [showDocsModal, setShowDocsModal] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
 
   // État des données réelles chargées depuis SQLite
   const [documents, setDocuments] = useState<DocumentScolaire[]>([]);
@@ -90,6 +100,11 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
     loadStudentData();
   }, [student.id]);
 
+  // Pagination
+  const paymentsPagination = usePagination(payments, { defaultPageSize: 5 });
+  const cotesPagination = usePagination(cotes, { defaultPageSize: 5 });
+  const documentsPagination = usePagination(documents, { defaultPageSize: 5 });
+
   // Calcul réel du résumé financier
   const financialSummary = useMemo(() => {
     const totalDue = invoices.reduce((sum, inv) => sum + (inv.montantTotal || 0), 0);
@@ -122,23 +137,78 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
 
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block" />
 
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                {student.prenom} {student.nom} {student.postnom}
-              </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-                {student.statut}
-              </span>
+          <div className="flex items-center gap-4">
+            <div
+              className="relative group shrink-0 cursor-pointer overflow-hidden rounded-2xl border-2 border-indigo-500/30 hover:border-indigo-600 shadow-md transition-all active:scale-95"
+              onClick={() => setShowPhotoModal(true)}
+              title="Cliquer pour voir la photo en grand format HD"
+            >
+              {student.photoUrl ? (
+                <img
+                  src={student.photoUrl}
+                  alt={student.prenom}
+                  className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-2xl group-hover:scale-105 transition-transform duration-300"
+                />
+              ) : (
+                <div
+                  className="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center text-white font-black text-xl group-hover:scale-105 transition-transform duration-300"
+                  style={{ background: 'linear-gradient(135deg, #4f46e5, #6366f1)' }}
+                >
+                  {student.prenom[0]}{student.nom[0]}
+                </div>
+              )}
+
+              <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-all duration-200">
+                <ZoomIn className="w-5 h-5 text-indigo-300 animate-pulse" />
+                <span className="text-[9px] font-black tracking-widest uppercase mt-0.5 text-indigo-100">Agrandir</span>
+              </div>
             </div>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              Matricule : <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{student.registrationNumber}</span> · Classe : <span className="font-bold text-slate-700 dark:text-slate-200">{student.nomClasse}</span>
-            </p>
+
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                  {student.prenom} {student.nom} {student.postnom}
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                  {student.statut}
+                </span>
+              </div>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                Matricule : <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{student.registrationNumber}</span> · Classe : <span className="font-bold text-slate-700 dark:text-slate-200">{student.nomClasse}</span>
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Boutons d'Action Rapides */}
+        {/* Boutons d'Action Rapides Structurés */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {onEdit && (
+            <button
+              onClick={() => onEdit(student)}
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white font-extrabold text-xs shadow-md shadow-indigo-500/25 flex items-center gap-2 transition-all duration-200 cursor-pointer"
+            >
+              <Edit3 className="w-4 h-4 text-white" />
+              <span>Éditer la Fiche</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => setShowFullFileModal(true)}
+            className="px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs hover:shadow-md active:scale-[0.97] transition-all duration-200 cursor-pointer"
+            style={{ background: 'var(--bg-sunken)', color: 'var(--text-primary)' }}
+          >
+            <FileText className="w-4 h-4 text-indigo-500 icon-animated" />
+            <span>Dossier Complet (PDF/Word)</span>
+          </button>
+
+          <button
+            onClick={() => setShowDocsModal(true)}
+            className="px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs hover:shadow-md active:scale-[0.97] transition-all duration-200 cursor-pointer bg-indigo-500/15 text-indigo-700 dark:text-indigo-300"
+          >
+            <FileCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 icon-animated" />
+            <span>Pièces & Scans</span>
+          </button>
+
           <button
             onClick={() => setShowCardModal(true)}
             className="px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs hover:shadow-md active:scale-[0.97] transition-all duration-200 cursor-pointer"
@@ -147,40 +217,6 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
             <QrCode className="w-4 h-4 text-indigo-500 icon-animated" />
             <span>Carte QR</span>
           </button>
-
-          <button
-            onClick={() => setShowDocsModal(true)}
-            className="px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs hover:shadow-md active:scale-[0.97] transition-all duration-200 cursor-pointer bg-indigo-500/15 text-indigo-700 dark:text-indigo-300"
-          >
-            <FileCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 icon-animated" />
-            <span>Gestion du Dossier & Scans</span>
-          </button>
-
-          <button
-            onClick={() => setShowFullFileModal(true)}
-            className="px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs hover:shadow-md active:scale-[0.97] transition-all duration-200 cursor-pointer"
-            style={{ background: 'var(--bg-sunken)', color: 'var(--text-primary)' }}
-          >
-            <FileText className="w-4 h-4 text-indigo-500 icon-animated" />
-            <span>Dossier PDF</span>
-          </button>
-
-          <button
-            onClick={() => setShowCardModal(true)}
-            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white font-bold text-xs shadow-md shadow-indigo-500/25 flex items-center gap-2 transition-all duration-200 cursor-pointer"
-          >
-            <Printer className="w-4 h-4 text-white" />
-            <span>Bulletin Trimestriel</span>
-          </button>
-
-          {onEdit && (
-            <button
-              onClick={() => onEdit(student)}
-              className="px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs hover:shadow-md active:scale-[0.97] transition-all duration-200 cursor-pointer bg-amber-500/15 text-amber-700 dark:text-amber-300"
-            >
-              <span>Éditer la Fiche</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -196,11 +232,10 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
             style={{ background: 'var(--bg-surface)' }}
           >
             {[
-              { id: 'identity', label: 'Identité & État Civil', icon: User },
+              { id: 'identity', label: 'Identité, Dossier & Santé', icon: User },
               { id: 'finance', label: 'Finances & Frais', icon: DollarSign },
               { id: 'grades', label: 'Cotes & Matières', icon: Award },
-              { id: 'medical', label: 'Fiche Médicale', icon: Heart },
-              { id: 'discipline', label: 'Assiduité', icon: ShieldCheck },
+              { id: 'discipline', label: 'Assiduité & Discipline', icon: ShieldCheck },
             ].map(t => (
               <button
                 key={t.id}
@@ -217,91 +252,196 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
             ))}
           </div>
 
-          {/* ── SOUS-ONGLET 1 : IDENTITÉ & ÉTAT CIVIL ── */}
+          {/* ── SOUS-ONGLET 1 : IDENTITÉ, DOSSIER & SANTÉ (UN SEUL CADRE MASTER BIEN STRUCTURÉ) ── */}
           {activeLeftTab === 'identity' && (
-            <div className="space-y-6">
-              {/* Carte État Civil */}
-              <div className="p-6 rounded-2xl border-0 shadow-md space-y-4" style={{ background: 'var(--bg-surface)' }}>
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/40 pb-3">
-                  <h3 className="text-sm font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                    <User className="w-4.5 h-4.5" /> Fiche Officielle d'État Civil
-                  </h3>
-                  <span className="text-[10.5px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-300">
-                    Certifié Établissement
-                  </span>
+            <div
+              className="p-6 rounded-2xl border-0 shadow-md space-y-6 animate-fade-in"
+              style={{ background: 'var(--bg-surface)' }}
+            >
+              {/* En-tête du Cadre Master */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-4 gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+                    <User className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                      Fiche d'Identité, Origine & Profil Médical
+                    </h3>
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Registre national certifié EPST RDC · État civil, origine géographique et santé
+                    </p>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3.5 gap-x-6 text-xs">
-                  <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
-                    <span className="font-bold text-slate-400">Nom (Patronyme) :</span>
+                <span className="text-[10.5px] font-bold px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 self-start sm:self-auto shrink-0">
+                  Dossier Certifié EPST
+                </span>
+              </div>
+
+              {/* SECTION 1 : ÉTAT CIVIL & IDENTITÉ OFFICIELLE */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                    <User className="w-4 h-4" /> 1. État Civil & Identité Officielle
+                  </h4>
+                  <span className="text-[10px] font-mono font-bold text-slate-400">Section 01</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-xs p-4 rounded-xl" style={{ background: 'var(--bg-sunken)' }}>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Nom (Patronyme) :</span>
                     <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.nom}</span>
                   </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
-                    <span className="font-bold text-slate-400">Postnom :</span>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Postnom :</span>
                     <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.postnom || '—'}</span>
                   </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
-                    <span className="font-bold text-slate-400">Prénom :</span>
-                    <span className="font-black text-sm text-indigo-500">{student.prenom}</span>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Prénom :</span>
+                    <span className="font-black text-sm text-indigo-600 dark:text-indigo-400">{student.prenom}</span>
                   </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
-                    <span className="font-bold text-slate-400">Sexe & Genre :</span>
-                    <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.sexe === 'M' ? 'Masculin (M)' : 'Féminin (F)'}</span>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Sexe & Genre :</span>
+                    <span className="font-black text-xs" style={{ color: 'var(--text-primary)' }}>{student.sexe === 'M' ? 'Masculin (M)' : 'Féminin (F)'}</span>
                   </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
-                    <span className="font-bold text-slate-400">Date de Naissance :</span>
-                    <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.dateNaissance || 'Non renseignée'}</span>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Date de Naissance :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{student.dateNaissance || 'Non renseignée'}</span>
                   </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
-                    <span className="font-bold text-slate-400">Lieu de Naissance :</span>
-                    <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.lieuNaissance || 'Non renseigné'}</span>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Lieu de Naissance :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{student.lieuNaissance || 'Non renseigné'}</span>
                   </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
-                    <span className="font-bold text-slate-400">Nationalité :</span>
-                    <span className="font-black text-sm text-emerald-600 dark:text-emerald-400">{student.nationalite || 'Congolaise (RDC)'}</span>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Nationalité :</span>
+                    <span className="font-black text-xs text-emerald-600 dark:text-emerald-400">{student.nationalite || 'Congolaise (RDC)'}</span>
                   </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
-                    <span className="font-bold text-slate-400">Statut Scolaire :</span>
-                    <span className="font-black text-sm text-emerald-500">{student.statut}</span>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Statut Scolaire :</span>
+                    <span className="font-black text-xs text-emerald-500">{student.statut}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Carte Origine Géographique RDC */}
-              <div className="p-6 rounded-2xl border-0 shadow-md space-y-4" style={{ background: 'var(--bg-surface)' }}>
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/40 pb-3">
-                  <h3 className="text-sm font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                    <MapPin className="w-4.5 h-4.5" /> Origine Géographique & Découpage EPST RDC
-                  </h3>
-                  <span className="text-[10.5px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-300">
-                    26 Provinces
+              {/* SÉPARATEUR DE SECTION */}
+              <div className="border-t border-slate-100 dark:border-slate-800/60" />
+
+              {/* SECTION 2 : ORIGINE GÉOGRAPHIQUE & DÉCOUPAGE EPST RDC */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                    <MapPin className="w-4 h-4" /> 2. Origine Géographique & Résidence
+                  </h4>
+                  <span className="text-[10px] font-mono font-bold text-slate-400">Section 02</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-xs p-4 rounded-xl" style={{ background: 'var(--bg-sunken)' }}>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Province de Résidence :</span>
+                    <span className="font-black text-indigo-600 dark:text-indigo-400">{student.province || 'Non spécifiée'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Province d'Origine :</span>
+                    <span className="font-black text-indigo-600 dark:text-indigo-400">{student.provinceOrigine || 'Non spécifiée'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Territoire / Commune :</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-200">{student.territoireCommune || 'Non renseigné'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Chefferie / Secteur :</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-200">{student.chefferieSecteur || 'Non renseigné'}</span>
+                  </div>
+                  <div className="col-span-1 sm:col-span-2 pt-1">
+                    <span className="font-bold text-slate-400 block text-[11px] mb-1">Adresse Physique Précise :</span>
+                    <p className="font-bold text-xs text-indigo-600 dark:text-indigo-400 p-2.5 rounded-lg bg-indigo-500/5 border border-indigo-500/10">
+                      {student.adressePhysique || 'Non renseignée'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* SÉPARATEUR DE SECTION */}
+              <div className="border-t border-slate-100 dark:border-slate-800/60" />
+
+              {/* SECTION 3 : PROFIL MÉDICAL & DOSSIER INFIRMERIE */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-rose-500 flex items-center gap-2">
+                    <Heart className="w-4 h-4" /> 3. Profil Médical & Fiche Santé
+                  </h4>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500/15 text-rose-600 dark:text-rose-400">
+                    Infirmerie
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3.5 gap-x-6 text-xs">
-                  <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
-                    <span className="font-bold text-slate-400">Province de Résidence :</span>
-                    <span className="font-black text-indigo-500">{student.province || 'Non spécifiée'}</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
-                    <span className="font-bold text-slate-400">Province d'Origine :</span>
-                    <span className="font-black text-indigo-500">{student.provinceOrigine || 'Non spécifiée'}</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
-                    <span className="font-bold text-slate-400">Territoire / Commune :</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-200">{student.territoireCommune || 'Non renseigné'}</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800/40">
-                    <span className="font-bold text-slate-400">Chefferie / Secteur :</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-200">{student.chefferieSecteur || 'Non renseigné'}</span>
-                  </div>
-                </div>
+                <div className="p-4 rounded-xl space-y-3" style={{ background: 'var(--bg-sunken)' }}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                          <Heart className="w-3.5 h-3.5" /> Groupe Sanguin
+                        </span>
+                        <span className="font-black text-sm text-rose-600 dark:text-rose-400">{student.groupeSanguin || 'Non renseigné'}</span>
+                      </div>
+                    </div>
 
-                <div className="p-4 rounded-xl space-y-1" style={{ background: 'var(--bg-sunken)' }}>
-                  <p className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">Adresse Physique de Résidence Exacte</p>
-                  <p className="text-xs font-black text-indigo-600 dark:text-indigo-400">{student.adressePhysique || 'Non renseignée'}</p>
+                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                          <BadgeAlert className="w-3.5 h-3.5" /> Allergies Connues
+                        </span>
+                        <span className="font-extrabold text-xs text-amber-700 dark:text-amber-300">
+                          {student.allergies || 'Aucune allergie majeure'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {student.informationsMedicales && (
+                    <div className="p-3 rounded-lg border border-slate-200/50 dark:border-slate-800 text-xs space-y-1">
+                      <span className="font-bold text-slate-500 dark:text-slate-400 block text-[11px]">Antécédents Médicaux & Précautions :</span>
+                      <p className="font-semibold text-slate-800 dark:text-slate-200">{student.informationsMedicales}</p>
+                    </div>
+                  )}
+
+                  {(student.medecinTraitant || student.numeroCarteSante || student.assuranceSante) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                      {student.medecinTraitant && (
+                        <div className="flex justify-between py-1 border-b border-slate-200/30 dark:border-slate-800/30">
+                          <span className="text-slate-400 font-bold">Médecin Traitant :</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{student.medecinTraitant}</span>
+                        </div>
+                      )}
+                      {student.assuranceSante && (
+                        <div className="flex justify-between py-1 border-b border-slate-200/30 dark:border-slate-800/30">
+                          <span className="text-slate-400 font-bold">Assurance Santé :</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{student.assuranceSante}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* SÉPARATEUR SI NOTES DISPONIBLES */}
+              {(student.description || student.notesPsychopedagogiques) && (
+                <>
+                  <div className="border-t border-slate-100 dark:border-slate-800/60" />
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                      <FileText className="w-4 h-4" /> 4. Observations & Notes Psychopédagogiques
+                    </h4>
+                    <div className="p-4 rounded-xl text-xs space-y-1" style={{ background: 'var(--bg-sunken)' }}>
+                      <p className="font-medium text-slate-700 dark:text-slate-300 leading-relaxed">
+                        {student.description || student.notesPsychopedagogiques}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+
             </div>
           )}
 
@@ -356,7 +496,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                     </p>
                   ) : (
                     <div className="space-y-2">
-                      {payments.map((r, i) => (
+                      {paymentsPagination.paginated.map((r, i) => (
                         <div key={r.id || i} className="p-3 rounded-xl flex items-center justify-between text-xs" style={{ background: 'var(--bg-sunken)' }}>
                           <div className="space-y-0.5">
                             <p className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{r.numeroRecu || r.reference || `REC-${i + 1}`} · <span className="font-sans text-slate-500 dark:text-slate-400">{r.dateCreation}</span></p>
@@ -367,6 +507,18 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                         </div>
                       ))}
                     </div>
+                  )}
+                  {payments.length > 0 && (
+                    <Pagination
+                      currentPage={paymentsPagination.page}
+                      totalPages={paymentsPagination.totalPages}
+                      total={paymentsPagination.total}
+                      pageSize={paymentsPagination.pageSize}
+                      start={paymentsPagination.start}
+                      end={paymentsPagination.end}
+                      onPageChange={paymentsPagination.setPage}
+                      onPageSizeChange={paymentsPagination.setPageSize}
+                    />
                   )}
                 </div>
               </div>
@@ -411,7 +563,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
-                        {cotes.map((c, i) => (
+                        {cotesPagination.paginated.map((c, i) => (
                           <tr key={c.id || i} className="hover:bg-slate-500/5 transition-colors">
                             <td className="p-3">
                               <p className="font-bold" style={{ color: 'var(--text-primary)' }}>{c.titre || c.matiereId}</p>
@@ -427,47 +579,25 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                         ))}
                       </tbody>
                     </table>
+                    {cotes.length > 0 && (
+                      <Pagination
+                        currentPage={cotesPagination.page}
+                        totalPages={cotesPagination.totalPages}
+                        total={cotesPagination.total}
+                        pageSize={cotesPagination.pageSize}
+                        start={cotesPagination.start}
+                        end={cotesPagination.end}
+                        onPageChange={cotesPagination.setPage}
+                        onPageSizeChange={cotesPagination.setPageSize}
+                      />
+                    )}
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* ── SOUS-ONGLET 4 : FICHE MÉDICALE & INFIRMERIE ── */}
-          {activeLeftTab === 'medical' && (
-            <div className="space-y-6">
-              <div className="p-6 rounded-2xl border-0 shadow-md space-y-4" style={{ background: 'var(--bg-surface)' }}>
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/40 pb-3">
-                  <h3 className="text-sm font-black uppercase tracking-wider text-rose-500 flex items-center gap-2">
-                    <Heart className="w-4.5 h-4.5" /> Fiche d'Urgence Médicale Infirmerie
-                  </h3>
-                  <span className="text-xs font-black px-3 py-1 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400">
-                    Groupe Sanguin : {student.groupeSanguin || 'Non renseigné'}
-                  </span>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-xl bg-rose-500/10 space-y-1.5">
-                    <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold text-xs">
-                      <BadgeAlert className="w-4 h-4" /> Allergies Connues
-                    </div>
-                    <p className="text-sm font-bold text-rose-700 dark:text-rose-300">
-                      {student.allergies || 'Aucune allergie majeure signalée'}
-                    </p>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-amber-500/10 space-y-1.5">
-                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-bold text-xs">
-                      <ShieldCheck className="w-4 h-4" /> Antécédents Médicaux
-                    </div>
-                    <p className="text-sm font-bold text-amber-800 dark:text-amber-200">
-                      {student.informationsMedicales || 'Aucun antécédent médical signalé'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* ── SOUS-ONGLET 5 : ASSIDUITÉ & DISCIPLINE ── */}
           {activeLeftTab === 'discipline' && (
@@ -536,11 +666,12 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
               </div>
             </div>
 
-            {/* Rendu Live de la Carte */}
-            <div className="flex justify-center p-2 rounded-xl" style={{ background: 'var(--bg-sunken)' }}>
-              <div className="transform scale-90 sm:scale-95 origin-center transition-transform">
-                <IdCardRenderer
+            {/* Rendu Live de la Carte HD Haute Lisibilité */}
+            <div className="flex items-center justify-center p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-inner overflow-x-auto" style={{ background: 'var(--bg-sunken)' }}>
+              <div className="transform scale-100 sm:scale-[1.02] origin-center transition-transform py-1">
+                <RDCEleveCardTemplate
                   student={student}
+                  schoolConfig={schoolConfig}
                   face={cardFace}
                 />
               </div>
@@ -579,7 +710,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
               </div>
             ) : (
               <div className="space-y-2.5">
-                {documents.map((doc) => (
+                {documentsPagination.paginated.map((doc) => (
                   <div key={doc.id} className="p-3 rounded-xl flex items-center justify-between text-xs" style={{ background: 'var(--bg-sunken)' }}>
                     <div className="flex items-center gap-2.5 min-w-0">
                       <FileText className="w-4 h-4 text-indigo-500 shrink-0" />
@@ -594,6 +725,18 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                   </div>
                 ))}
               </div>
+            )}
+            {documents.length > 0 && (
+              <Pagination
+                currentPage={documentsPagination.page}
+                totalPages={documentsPagination.totalPages}
+                total={documentsPagination.total}
+                pageSize={documentsPagination.pageSize}
+                start={documentsPagination.start}
+                end={documentsPagination.end}
+                onPageChange={documentsPagination.setPage}
+                onPageSizeChange={documentsPagination.setPageSize}
+              />
             )}
 
             <button
@@ -699,6 +842,16 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
         }}
         student={student}
         mode="student"
+      />
+
+      {/* MODALE LIGHTBOX PHOTO ÉLÈVE EN GRAND */}
+      <PhotoLightboxModal
+        isOpen={showPhotoModal}
+        onClose={() => setShowPhotoModal(false)}
+        photoUrl={student.photoUrl}
+        title={`${student.prenom} ${student.nom} ${student.postnom || ''}`}
+        subtitle={`Matricule : ${student.registrationNumber} · Classe : ${student.nomClasse}`}
+        badge={student.statut}
       />
     </div>
   );

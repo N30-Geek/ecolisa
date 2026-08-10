@@ -3,6 +3,7 @@ import { Layers, Plus, Trash2, DoorClosed, GraduationCap, Sparkles, Check, Chevr
 import type { ClasseConfig, Salle } from '../../../types';
 import { CYCLES_EPST, OPTIONS_EPST, CLASSES_PAR_CYCLE, NIVEAUX_HUMANITES, getNomOption } from '../../../data/referentielEPST';
 import { CustomSelect } from '../../common/CustomSelect';
+import { NumberInput } from '../../common/NumberInput';
 
 const STORAGE_KEY = 'ecolisa_structure_academique';
 
@@ -301,13 +302,14 @@ export const StructureAcademiqueTab: React.FC = () => {
               <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                 Nombre de Salles pour cette Classe
               </label>
-              <input
-                type="number"
+              <NumberInput
+                value={initialRoomsCount}
+                onChange={setInitialRoomsCount}
                 min={1}
                 max={10}
-                value={initialRoomsCount}
-                onChange={e => setInitialRoomsCount(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg text-xs border font-medium focus:outline-none focus:border-indigo-500"
+                integer
+                placeholder="Nb salles"
+                className="w-full px-3 py-2 rounded-lg text-xs border font-medium"
                 style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               />
               <span className="text-[10px] text-slate-400">Ex: 2 pour Salle 1 & Salle 2</span>
@@ -317,13 +319,14 @@ export const StructureAcademiqueTab: React.FC = () => {
               <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                 Capacité Max par Salle (Élèves)
               </label>
-              <input
-                type="number"
+              <NumberInput
+                value={newClassCapacity}
+                onChange={setNewClassCapacity}
                 min={10}
                 max={100}
-                value={newClassCapacity}
-                onChange={e => setNewClassCapacity(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg text-xs border font-medium focus:outline-none focus:border-indigo-500"
+                integer
+                placeholder="Capacité"
+                className="w-full px-3 py-2 rounded-lg text-xs border font-medium"
                 style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               />
             </div>
@@ -391,13 +394,14 @@ export const StructureAcademiqueTab: React.FC = () => {
               <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                 Capacité Maximale (Élèves)
               </label>
-              <input
-                type="number"
+              <NumberInput
+                value={newRoomCapacity}
+                onChange={setNewRoomCapacity}
                 min={10}
                 max={100}
-                value={newRoomCapacity}
-                onChange={e => setNewRoomCapacity(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg text-xs border font-medium focus:outline-none focus:border-indigo-500"
+                integer
+                placeholder="Capacité"
+                className="w-full px-3 py-2 rounded-lg text-xs border font-medium"
                 style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               />
             </div>

@@ -34,11 +34,14 @@ import {
 import { ClasseScolaire, SalleConfig, MembrePersonnel, AnneeScolaireConfig, Eleve } from '../../types';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
+import { Pagination } from '../common/Pagination';
+import { usePagination } from '../../hooks/usePagination';
 import { ClassFormModal } from './ClassFormModal';
 import { RoomFormModal } from './RoomFormModal';
 
 interface ClassesPromotionsManagerProps {
   onNavigateToStudents?: (classId?: string) => void;
+  activeSchoolYear?: string;
 }
 
 const cycleOptions: SelectOption[] = [
@@ -163,6 +166,9 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
       return matchesSearch && matchesCycle;
     });
   }, [salles, searchQuery, cycleFilter]);
+
+  const classesPagination = usePagination(filteredClasses, { defaultPageSize: 12 });
+  const sallesPagination = usePagination(filteredSalles, { defaultPageSize: 12 });
 
   // Statistiques globales
   const totalCapacity = useMemo(() => classes.reduce((sum, c) => sum + (c.capacite || 45), 0), [classes]);
@@ -513,7 +519,7 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
           ) : viewMode === 'grid' ? (
             /* AFFICHAGE GRILLE DE CARTES HIGH-END */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredClasses.map(c => {
+              {classesPagination.paginated.map(c => {
                 const badge = getCycleBadge(c.cycleId);
                 const countEnrolled = studentCountByClass[c.id] || c.nombreEleves || 0;
                 const capacity = c.capacite || 45;
@@ -624,7 +630,7 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
                     </tr>
                   </thead>
                   <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
-                    {filteredClasses.map(c => {
+                    {classesPagination.paginated.map(c => {
                       const badge = getCycleBadge(c.cycleId);
                       const countEnrolled = studentCountByClass[c.id] || c.nombreEleves || 0;
 
@@ -687,6 +693,18 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
                 </table>
               </div>
             </div>
+          )}
+          {!loading && filteredClasses.length > 0 && (
+            <Pagination
+              currentPage={classesPagination.page}
+              totalPages={classesPagination.totalPages}
+              total={classesPagination.total}
+              pageSize={classesPagination.pageSize}
+              start={classesPagination.start}
+              end={classesPagination.end}
+              onPageChange={classesPagination.setPage}
+              onPageSizeChange={classesPagination.setPageSize}
+            />
           )}
         </div>
       )}
@@ -901,7 +919,7 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredSalles.map(s => (
+            {sallesPagination.paginated.map(s => (
               <div
                 key={s.id}
                 className="p-5 rounded-2xl border-0 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 space-y-3.5"
@@ -946,6 +964,18 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
               </div>
             ))}
           </div>
+          {!loading && filteredSalles.length > 0 && (
+            <Pagination
+              currentPage={sallesPagination.page}
+              totalPages={sallesPagination.totalPages}
+              total={sallesPagination.total}
+              pageSize={sallesPagination.pageSize}
+              start={sallesPagination.start}
+              end={sallesPagination.end}
+              onPageChange={sallesPagination.setPage}
+              onPageSizeChange={sallesPagination.setPageSize}
+            />
+          )}
         </div>
       )}
 

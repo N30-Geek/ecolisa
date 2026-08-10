@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X, User, Phone, Mail, MapPin, Calendar, Briefcase,
   BookOpen, DollarSign, Hash, Edit2, Trash2, AlertTriangle, Folder, Award, School
@@ -87,6 +88,7 @@ export const TeacherDetailDrawer: React.FC<TeacherDetailDrawerProps> = ({
     SUSPENDU: { label: 'Suspendu', bg: 'rgba(239,68,68,0.10)', color: '#ef4444', border: 'rgba(239,68,68,0.25)' },
     INACTIF: { label: 'Inactif', bg: 'rgba(239,68,68,0.10)', color: '#ef4444', border: 'rgba(239,68,68,0.25)' },
   };
+
   const statutBadge = statutBadgeMap[teacher.statut] || statutBadgeMap.ACTIF;
 
   const tabs: { id: DrawerTab; label: string; icon: React.ElementType }[] = [
@@ -96,13 +98,12 @@ export const TeacherDetailDrawer: React.FC<TeacherDetailDrawerProps> = ({
     { id: 'contrat', label: 'Contrat', icon: Hash },
   ];
 
-  return (
+  return createPortal(
     <>
       {/* Overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 animate-fade-in"
-          style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(2px)' }}
+          className="fixed inset-0 z-40 animate-fade-in bg-slate-950/60 backdrop-blur-sm"
           onClick={onClose}
         />
       )}
@@ -110,6 +111,7 @@ export const TeacherDetailDrawer: React.FC<TeacherDetailDrawerProps> = ({
       {/* Drawer */}
       <div
         className="fixed top-0 right-0 h-full z-50 flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
         style={{
           width: 420,
           background: 'var(--bg-surface)',
@@ -433,11 +435,10 @@ export const TeacherDetailDrawer: React.FC<TeacherDetailDrawerProps> = ({
       </div>
 
       {/* Confirm Delete Dialog */}
-      {confirmDelete && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-fade-in">
+      {confirmDelete && createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in">
           <div
             className="absolute inset-0"
-            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
             onClick={() => setConfirmDelete(false)}
           />
           <div
@@ -473,7 +474,8 @@ export const TeacherDetailDrawer: React.FC<TeacherDetailDrawerProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Dossier Numérique */}
@@ -482,6 +484,7 @@ export const TeacherDetailDrawer: React.FC<TeacherDetailDrawerProps> = ({
         onClose={() => setDocsModalOpen(false)}
         staff={teacher}
       />
-    </>
+    </>,
+    document.body
   );
 };

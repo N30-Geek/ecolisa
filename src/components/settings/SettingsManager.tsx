@@ -17,9 +17,11 @@ import {
   DollarSign,
   FileCheck,
   CreditCard,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Trash2
 } from 'lucide-react';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
+import { NumberInput } from '../common/NumberInput';
 import { PROVINCES_RDC } from '../../data/referentielEPST';
 import { SchoolConfig } from '../onboarding/OnboardingWizard';
 import { LocalDatabaseService } from '../../services/localDatabase';
@@ -493,11 +495,12 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onOpenOnboardi
                 <label className="text-xs font-bold uppercase text-slate-400 tracking-wider">
                   Taux de Change Indicatif (1 USD en CDF)
                 </label>
-                <input
-                  type="number"
+                <NumberInput
                   value={config.exchangeRate}
-                  onChange={(e) => setConfig({ ...config, exchangeRate: Number(e.target.value) })}
-                  className="w-full px-3.5 py-2 rounded-lg border font-black text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  onChange={v => setConfig({ ...config, exchangeRate: v })}
+                  min={0}
+                  placeholder="Taux"
+                  className="w-full px-3.5 py-2 rounded-lg border font-black text-xs"
                   style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                 />
               </div>
@@ -534,32 +537,34 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onOpenOnboardi
               <p className="font-mono text-xs font-bold text-slate-300">{config.hwid}</p>
             </div>
 
-            {/* Injection des Données de Test Massives */}
-            <div className="p-4 rounded-xl border space-y-3" style={{ background: 'rgba(99,102,241,0.06)', borderColor: 'rgba(99,102,241,0.25)' }}>
+            {/* Nettoyage des Données de Test */}
+            <div className="p-4 rounded-xl border space-y-3" style={{ background: 'rgba(239,68,68,0.06)', borderColor: 'rgba(239,68,68,0.25)' }}>
               <div className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-indigo-500" />
-                <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                  Génération des Données de Test (1 125+ Élèves, Staff & Matières)
+                <Trash2 className="w-5 h-5 text-rose-500" />
+                <h4 className="text-xs font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                  Nettoyage & Remise à Zéro de l'Application (Base Propre)
                 </h4>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                Remplissez la base de données relationnelle SQLite avec plus de 1 125 élèves répartis dans les 24 classes (Maternelle, Primaire, CTEB, Humanités Math-Physique, Bio-Chimie, Commerciale, Pédagogie), ainsi que 35 agents du staff et profs, et les matières officielles EPST.
+                Supprimez instantanément toutes les données factices (les 1 000+ élèves et enseignants de démonstration). Conserve uniquement la structure propre de votre établissement (les classes EPST, l'année scolaire et le plan comptable).
               </p>
               <button
                 type="button"
                 onClick={async () => {
-                  const res = await LocalDatabaseService.seedDatabase();
-                  if (res.success) {
-                    alert(`✅ Succès ! ${res.count || 1125} Élèves, le Staff Administratif, les Professeurs, les Classes et les Matières ont été générés dans SQLite avec succès !`);
-                    window.location.reload();
-                  } else {
-                    alert(`⚠️ Information : ${res.error || 'Base de données déjà peuplée.'}`);
+                  if (confirm('Voulez-vous vraiment supprimer toutes les données de test et remettre l’application à zéro (0 élève, 0 enseignant) ?')) {
+                    const res = await LocalDatabaseService.cleanMockData();
+                    if (res.success) {
+                      alert('✅ Succès ! L’application a été entièrement nettoyée.');
+                      window.location.reload();
+                    } else {
+                      alert(`⚠️ Erreur : ${res.error || 'Impossible de nettoyer la base.'}`);
+                    }
                   }
                 }}
-                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer"
               >
-                <RefreshCw className="w-4 h-4" />
-                <span>Générer les 1 125+ Élèves & le Staff Administratif (Test Volant)</span>
+                <Trash2 className="w-4 h-4" />
+                <span>Nettoyer la Base de Données (Supprimer les 1 000+ Élèves & Enseignants Factices)</span>
               </button>
             </div>
           </div>

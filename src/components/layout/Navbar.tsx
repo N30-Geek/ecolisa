@@ -163,7 +163,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [yearOptions, setYearOptions] = useState<SelectOption[]>([]);
 
   useEffect(() => {
-    LocalDatabaseService.getSchoolYears().then(years => {
+    let isMounted = true;
+    const loadYears = async () => {
+      const years = await LocalDatabaseService.getSchoolYears();
+      if (!isMounted) return;
       const options = years.map(y => ({
         value: y.nom,
         label: y.nom,
@@ -173,13 +176,16 @@ export const Navbar: React.FC<NavbarProps> = ({
       setYearOptions(options);
       if (setActiveSchoolYear) {
         const found = options.find(o => o.value === activeSchoolYear);
-        if (!found) {
+        if (!found && options.length > 0) {
           const active = years.find(y => y.statut === 'EN_COURS')?.nom || years[0]?.nom;
           setActiveSchoolYear(active || '');
         }
       }
-    });
-  }, []);
+    };
+    loadYears();
+    const timer = setInterval(loadYears, 3000);
+    return () => { isMounted = false; clearInterval(timer); };
+  }, [activeSchoolYear, setActiveSchoolYear]);
 
   const currentTabInfo = tabBreadcrumbs[activeTab] || {
     label: 'Tableau de Bord',

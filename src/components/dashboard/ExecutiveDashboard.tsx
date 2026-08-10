@@ -61,11 +61,14 @@ import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { formatCurrency } from '../../utils/currency';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { SchoolCalendar } from './SchoolCalendar';
+import { Pagination } from '../common/Pagination';
+import { usePagination } from '../../hooks/usePagination';
 
 // ── Props du Dashboard Exécutif ────────────────────────────────────────────
 interface ExecutiveDashboardProps {
   onNavigate?: (tab: string) => void;
   onOpenRegistration?: () => void;
+  activeSchoolYear?: string;
 }
 
 // ── Tooltip personnalisé Recharts 100% Adaptatif Mode Clair & Sombre ───────
@@ -379,7 +382,9 @@ const RdcOfficialSchoolCalendar: React.FC<{ events?: CalendarEventData[] }> = ({
       const matchSearch = !searchTerm || ev.titre.toLowerCase().includes(searchTerm.toLowerCase()) || (ev.subtitre && ev.subtitre.toLowerCase().includes(searchTerm.toLowerCase()));
       return matchCat && matchSearch;
     });
-  }, [catFilter, searchTerm]);
+  }, [allEvents, catFilter, searchTerm]);
+
+  const { paginated: paginatedEvents, ...eventsPagination } = usePagination(filteredEvents, { defaultPageSize: 6 });
 
   return (
     <div
@@ -475,7 +480,7 @@ const RdcOfficialSchoolCalendar: React.FC<{ events?: CalendarEventData[] }> = ({
 
       {/* Grille des Événements Officiels RDC */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filteredEvents.map(ev => {
+        {paginatedEvents.map(ev => {
           let badgeColor = 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/25';
           if (ev.categorie === 'EXAMENS_JURY') badgeColor = 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30';
           else if (ev.categorie === 'VACANCES') badgeColor = 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30';
@@ -522,6 +527,19 @@ const RdcOfficialSchoolCalendar: React.FC<{ events?: CalendarEventData[] }> = ({
           );
         })}
       </div>
+
+      {filteredEvents.length > 0 && (
+        <Pagination
+          currentPage={eventsPagination.page}
+          totalPages={eventsPagination.totalPages}
+          total={eventsPagination.total}
+          pageSize={eventsPagination.pageSize}
+          start={eventsPagination.start}
+          end={eventsPagination.end}
+          onPageChange={eventsPagination.setPage}
+          onPageSizeChange={eventsPagination.setPageSize}
+        />
+      )}
     </div>
   );
 };
@@ -532,6 +550,7 @@ interface CycleAttendanceData {
   nom: string;
   code: string;
   isPresentInSchool: boolean;
+  hasPointage?: boolean;
   effectifTotal: number;
   presentsTotal: number;
   fillesTotal: number;
@@ -546,6 +565,7 @@ const mockDailyAttendance: CycleAttendanceData[] = [
     nom: 'Cycle Maternelle (3–5 ans)',
     code: 'MATERNELLE',
     isPresentInSchool: true,
+    hasPointage: false,
     effectifTotal: 0,
     presentsTotal: 0,
     fillesTotal: 0,
@@ -558,6 +578,7 @@ const mockDailyAttendance: CycleAttendanceData[] = [
     nom: 'Cycle Primaire (1ère–6ème)',
     code: 'PRIMAIRE',
     isPresentInSchool: true,
+    hasPointage: false,
     effectifTotal: 0,
     presentsTotal: 0,
     fillesTotal: 0,
@@ -570,6 +591,7 @@ const mockDailyAttendance: CycleAttendanceData[] = [
     nom: 'Secondaire & Humanités',
     code: 'SECONDAIRE',
     isPresentInSchool: true,
+    hasPointage: false,
     effectifTotal: 0,
     presentsTotal: 0,
     fillesTotal: 0,
@@ -581,8 +603,7 @@ const mockDailyAttendance: CycleAttendanceData[] = [
 
 const DailyAttendanceByCategory: React.FC<{ selectedCycleFilter: string; data?: DashboardStats['attendanceByCycle'] }> = ({ selectedCycleFilter, data }) => {
   const cycleData = useMemo(() => {
-    if (data && data.length > 0) return data;
-    return mockDailyAttendance;
+    return data && data.length > 0 ? data : [];
   }, [data]);
 
   const activeCycles = useMemo(() => {
@@ -593,7 +614,9 @@ const DailyAttendanceByCategory: React.FC<{ selectedCycleFilter: string; data?: 
       if (selectedCycleFilter === 'SECONDAIRE') return secondaire.has(c.code);
       return c.code === selectedCycleFilter;
     });
-  }, [selectedCycleFilter]);
+  }, [cycleData, selectedCycleFilter]);
+
+  const { paginated: paginatedActiveCycles, ...activeCyclesPagination } = usePagination(activeCycles, { defaultPageSize: 6 });
 
   const totals = useMemo(() => {
     return activeCycles.reduce(
@@ -608,6 +631,8 @@ const DailyAttendanceByCategory: React.FC<{ selectedCycleFilter: string; data?: 
       { effectifTotal: 0, presentsTotal: 0, fillesTotal: 0, fillesPresents: 0, garconsTotal: 0, garconsPresents: 0 }
     );
   }, [activeCycles]);
+
+  const hasAnyPointage = activeCycles.some(c => c.hasPointage);
 
   const pctGlobal = totals.effectifTotal > 0 ? Math.round((totals.presentsTotal / totals.effectifTotal) * 1000) / 10 : 0;
   const pctFilles = totals.fillesTotal > 0 ? Math.round((totals.fillesPresents / totals.fillesTotal) * 1000) / 10 : 0;
@@ -638,10 +663,17 @@ const DailyAttendanceByCategory: React.FC<{ selectedCycleFilter: string; data?: 
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <span className="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Assiduité Globale: {pctGlobal}% ({totals.presentsTotal.toLocaleString()} / {totals.effectifTotal.toLocaleString()})
-          </span>
+          {hasAnyPointage ? (
+            <span className="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Assiduité Globale: {pctGlobal}% ({totals.presentsTotal.toLocaleString()} / {totals.effectifTotal.toLocaleString()})
+            </span>
+          ) : (
+            <span className="px-3 py-1 rounded-lg text-xs font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              Pointage en attente aujourd'hui (0 / {totals.effectifTotal.toLocaleString()})
+            </span>
+          )}
         </div>
       </div>
 
@@ -671,13 +703,13 @@ const DailyAttendanceByCategory: React.FC<{ selectedCycleFilter: string; data?: 
                 <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Parité & Assiduité Féminine</span>
               </div>
             </div>
-            <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">{pctFilles}%</span>
+            <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">{hasAnyPointage ? `${pctFilles}%` : '—'}</span>
           </div>
 
           <div className="space-y-1">
             <div className="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
-              <span>{totals.fillesPresents.toLocaleString()} présentes</span>
-              <span>sur {totals.fillesTotal.toLocaleString()} inscrites</span>
+              <span>{totals.fillesPresents.toLocaleString()} présente{totals.fillesPresents > 1 ? 's' : ''}</span>
+              <span>sur {totals.fillesTotal.toLocaleString()} inscrite{totals.fillesTotal > 1 ? 's' : ''}</span>
             </div>
             <div className="w-full h-2 rounded-full bg-slate-500/15 overflow-hidden">
               <div
@@ -703,13 +735,13 @@ const DailyAttendanceByCategory: React.FC<{ selectedCycleFilter: string; data?: 
                 <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Assiduité Masculine</span>
               </div>
             </div>
-            <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">{pctGarcons}%</span>
+            <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">{hasAnyPointage ? `${pctGarcons}%` : '—'}</span>
           </div>
 
           <div className="space-y-1">
             <div className="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
-              <span>{totals.garconsPresents.toLocaleString()} présents</span>
-              <span>sur {totals.garconsTotal.toLocaleString()} inscrits</span>
+              <span>{totals.garconsPresents.toLocaleString()} présent{totals.garconsPresents > 1 ? 's' : ''}</span>
+              <span>sur {totals.garconsTotal.toLocaleString()} inscrit{totals.garconsTotal > 1 ? 's' : ''}</span>
             </div>
             <div className="w-full h-2 rounded-full bg-slate-500/15 overflow-hidden">
               <div
@@ -728,10 +760,10 @@ const DailyAttendanceByCategory: React.FC<{ selectedCycleFilter: string; data?: 
         </h4>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {activeCycles.map((c) => {
-            const pctCycle = Math.round((c.presentsTotal / c.effectifTotal) * 1000) / 10;
-            const pctF = Math.round((c.fillesPresents / c.fillesTotal) * 1000) / 10;
-            const pctG = Math.round((c.garconsPresents / c.garconsTotal) * 1000) / 10;
+          {paginatedActiveCycles.map((c) => {
+            const pctCycle = c.effectifTotal > 0 ? Math.round((c.presentsTotal / c.effectifTotal) * 1000) / 10 : 0;
+            const pctF = c.fillesTotal > 0 ? Math.round((c.fillesPresents / c.fillesTotal) * 1000) / 10 : 0;
+            const pctG = c.garconsTotal > 0 ? Math.round((c.garconsPresents / c.garconsTotal) * 1000) / 10 : 0;
 
             return (
               <div
@@ -747,9 +779,15 @@ const DailyAttendanceByCategory: React.FC<{ selectedCycleFilter: string; data?: 
                     <School className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
                     <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{c.nom}</span>
                   </div>
-                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                    {pctCycle}%
-                  </span>
+                  {c.hasPointage ? (
+                    <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                      {pctCycle}%
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                      Non pointé
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -765,18 +803,30 @@ const DailyAttendanceByCategory: React.FC<{ selectedCycleFilter: string; data?: 
                 <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
                   <div className="p-2 rounded-lg border border-slate-500/15 bg-slate-500/5">
                     <p className="font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400">Filles</p>
-                    <p className="font-bold text-xs mt-0.5" style={{ color: 'var(--text-primary)' }}>{c.fillesPresents.toLocaleString()} <span className="text-[10px] text-indigo-600 dark:text-indigo-400">({pctF}%)</span></p>
+                    <p className="font-bold text-xs mt-0.5" style={{ color: 'var(--text-primary)' }}>{c.fillesPresents.toLocaleString()} <span className="text-[10px] text-indigo-600 dark:text-indigo-400">({c.hasPointage ? `${pctF}%` : '—'})</span></p>
                   </div>
 
                   <div className="p-2 rounded-lg border border-slate-500/15 bg-slate-500/5">
                     <p className="font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400">Garçons</p>
-                    <p className="font-bold text-xs mt-0.5" style={{ color: 'var(--text-primary)' }}>{c.garconsPresents.toLocaleString()} <span className="text-[10px] text-indigo-600 dark:text-indigo-400">({pctG}%)</span></p>
+                    <p className="font-bold text-xs mt-0.5" style={{ color: 'var(--text-primary)' }}>{c.garconsPresents.toLocaleString()} <span className="text-[10px] text-indigo-600 dark:text-indigo-400">({c.hasPointage ? `${pctG}%` : '—'})</span></p>
                   </div>
                 </div>
               </div>
             );
           })}
         </div>
+        {activeCycles.length > 0 && (
+          <Pagination
+            currentPage={activeCyclesPagination.page}
+            totalPages={activeCyclesPagination.totalPages}
+            total={activeCyclesPagination.total}
+            pageSize={activeCyclesPagination.pageSize}
+            start={activeCyclesPagination.start}
+            end={activeCyclesPagination.end}
+            onPageChange={activeCyclesPagination.setPage}
+            onPageSizeChange={activeCyclesPagination.setPageSize}
+          />
+        )}
       </div>
       </>
       )}
@@ -863,7 +913,7 @@ const periodOptions: SelectOption[] = [
 ];
 
 // ── Dashboard Exécutif Épuré Haute Visibilité Mode Clair & Sombre ──
-export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNavigate, onOpenRegistration }) => {
+export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNavigate, onOpenRegistration, activeSchoolYear }) => {
   const { currency, exchangeRate, format } = useSchoolConfig();
   const [activeSubTab, setActiveSubTab] = useState<'executive' | 'calendar' | 'pedagogy' | 'finances' | 'viescolaire'>('executive');
   const [chartMode, setChartMode] = useState<'BOTH' | 'COTES' | 'PRESENCE'>('BOTH');
@@ -884,27 +934,54 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
     selectedYear: undefined,
   });
 
+  const [selectedSchoolYearId, setSelectedSchoolYearId] = useState<string>(activeSchoolYear || 'ALL');
+
+  useEffect(() => {
+    if (activeSchoolYear) {
+      setSelectedSchoolYearId(activeSchoolYear);
+    }
+  }, [activeSchoolYear]);
+
   const refreshData = async () => {
     setData(prev => ({ ...prev, loading: true }));
-    const raw = await fetchDashboardData();
+    const raw = await fetchDashboardData(selectedSchoolYearId);
     setData(raw);
   };
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
-      const raw = await fetchDashboardData();
+      const raw = await fetchDashboardData(selectedSchoolYearId);
       if (!mounted) return;
       setData(raw);
     };
     load();
     
-    // Auto-refresh léger toutes les 15 secondes pour synchroniser la base de données
-    const interval = setInterval(load, 15000);
+    // Auto-refresh léger toutes les 3 secondes pour synchroniser la base de données en direct
+    const interval = setInterval(load, 3000);
     return () => { mounted = false; clearInterval(interval); };
-  }, []);
+  }, [selectedSchoolYearId]);
+
+  const schoolYearOptions = useMemo<SelectOption[]>(() => {
+    const opts: SelectOption[] = [
+      { value: 'ALL', label: 'Toutes les Années Scolaires', icon: Calendar }
+    ];
+    data.schoolYears.forEach(y => {
+      opts.push({
+        value: y.id,
+        label: `Année Scolaire ${y.nom} (${y.statut === 'EN_COURS' ? 'En cours' : 'Clôturée'})`,
+        icon: Calendar,
+        badge: y.statut === 'EN_COURS' ? 'EN COURS' : undefined
+      });
+    });
+    return opts;
+  }, [data.schoolYears]);
 
   const stats = useMemo<DashboardStats>(() => computeDashboardStats(data, currency, exchangeRate), [data, currency, exchangeRate]);
+
+  const { paginated: paginatedRecentActivity, ...recentActivityPagination } = usePagination(stats.recentActivity, { defaultPageSize: 5 });
+  const { paginated: paginatedUpcomingEvents, ...upcomingEventsPagination } = usePagination(stats.upcomingEvents, { defaultPageSize: 5 });
+  const { paginated: paginatedTopUnpaid, ...topUnpaidPagination } = usePagination(stats.topUnpaidInvoices, { defaultPageSize: 5 });
 
   // ÉTATS DES FILTRES MULTI-CRITÈRES INTELLIGENTS
   const [selectedCycleFilter, setSelectedCycleFilter] = useState<string>('ALL');
@@ -991,17 +1068,19 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
   const kpis: KpiCardProps[] = useMemo(() => {
     const fmt = (n: number) => n.toLocaleString();
     const paid = stats.totalRevenue;
-    const goal = stats.totalInvoiced;
     const recovery = stats.recoveryRate;
     const totalStudents = stats.totalStudents;
     const activeStudents = stats.activeStudents;
+    const girls = stats.girlsCount;
+    const boys = stats.boysCount;
     return [
       {
         label: 'Effectif Total Élèves',
-        sublabel: `${fmt(activeStudents)} actif${activeStudents > 1 ? 's' : ''}`,
+        sublabel: `${fmt(activeStudents)} actif${activeStudents > 1 ? 's' : ''} · ${fmt(girls)} F / ${fmt(boys)} M`,
         value: fmt(totalStudents),
-        trend: `${fmt(totalStudents)} inscrit${totalStudents > 1 ? 's' : ''}`,
-        trendUp: activeStudents >= 0,
+        trend: totalStudents > 0 ? `${fmt(totalStudents)} inscrit${totalStudents > 1 ? 's' : ''}` : 'Aucun inscrit',
+        trendUp: totalStudents > 0,
+        trendNeutral: totalStudents === 0,
         icon: GraduationCap,
         iconColor: 'indigo',
         delay: 0,
@@ -1011,7 +1090,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
         label: 'Recettes Perçues',
         sublabel: 'Minerval & frais encaissés',
         value: format(paid),
-        trend: `${recovery}% recouvré`,
+        trend: recovery > 0 ? `${recovery}% recouvré` : 'Aucun paiement',
         trendUp: recovery > 50,
         trendNeutral: recovery === 0,
         icon: DollarSign,
@@ -1020,11 +1099,12 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
         onViewDetails: () => onNavigate && onNavigate('invoices'),
       },
       {
-        label: 'Présence Enseignants',
-        sublabel: 'Personnels actifs',
+        label: 'Personnel & Classes',
+        sublabel: `${fmt(stats.totalClasses)} classe${stats.totalClasses > 1 ? 's' : ''} · ${fmt(stats.totalSubjects)} matière${stats.totalSubjects > 1 ? 's' : ''}`,
         value: `${fmt(stats.totalStaff)}`,
-        trend: `${fmt(stats.totalStaff)} présent${stats.totalStaff > 1 ? 's' : ''}`,
-        trendUp: true,
+        trend: stats.totalStaff > 0 ? `${fmt(stats.totalStaff)} membre${stats.totalStaff > 1 ? 's' : ''}` : 'Aucun personnel',
+        trendUp: stats.totalStaff > 0,
+        trendNeutral: stats.totalStaff === 0,
         icon: UserCheck,
         iconColor: 'violet',
         delay: 120,
@@ -1032,9 +1112,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
       },
       {
         label: 'Taux de Réussite',
-        sublabel: 'Moyenne générale école',
+        sublabel: `Présence: ${stats.presenceRate}% · Moyenne école`,
         value: `${stats.averageScore}%`,
-        trend: `${stats.averageScore}% moyenne`,
+        trend: stats.averageScore > 0 ? `${stats.averageScore}% moyenne` : 'Aucune cote saisie',
         trendUp: stats.averageScore >= 60,
         trendNeutral: stats.averageScore === 0,
         icon: Award,
@@ -1043,7 +1123,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
         onViewDetails: () => onNavigate && onNavigate('grades'),
       },
     ];
-  }, [onNavigate]);
+  }, [stats, format, onNavigate]);
 
   return (
     <div className="space-y-4 w-full px-1 py-1 pb-8">
@@ -1072,8 +1152,30 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
             <Sparkles className="w-5 h-5 text-amber-500 shrink-0" />
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
-            Suivez en temps réel les effectifs, les performances académiques et la situation financière de votre établissement.
+            {data.selectedYear ? `Année Scolaire ${data.selectedYear.nom} — ` : ''}Suivez en temps réel les effectifs, performances et finances de votre établissement.
           </p>
+          {!data.loading && (
+            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+              {[
+                { label: `${stats.totalStudents} élève${stats.totalStudents > 1 ? 's' : ''}`, color: '#6366f1' },
+                { label: `${stats.totalClasses} classe${stats.totalClasses > 1 ? 's' : ''}`, color: '#10b981' },
+                { label: `${stats.totalStaff} personnel${stats.totalStaff > 1 ? 's' : ''}`, color: '#8b5cf6' },
+                { label: `${stats.recoveryRate}% recouvrement`, color: stats.recoveryRate > 50 ? '#10b981' : '#f59e0b' },
+              ].map((item) => (
+                <span
+                  key={item.label}
+                  className="px-2 py-0.5 rounded-md text-[10px] font-bold border"
+                  style={{
+                    background: `${item.color}12`,
+                    borderColor: `${item.color}30`,
+                    color: item.color,
+                  }}
+                >
+                  {item.label}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* BOUTONS D'ACTION ÉPURÉS */}
@@ -1172,6 +1274,13 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <CustomSelect
+            options={schoolYearOptions}
+            value={selectedSchoolYearId}
+            onChange={setSelectedSchoolYearId}
+            placeholder="Année Scolaire"
+          />
+
           <CustomSelect
             options={cycleOptions}
             value={selectedCycleFilter}
@@ -1524,7 +1633,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {stats.recentActivity.map((fu) => (
+                    {paginatedRecentActivity.map((fu) => (
                       <div key={fu.id} className="flex items-start gap-2.5">
                         <img
                           src={fu.avatarUrl}
@@ -1541,6 +1650,18 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                       </div>
                     ))}
                   </div>
+                )}
+                {stats.recentActivity.length > 0 && (
+                  <Pagination
+                    currentPage={recentActivityPagination.page}
+                    totalPages={recentActivityPagination.totalPages}
+                    total={recentActivityPagination.total}
+                    pageSize={recentActivityPagination.pageSize}
+                    start={recentActivityPagination.start}
+                    end={recentActivityPagination.end}
+                    onPageChange={recentActivityPagination.setPage}
+                    onPageSizeChange={recentActivityPagination.setPageSize}
+                  />
                 )}
               </div>
 
@@ -1576,7 +1697,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                   </div>
                 ) : (
                   <div className="space-y-2.5">
-                    {stats.upcomingEvents.map((ev) => (
+                    {paginatedUpcomingEvents.map((ev) => (
                       <div key={ev.id} className="flex items-start gap-2.5">
                         <div className="rounded-lg p-1 text-center min-w-[38px] shrink-0 border shadow-xs" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                           <div className="text-[8px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -1596,6 +1717,18 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                       </div>
                     ))}
                   </div>
+                )}
+                {stats.upcomingEvents.length > 0 && (
+                  <Pagination
+                    currentPage={upcomingEventsPagination.page}
+                    totalPages={upcomingEventsPagination.totalPages}
+                    total={upcomingEventsPagination.total}
+                    pageSize={upcomingEventsPagination.pageSize}
+                    start={upcomingEventsPagination.start}
+                    end={upcomingEventsPagination.end}
+                    onPageChange={upcomingEventsPagination.setPage}
+                    onPageSizeChange={upcomingEventsPagination.setPageSize}
+                  />
                 )}
               </div>
 
@@ -1634,9 +1767,6 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
       {/* ===== ONGLET 3 : PÉDAGOGIE & PERFORMANCES ===== */}
       {activeSubTab === 'pedagogy' && (
         <div className="space-y-4 animate-fade-in">
-          {/* SECTION PRÉSENCES DU JOUR PAR CATÉGORIE INTEGRÉE DANS PÉDAGOGIE */}
-          <DailyAttendanceByCategory selectedCycleFilter={selectedCycleFilter} data={stats.attendanceByCycle} />
-
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
 
             {/* Distribution des Élèves par Cycle EPST */}
@@ -1840,7 +1970,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                 <h3 className="font-bold text-base mb-2" style={{ color: 'var(--text-primary)' }}>Top des Impayés par Promotion</h3>
                 {stats.topUnpaidInvoices.length > 0 ? (
                   <div className="space-y-2 mt-3">
-                    {stats.topUnpaidInvoices.map((inv, i) => (
+                    {paginatedTopUnpaid.map((inv, i) => (
                       <div key={i} className="p-3 rounded-xl flex items-center justify-between" style={{ background: 'var(--bg-sunken)' }}>
                         <span className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{inv.nomEleve}</span>
                         <span className="text-xs font-bold text-rose-600 dark:text-rose-400">{format(inv.montant)}</span>
@@ -1852,6 +1982,18 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                     <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucun Impayé Enregistré</p>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">Toutes les factures et minervals sont en ordre.</p>
                   </div>
+                )}
+                {stats.topUnpaidInvoices.length > 0 && (
+                  <Pagination
+                    currentPage={topUnpaidPagination.page}
+                    totalPages={topUnpaidPagination.totalPages}
+                    total={topUnpaidPagination.total}
+                    pageSize={topUnpaidPagination.pageSize}
+                    start={topUnpaidPagination.start}
+                    end={topUnpaidPagination.end}
+                    onPageChange={topUnpaidPagination.setPage}
+                    onPageSizeChange={topUnpaidPagination.setPageSize}
+                  />
                 )}
               </div>
 
@@ -1871,7 +2013,52 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
       {/* ===== ONGLET 4 : VIE SCOLAIRE, PRÉSENCES & DISCIPLINE ===== */}
       {activeSubTab === 'viescolaire' && (
         <div className="space-y-4 animate-fade-in">
-          {/* SECTION PRÉSENCE DU JOUR PAR CATÉGORIE DEPLACÉE ICI DANS VIE SCOLAIRE */}
+          {/* CARTES KPI DE SYNTHÈSE VIE SCOLAIRE */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div
+              className="p-4 rounded-2xl shadow-xs border transition-colors flex items-center justify-between"
+              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+            >
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Taux d'Assiduité Globale</span>
+                <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5 block">{stats.presenceRate}%</span>
+                <span className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">Moyenne générale de présence</span>
+              </div>
+              <div className="p-3 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                <UserCheck className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div
+              className="p-4 rounded-2xl shadow-xs border transition-colors flex items-center justify-between"
+              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+            >
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Absences Ce Mois</span>
+                <span className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-0.5 block">{monthlyPresenceStats.absences}</span>
+                <span className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">{monthlyPresenceStats.justifiees} justifiée{monthlyPresenceStats.justifiees > 1 ? 's' : ''}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div
+              className="p-4 rounded-2xl shadow-xs border transition-colors flex items-center justify-between"
+              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+            >
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Retards Signalisés</span>
+                <span className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-0.5 block">{monthlyPresenceStats.retards}</span>
+                <span className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">Registre des retards en classe</span>
+              </div>
+              <div className="p-3 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+                <Clock className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION PRÉSENCE DU JOUR PAR CATÉGORIE ET CYCLE */}
           <DailyAttendanceByCategory selectedCycleFilter={selectedCycleFilter} data={stats.attendanceByCycle} />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

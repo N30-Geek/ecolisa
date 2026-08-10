@@ -44,7 +44,9 @@ import {
 import { CustomSelect } from '../common/CustomSelect';
 import { CardCustomization, CardFieldOverride } from '../onboarding/OnboardingWizard';
 import { IdCardRenderer, defaultCardCustomization } from '../academic/IdCardRenderer';
+import { RDCEleveCardTemplate } from '../academic/RDCEleveCardTemplate';
 import { Eleve, CodeCycle } from '../../types';
+import { ZoomIn, ZoomOut, Sparkles } from 'lucide-react';
 
 interface CardSettingsPanelProps {
   value: CardCustomization;
@@ -105,20 +107,23 @@ const PREVIEW_STUDENT: Eleve = {
   emailEleve: '',
   nomPere: 'Patrick MUKENDI',
   nomMere: 'Marie NZUZI',
+  nomClasse: '6ème Année Primaire',
+  nomParent: 'Patrick MUKENDI / Marie NZUZI',
   telephoneParent: '+243 81 333 4444',
   statut: 'ACTIF',
   schoolYearId: 'sy-2025',
   classId: 'cl-6em',
-  nomClasse: '6ème Primaire',
-  nomParent: 'Patrick MUKENDI',
-  photoUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=400&auto=format&fit=crop&q=80',
+  photoUrl: '', // Utilise l'icône d'illustration vectorielle à la place de l'image de démonstration
 };
 
 const THEME_OPTIONS = [
-  { id: 'blue', label: 'Bleu EPST', color: 'bg-cyan-500' },
-  { id: 'indigo', label: 'Indigo', color: 'bg-indigo-500' },
-  { id: 'emerald', label: 'Vert', color: 'bg-emerald-500' },
-  { id: 'gold', label: 'Or', color: 'bg-amber-500' },
+  { id: 'light_rdc', label: 'Fond Bleu Clair #F0F4F8', color: 'bg-sky-200 border-sky-400' },
+  { id: 'blue', label: 'Bleu Officiel RDC', color: 'bg-blue-600' },
+  { id: 'indigo', label: 'Indigo Écolisa', color: 'bg-indigo-600' },
+  { id: 'emerald', label: 'Émeraude Institutionnel', color: 'bg-emerald-600' },
+  { id: 'gold', label: 'Or & Prestige', color: 'bg-amber-500' },
+  { id: 'burgundy', label: 'Rouge Bourgogne', color: 'bg-rose-700' },
+  { id: 'violet', label: 'Violet Altesse', color: 'bg-purple-700' },
 ];
 
 const ALIGN_OPTIONS = [
@@ -154,8 +159,10 @@ export const CardSettingsPanel: React.FC<CardSettingsPanelProps> = ({
   logoUrl,
   secopeCode,
 }) => {
+  const [previewModel, setPreviewModel] = useState<'rdc_epst' | 'custom'>('rdc_epst');
   const [previewFace, setPreviewFace] = useState<'front' | 'back'>('front');
   const [previewCycle, setPreviewCycle] = useState<CodeCycle>('PRIMAIRE');
+  const [previewZoom, setPreviewZoom] = useState<number>(0.95);
   const [activeCycleTab, setActiveCycleTab] = useState<CodeCycle | null>(null);
   const [fieldSearch, setFieldSearch] = useState('');
   const [fieldDropdownOpen, setFieldDropdownOpen] = useState(false);
@@ -893,31 +900,73 @@ export const CardSettingsPanel: React.FC<CardSettingsPanelProps> = ({
         </div>
       </div>
 
-      {/* COLONNE PRÉVISUALISATION */}
+      {/* COLONNE PRÉVISUALISATION DYNAMIQUE */}
       <div className="xl:col-span-5 relative">
         <div className="xl:sticky xl:top-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-indigo-400">
-              <Monitor className="w-4 h-4" />
-              <h3 className="text-xs font-black uppercase tracking-wider">Aperçu fixe</h3>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-indigo-400">
+                <Monitor className="w-4 h-4" />
+                <h3 className="text-xs font-black uppercase tracking-wider">Aperçu Live Carte</h3>
+              </div>
+
+              {/* Contrôles de Zoom */}
+              <div className="flex items-center gap-1 p-0.5 rounded-xl border bg-slate-100 dark:bg-slate-900" style={{ borderColor: 'var(--border)' }}>
+                <button
+                  onClick={() => setPreviewZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 100) / 100))}
+                  className="p-1 rounded-lg hover:bg-slate-700/20 text-slate-400"
+                  title="Zoom Arrière"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[10px] font-mono font-black text-indigo-500 px-1">
+                  {Math.round(previewZoom * 100)}%
+                </span>
+                <button
+                  onClick={() => setPreviewZoom((z) => Math.min(1.8, Math.round((z + 0.1) * 100) / 100))}
+                  className="p-1 rounded-lg hover:bg-slate-700/20 text-slate-400"
+                  title="Zoom Avant"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <CustomSelect
-                value={previewCycle}
-                onChange={(v) => setPreviewCycle(v as CodeCycle)}
-                options={CODE_CYCLES.map((c) => ({ value: c.code, label: c.label, icon: c.icon }))}
-                className="w-40"
-              />
-              <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+
+            {/* Sélecteur de Modèle et Face */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex rounded-xl border p-0.5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                <button
+                  onClick={() => setPreviewModel('rdc_epst')}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all flex items-center gap-1 ${
+                    previewModel === 'rdc_epst' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Sparkles className="w-3 h-3" /> Modèle Officiel RDC
+                </button>
+                <button
+                  onClick={() => setPreviewModel('custom')}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${
+                    previewModel === 'custom' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Modèle Personnalisé
+                </button>
+              </div>
+
+              <div className="flex rounded-xl border p-0.5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                 <button
                   onClick={() => setPreviewFace('front')}
-                  className={`px-2.5 py-1 text-[10px] font-black ${previewFace === 'front' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-400'}`}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${
+                    previewFace === 'front' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                  }`}
                 >
                   Recto
                 </button>
                 <button
                   onClick={() => setPreviewFace('back')}
-                  className={`px-2.5 py-1 text-[10px] font-black ${previewFace === 'back' ? 'bg-indigo-600 text-white' : 'bg-slate-800/50 text-slate-400'}`}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${
+                    previewFace === 'back' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                  }`}
                 >
                   Verso
                 </button>
@@ -926,23 +975,31 @@ export const CardSettingsPanel: React.FC<CardSettingsPanelProps> = ({
           </div>
 
           <div
-            className="rounded-2xl border flex items-center justify-center overflow-hidden"
-            style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', height: '460px' }}
+            className="rounded-2xl border flex items-center justify-center overflow-auto p-4 transition-all"
+            style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', minHeight: '440px' }}
           >
             <div
-              className="flex items-center justify-center origin-center transition-transform"
-              style={{ transform: `scale(${value.cardLayout === 'landscape' ? '0.82' : '0.9'})` }}
+              className="transition-transform duration-200 ease-out flex items-center justify-center py-2"
+              style={{ transform: `scale(${previewZoom})` }}
             >
-              <IdCardRenderer
-                student={previewStudent}
-                schoolConfig={schoolConfigForPreview}
-                face={previewFace}
-              />
+              {previewModel === 'rdc_epst' ? (
+                <RDCEleveCardTemplate
+                  student={previewStudent}
+                  schoolConfig={schoolConfigForPreview}
+                  face={previewFace}
+                />
+              ) : (
+                <IdCardRenderer
+                  student={previewStudent}
+                  schoolConfig={schoolConfigForPreview}
+                  face={previewFace}
+                />
+              )}
             </div>
           </div>
 
-          <p className="text-[10px] text-slate-500 text-center">
-            L'aperçu se met à jour instantanément. Le fond suit le thème de l'application.
+          <p className="text-[10px] text-slate-500 text-center font-medium">
+            L'aperçu se met à jour en temps réel avec vos paramètres. Sceau physique et filigranes intégrés.
           </p>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, School, Building, AlertCircle, Sparkles } from 'lucide-react';
 import { SalleConfig } from '../../types';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
+import { NumberInput } from '../common/NumberInput';
 
 interface RoomFormModalProps {
   isOpen: boolean;
@@ -209,13 +210,14 @@ export const RoomFormModal: React.FC<RoomFormModalProps> = ({
               <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                 Capacité d'Élèves (Places Assises)
               </label>
-              <input
-                type="number"
+              <NumberInput
+                value={capacite}
+                onChange={setCapacite}
                 min={10}
                 max={150}
-                value={capacite}
-                onChange={(e) => setCapacite(parseInt(e.target.value) || 45)}
-                className="w-full px-3.5 py-2 text-xs rounded-lg border font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                integer
+                placeholder="Capacité"
+                className="w-full px-3.5 py-2 text-xs rounded-lg border font-semibold"
                 style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               />
             </div>
