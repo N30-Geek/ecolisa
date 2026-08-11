@@ -41,6 +41,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateClass:  (id, upd)  => ipcRenderer.invoke('db-update-class', id, upd),
   deleteClass:  (id)       => ipcRenderer.invoke('db-delete-class', id),
 
+  // Salles Physiques
+  getSalles:    (cycleCode) => ipcRenderer.invoke('db-get-salles', cycleCode),
+  addSalle:     (salle)     => ipcRenderer.invoke('db-add-salle', salle),
+  updateSalle:  (id, upd)   => ipcRenderer.invoke('db-update-salle', id, upd),
+  deleteSalle:  (id)        => ipcRenderer.invoke('db-delete-salle', id),
+
   // Matieres
   getSubjects:   ()      => ipcRenderer.invoke('db-get-subjects'),
   addSubject:    (s)     => ipcRenderer.invoke('db-add-subject', s),

@@ -215,6 +215,18 @@ const initDatabase = () => {
       );
       CREATE INDEX IF NOT EXISTS idx_student_documents_eleve ON student_documents(eleve_id);
 
+      -- Salles physiques d'étude
+      CREATE TABLE IF NOT EXISTS salles (
+        id          TEXT PRIMARY KEY,
+        code_salle  TEXT UNIQUE NOT NULL,
+        nom_salle   TEXT NOT NULL,
+        capacite    INTEGER DEFAULT 45,
+        cycle_code  TEXT,
+        batiment    TEXT,
+        statut      TEXT DEFAULT 'DISPONIBLE'
+      );
+      CREATE INDEX IF NOT EXISTS idx_salles_cycle ON salles(cycle_code);
+
       CREATE TABLE IF NOT EXISTS cotes (
         id          TEXT PRIMARY KEY,
         eleve_id    TEXT NOT NULL,
@@ -266,9 +278,30 @@ const initDatabase = () => {
         obligatoire    INTEGER DEFAULT 0,
         portee         TEXT,
         school_year_id TEXT,
+        class_id       TEXT,
+        salle_id       TEXT,
         data_json      TEXT DEFAULT '{}'
       );
-      CREATE INDEX IF NOT EXISTS idx_fee_types_year ON fee_types(school_year_id);
+      -- Indexes fee_types créés APRÈS les migrations de colonnes (voir plus bas)
+      -- pour éviter l'erreur "no such column" sur les anciennes bases.
+
+      -- Journal d'audit — trace toutes les actions utilisateurs
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id           TEXT PRIMARY KEY,
+        user_id      TEXT,
+        user_nom     TEXT,
+        user_role    TEXT,
+        action       TEXT NOT NULL,
+        module       TEXT,
+        entite       TEXT,
+        entite_id    TEXT,
+        details_json TEXT DEFAULT '{}',
+        ip_info      TEXT,
+        created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_log_date ON audit_log(created_at);
+      CREATE INDEX IF NOT EXISTS idx_audit_log_module ON audit_log(module);
 
       -- Journal de caisse (recettes et dépenses)
       CREATE TABLE IF NOT EXISTS cash_operations (
@@ -418,6 +451,8 @@ const initDatabase = () => {
       { table: 'classes',      column: 'salle_code',         def: 'TEXT' },
       { table: 'school_years', column: 'frais_reinscription', def: 'REAL DEFAULT 0' },
       { table: 'school_years', column: 'frais_carte',         def: 'REAL DEFAULT 0' },
+      { table: 'fee_types',    column: 'class_id',            def: 'TEXT' },
+      { table: 'fee_types',    column: 'salle_id',            def: 'TEXT' },
     ];
     for (const { table, column, def } of columnMigrations) {
       try {
@@ -429,6 +464,17 @@ const initDatabase = () => {
       } catch (e) {
         console.warn(`[ECOLISA Migration] Impossible d'ajouter '${column}' a '${table}':`, e.message);
       }
+    }
+
+    // Indexes fee_types — créés APRÈS les migrations de colonnes (class_id/salle_id)
+    // pour éviter l'erreur "no such column" sur les anciennes bases.
+    try {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_fee_types_year ON fee_types(school_year_id);
+        CREATE INDEX IF NOT EXISTS idx_fee_types_class ON fee_types(class_id);
+      `);
+    } catch (e) {
+      console.warn('[ECOLISA Migration] Index fee_types:', e.message);
     }
 
     // Seed du plan comptable minimal
@@ -515,9 +561,10 @@ const initDatabase = () => {
 const jp = (v, fb='[]') => { try { return JSON.parse(v||fb); } catch { return JSON.parse(fb); } };
 
 function mapUser(r) { return { id:r.id, email:r.email, nom:r.nom, prenom:r.prenom, role:r.role, pinCode:r.pin_code, avatarUrl:r.avatar_url, statut:r.statut, telephone:r.telephone, creeLe:r.cree_le, derniereConnexion:r.derniere_connexion }; }
+function mapSalle(r) { return { id:r.id, codeSalle:r.code_salle, nomSalle:r.nom_salle, capacite:r.capacite||45, cycleCode:r.cycle_code, batiment:r.batiment, statut:r.statut||'DISPONIBLE' }; }
 function mapYear(r) { return { id:r.id, nom:r.nom, statut:r.statut, debut:r.debut, fin:r.fin, nombreElevesTotal:r.nombre_eleves_total||0, fraisInscription:r.frais_inscription||0, fraisConnexion:r.frais_connexion||0, fraisReinscription:r.frais_reinscription||0, fraisCarte:r.frais_carte||0, fraisAnnexes:jp(r.frais_annexes_json), cycles:jp(r.cycles_json), options:jp(r.options_json), salles:jp(r.salles_json), semestres:jp(r.semestres_json), periodes:jp(r.periodes_json) }; }
 function mapClass(r) { return { id:r.id, cycleId:r.cycle_id, schoolYearId:r.school_year_id, optionCode:r.option_code, salleCode:r.salle_code, nom:r.nom, salle:r.salle, nombreEleves:r.nombre_eleves||0, capacite:r.capacite||45, professeurTitulaire:r.professeur_titulaire }; }
-function mapEleve(r) { const b={id:r.id,registrationNumber:r.registration_number,prenom:r.prenom,nom:r.nom,postnom:r.postnom,sexe:r.sexe,dateNaissance:r.date_naissance,lieuNaissance:r.lieu_naissance,classId:r.class_id,schoolYearId:r.school_year_id,statut:r.statut,photoUrl:r.photo_url,nomParent:r.nom_parent,contactParent:r.contact_parent,adresse:r.adresse}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
+function mapEleve(r) { const b={id:r.id,registrationNumber:r.registration_number,prenom:r.prenom,nom:r.nom,postnom:r.postnom,sexe:r.sexe,dateNaissance:r.date_naissance,lieuNaissance:r.lieu_naissance,classId:r.class_id,schoolYearId:r.school_year_id,statut:r.statut,photoUrl:r.photo_url,nomParent:r.nom_parent,...(r.contact_parent?{telephoneParent:r.contact_parent}:{}),adresse:r.adresse}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
 function mapInvoice(r) { const b={id:r.id,eleveId:r.eleve_id,schoolYearId:r.school_year_id,montantTotal:r.montant_total,montantPaye:r.montant_paye,statut:r.statut,dateEcheance:r.date_echeance}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
 function mapPayment(r) { const b={id:r.id,invoiceId:r.invoice_id,eleveId:r.eleve_id,montant:r.montant,methode:r.methode,datePaiement:r.date_paiement,recuNumero:r.recu_numero,encaissePar:r.encaisse_par}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
 function mapExpense(r) { const b={id:r.id,motif:r.motif,montant:r.montant,devise:r.devise||'USD',categorie:r.categorie,validePar:r.valide_par,date:r.date_depense,modePaiement:r.mode_paiement,pieceJustificative:r.piece_justificative,caissier:r.valide_par}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
@@ -785,15 +832,33 @@ function registerIpcHandlers() {
   ipcMain.handle('db-update-class', (_, id, upd) => { if (!db) return null; const f=[],v=[]; if(upd.nom!==undefined){f.push('nom=?');v.push(upd.nom);} if(upd.salle!==undefined){f.push('salle=?');v.push(upd.salle);} if(upd.salleCode!==undefined){f.push('salle_code=?');v.push(upd.salleCode);} if(upd.optionCode!==undefined){f.push('option_code=?');v.push(upd.optionCode);} if(upd.cycleId!==undefined){f.push('cycle_id=?');v.push(upd.cycleId);} if(upd.schoolYearId!==undefined){f.push('school_year_id=?');v.push(upd.schoolYearId);} if(upd.nombreEleves!==undefined){f.push('nombre_eleves=?');v.push(upd.nombreEleves);} if(upd.capacite!==undefined){f.push('capacite=?');v.push(upd.capacite);} if(upd.professeurTitulaire!==undefined){f.push('professeur_titulaire=?');v.push(upd.professeurTitulaire);} if(!f.length) return null; v.push(id); db.prepare(`UPDATE classes SET ${f.join(',')} WHERE id=?`).run(...v); return mapClass(db.prepare('SELECT * FROM classes WHERE id=?').get(id)); });
   ipcMain.handle('db-delete-class', (_, id) => { if (!db) return false; db.prepare('DELETE FROM classes WHERE id=?').run(id); return true; });
 
+  // Salles Physiques
+  ipcMain.handle('db-get-salles', (_, cycleCode) => { if (!db) return []; if (cycleCode) return db.prepare('SELECT * FROM salles WHERE cycle_code=? ORDER BY nom_salle').all(cycleCode).map(mapSalle); return db.prepare('SELECT * FROM salles ORDER BY nom_salle').all().map(mapSalle); });
+  ipcMain.handle('db-add-salle', (_, s) => { if (!db) return null; db.prepare('INSERT OR REPLACE INTO salles (id,code_salle,nom_salle,capacite,cycle_code,batiment,statut) VALUES (?,?,?,?,?,?,?)').run(s.id, s.codeSalle||s.id, s.nomSalle, s.capacite||45, s.cycleCode||null, s.batiment||null, s.statut||'DISPONIBLE'); return mapSalle(db.prepare('SELECT * FROM salles WHERE id=?').get(s.id)); });
+  ipcMain.handle('db-update-salle', (_, id, upd) => { if (!db) return null; const r=db.prepare('SELECT * FROM salles WHERE id=?').get(id); if(!r) return null; const f=[],v=[]; if(upd.codeSalle!==undefined){f.push('code_salle=?');v.push(upd.codeSalle);} if(upd.nomSalle!==undefined){f.push('nom_salle=?');v.push(upd.nomSalle);} if(upd.capacite!==undefined){f.push('capacite=?');v.push(upd.capacite);} if(upd.cycleCode!==undefined){f.push('cycle_code=?');v.push(upd.cycleCode);} if(upd.batiment!==undefined){f.push('batiment=?');v.push(upd.batiment);} if(upd.statut!==undefined){f.push('statut=?');v.push(upd.statut);} if(!f.length) return mapSalle(r); v.push(id); db.prepare(`UPDATE salles SET ${f.join(',')} WHERE id=?`).run(...v); return mapSalle(db.prepare('SELECT * FROM salles WHERE id=?').get(id)); });
+  ipcMain.handle('db-delete-salle', (_, id) => { if (!db) return false; db.prepare('DELETE FROM salles WHERE id=?').run(id); return true; });
+
   // Subjects
   ipcMain.handle('db-get-subjects', () => { if (!db) return []; return db.prepare('SELECT * FROM subjects ORDER BY nom').all(); });
   ipcMain.handle('db-add-subject', (_, s) => { if (!db) return null; db.prepare('INSERT OR REPLACE INTO subjects (id,code,nom,coefficient,max_score,categorie) VALUES (?,?,?,?,?,?)').run(s.id,s.code,s.nom,s.coefficient||1,s.maxScore||100,s.categorie||'GENERAL'); return db.prepare('SELECT * FROM subjects WHERE id=?').get(s.id); });
   ipcMain.handle('db-delete-subject', (_, id) => { if (!db) return false; db.prepare('DELETE FROM subjects WHERE id=?').run(id); return true; });
 
   // Eleves
-  ipcMain.handle('db-get-eleves', (_, filters) => { if (!db) return []; let q='SELECT * FROM eleves',p=[]; if(filters?.classId){q+=' WHERE class_id=?';p.push(filters.classId);} else if(filters?.schoolYearId){q+=' WHERE school_year_id=?';p.push(filters.schoolYearId);} q+=' ORDER BY nom,prenom'; return db.prepare(q).all(...p).map(mapEleve); });
-  ipcMain.handle('db-add-eleve', (_, e) => { if (!db) return null; db.prepare('INSERT OR REPLACE INTO eleves (id,registration_number,prenom,nom,postnom,sexe,date_naissance,lieu_naissance,class_id,school_year_id,statut,photo_url,nom_parent,contact_parent,adresse,data_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(e.id,e.registrationNumber||null,e.prenom,e.nom,e.postnom||null,e.sexe||'M',e.dateNaissance||null,e.lieuNaissance||null,e.classId||null,e.schoolYearId||null,e.statut||'ACTIF',e.photoUrl||null,e.nomParent||null,e.contactParent||null,e.adresse||null,JSON.stringify(e)); if(e.classId) db.prepare('UPDATE classes SET nombre_eleves=nombre_eleves+1 WHERE id=?').run(e.classId); return mapEleve(db.prepare('SELECT * FROM eleves WHERE id=?').get(e.id)); });
-  ipcMain.handle('db-update-eleve', (_, id, upd) => { if (!db) return null; const r=db.prepare('SELECT * FROM eleves WHERE id=?').get(id); if(!r) return null; const m={...mapEleve(r),...upd}; db.prepare('UPDATE eleves SET prenom=?,nom=?,postnom=?,sexe=?,date_naissance=?,class_id=?,school_year_id=?,statut=?,nom_parent=?,contact_parent=?,adresse=?,data_json=? WHERE id=?').run(m.prenom,m.nom,m.postnom||null,m.sexe||'M',m.dateNaissance||null,m.classId||null,m.schoolYearId||null,m.statut||'ACTIF',m.nomParent||null,m.contactParent||null,m.adresse||null,JSON.stringify(m),id); return mapEleve(db.prepare('SELECT * FROM eleves WHERE id=?').get(id)); });
+  ipcMain.handle('db-get-eleves', (_, filters) => {
+    if (!db) return [];
+    let q='SELECT * FROM eleves', p=[];
+    if (filters?.classId) {
+      q+=' WHERE class_id=?'; p.push(filters.classId);
+    } else if (filters?.schoolYearId) {
+      // Résoudre le nom de l'année en id (l'appelant peut passer l'un ou l'autre)
+      const year = db.prepare('SELECT id FROM school_years WHERE id=? OR nom=?').get(filters.schoolYearId, filters.schoolYearId);
+      q+=' WHERE school_year_id=?'; p.push(year?.id || filters.schoolYearId);
+    }
+    q+=' ORDER BY nom,prenom';
+    return db.prepare(q).all(...p).map(mapEleve);
+  });
+  ipcMain.handle('db-add-eleve', (_, e) => { if (!db) return null; db.prepare('INSERT OR REPLACE INTO eleves (id,registration_number,prenom,nom,postnom,sexe,date_naissance,lieu_naissance,class_id,school_year_id,statut,photo_url,nom_parent,contact_parent,adresse,data_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(e.id,e.registrationNumber||null,e.prenom,e.nom,e.postnom||null,e.sexe||'M',e.dateNaissance||null,e.lieuNaissance||null,e.classId||null,e.schoolYearId||null,e.statut||'ACTIF',e.photoUrl||null,e.nomParent||null,e.telephoneParent||null,e.adresse||null,JSON.stringify(e)); if(e.classId) db.prepare('UPDATE classes SET nombre_eleves=nombre_eleves+1 WHERE id=?').run(e.classId); return mapEleve(db.prepare('SELECT * FROM eleves WHERE id=?').get(e.id)); });
+  ipcMain.handle('db-update-eleve', (_, id, upd) => { if (!db) return null; const r=db.prepare('SELECT * FROM eleves WHERE id=?').get(id); if(!r) return null; const m={...mapEleve(r),...upd}; db.prepare('UPDATE eleves SET prenom=?,nom=?,postnom=?,sexe=?,date_naissance=?,class_id=?,school_year_id=?,statut=?,nom_parent=?,contact_parent=?,adresse=?,data_json=? WHERE id=?').run(m.prenom,m.nom,m.postnom||null,m.sexe||'M',m.dateNaissance||null,m.classId||null,m.schoolYearId||null,m.statut||'ACTIF',m.nomParent||null,m.telephoneParent||null,m.adresse||null,JSON.stringify(m),id); return mapEleve(db.prepare('SELECT * FROM eleves WHERE id=?').get(id)); });
   ipcMain.handle('db-delete-eleve', (_, id) => { if (!db) return false; const r=db.prepare('SELECT class_id FROM eleves WHERE id=?').get(id); db.prepare('DELETE FROM eleves WHERE id=?').run(id); if(r?.class_id) db.prepare('UPDATE classes SET nombre_eleves=MAX(0,nombre_eleves-1) WHERE id=?').run(r.class_id); return true; });
 
   // Finances
@@ -1000,8 +1065,33 @@ function registerIpcHandlers() {
 
   // Staff
   ipcMain.handle('db-get-staff', () => { if (!db) return []; return db.prepare('SELECT * FROM staff ORDER BY nom').all().map(mapStaff); });
+  ipcMain.handle('db-get-staff-by-role', (_, role) => { if (!db) return []; return db.prepare('SELECT * FROM staff WHERE role=? ORDER BY nom').all(role).map(mapStaff); });
   ipcMain.handle('db-add-staff', (_, m) => { if (!db) return null; db.prepare('INSERT OR REPLACE INTO staff (id,nom,prenom,role,telephone,email,salaire_base,devise,statut,data_json) VALUES (?,?,?,?,?,?,?,?,?,?)').run(m.id,m.nom,m.prenom||null,m.role||null,m.telephone||null,m.email||null,m.salaireBase||0,m.devise||'USD',m.statut||'ACTIF',JSON.stringify(m)); return mapStaff(db.prepare('SELECT * FROM staff WHERE id=?').get(m.id)); });
+  ipcMain.handle('db-update-staff', (_, id, upd) => { if (!db) return null; const r=db.prepare('SELECT * FROM staff WHERE id=?').get(id); if(!r) return null; const m={...mapStaff(r),...upd}; db.prepare('UPDATE staff SET nom=?,prenom=?,role=?,telephone=?,email=?,salaire_base=?,devise=?,statut=?,data_json=? WHERE id=?').run(m.nom,m.prenom||null,m.role||null,m.telephone||null,m.email||null,m.salaireBase||0,m.devise||'USD',m.statut||'ACTIF',JSON.stringify(m),id); return mapStaff(db.prepare('SELECT * FROM staff WHERE id=?').get(id)); });
   ipcMain.handle('db-delete-staff', (_, id) => { if (!db) return false; db.prepare('DELETE FROM staff WHERE id=?').run(id); return true; });
+
+  // Journal d'Audit
+  ipcMain.handle('db-get-audit-log', (_, filters) => {
+    if (!db) return [];
+    let q = 'SELECT * FROM audit_log', p = [], cond = [];
+    if (filters?.userId) { cond.push('user_id=?'); p.push(filters.userId); }
+    if (filters?.module) { cond.push('module=?'); p.push(filters.module); }
+    if (filters?.action) { cond.push('action=?'); p.push(filters.action); }
+    if (filters?.dateFrom) { cond.push('created_at>=?'); p.push(filters.dateFrom); }
+    if (filters?.dateTo) { cond.push('created_at<=?'); p.push(filters.dateTo); }
+    if (cond.length) q += ' WHERE ' + cond.join(' AND ');
+    q += ' ORDER BY created_at DESC LIMIT 2000';
+    return db.prepare(q).all(...p).map(r => ({ id: r.id, userId: r.user_id, userNom: r.user_nom, userRole: r.user_role, action: r.action, module: r.module, entite: r.entite, entiteId: r.entite_id, details: (() => { try { return JSON.parse(r.details_json || '{}'); } catch { return {}; } })(), createdAt: r.created_at }));
+  });
+  ipcMain.handle('db-add-audit-entry', (_, entry) => {
+    if (!db) return null;
+    const id = entry.id || randomUUID();
+    db.prepare('INSERT INTO audit_log (id,user_id,user_nom,user_role,action,module,entite,entite_id,details_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,datetime(\'now\',\'localtime\'))').run(
+      id, entry.userId||null, entry.userNom||null, entry.userRole||null, entry.action, entry.module||null, entry.entite||null, entry.entiteId||null, JSON.stringify(entry.details||{})
+    );
+    return id;
+  });
+  ipcMain.handle('db-clear-audit-log', () => { if (!db) return false; db.prepare('DELETE FROM audit_log WHERE created_at < datetime(\'now\', \'-90 days\')').run(); return true; });
 
   // Cotes
   ipcMain.handle('db-get-cotes', (_, filters) => {
