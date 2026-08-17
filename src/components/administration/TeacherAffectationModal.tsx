@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  X, BookOpen, School, Award, Check, Plus, Clock, ShieldCheck,
+  X, BookOpen, School, Award, Check, Plus, Minus, Clock, ShieldCheck,
   AlertCircle, UserCheck, CheckCircle2, Sparkles, Baby, GraduationCap,
   Trash2, Layers, AlertTriangle, Briefcase, Users, FileText,
   ChevronRight, Info, Filter, Search, CheckSquare, Square,
@@ -1190,27 +1190,152 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
                 </div>
               )}
 
-              {/* Volume Horaire & Jauge Hebdomadaire */}
-              <div className="p-5 rounded-2xl border space-y-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                <div className="flex items-center justify-between">
-                  <label className="block font-black text-[10.5px] uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-emerald-500" />
-                    Volume Horaire Hebdomadaire (Heures / Semaine)
-                  </label>
-                  <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                    {volumeHoraire} Heures / sem. ({volumeHoraire * 4}h / mois)
-                  </span>
-                </div>
-                <NumberInput
-                  value={volumeHoraire}
-                  onChange={setVolumeHoraire}
-                  min={1}
-                  max={45}
-                />
-                <p className="text-[11px] text-slate-400 font-medium">
-                  Norme EPST : Secondaire ≈ 18h/semaine pour un temps plein | Maternelle/Primaire ≈ 25h/semaine.
-                </p>
-              </div>
+              {/* ── Volume Horaire & Jauge Hebdomadaire (Design Haute Fidélité) ── */}
+              {(() => {
+                const normeEpst = isPrimMat ? 25 : 18;
+                const ratio = Math.min(100, Math.round((volumeHoraire / normeEpst) * 100));
+                const isSurplus = volumeHoraire > normeEpst;
+                const isPlein = volumeHoraire === normeEpst;
+
+                return (
+                  <div
+                    className="p-5 sm:p-6 rounded-2xl border space-y-4 shadow-xs transition-all"
+                    style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
+                  >
+                    {/* Header du widget */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3" style={{ borderColor: 'var(--border)' }}>
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                          <Clock className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <label className="block font-black text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            Volume Horaire Hebdomadaire
+                          </label>
+                          <p className="text-[10.5px] font-semibold text-slate-400">
+                            Norme EPST : <strong className="text-slate-700 dark:text-slate-200">{normeEpst}h / semaine</strong> pour un temps plein ({isPrimMat ? 'Primaire/Maternelle' : 'Secondaire'})
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Badge récapitulatif mois */}
+                      <div className="flex items-center gap-2 self-start sm:self-auto">
+                        <span className="px-3 py-1 rounded-xl text-xs font-black bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 shadow-xs">
+                          <Zap className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>{volumeHoraire * 4} h / mois</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Contrôle principal : Stepper + Input stylé + Presets */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center pt-1">
+                      {/* Stepper interactif */}
+                      <div className="lg:col-span-5 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setVolumeHoraire(v => Math.max(1, v - 1))}
+                          className="w-10 h-10 rounded-xl border flex items-center justify-center font-black text-sm transition-all hover:bg-slate-500/10 active:scale-95 cursor-pointer shrink-0"
+                          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                          title="Diminuer d'une heure"
+                        >
+                          <Minus className="w-4 h-4" />
+                        </button>
+
+                        <div className="relative flex-1">
+                          <NumberInput
+                            value={volumeHoraire}
+                            onChange={v => setVolumeHoraire(Math.max(1, Math.min(50, v || 1)))}
+                            min={1}
+                            max={50}
+                            integer
+                            className="w-full text-center px-4 py-2 rounded-xl text-base font-black border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                            style={{
+                              background: 'var(--bg-surface)',
+                              borderColor: 'var(--border)',
+                              color: 'var(--text-primary)',
+                            }}
+                          />
+                          <span className="absolute right-3 top-2.5 text-[10px] font-bold text-slate-400 pointer-events-none">
+                            h / sem.
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setVolumeHoraire(v => Math.min(50, v + 1))}
+                          className="w-10 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center font-black text-sm transition-all shadow-xs active:scale-95 cursor-pointer shrink-0"
+                          title="Augmenter d'une heure"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Boutons Presets rapides */}
+                      <div className="lg:col-span-7 flex items-center gap-1.5 flex-wrap">
+                        {[
+                          { val: 12, label: '12h (Partiel)' },
+                          { val: 18, label: '18h (Sec. Plein)' },
+                          { val: 20, label: '20h' },
+                          { val: 25, label: '25h (Prim./Mat.)' },
+                          { val: 30, label: '30h (Lourd)' },
+                        ].map(p => {
+                          const isCurrent = volumeHoraire === p.val;
+                          return (
+                            <button
+                              key={p.val}
+                              type="button"
+                              onClick={() => setVolumeHoraire(p.val)}
+                              className={`px-2.5 py-1.5 rounded-lg text-[10.5px] font-black transition-all cursor-pointer border ${
+                                isCurrent
+                                  ? 'bg-emerald-600 text-white border-emerald-500 shadow-xs'
+                                  : 'hover:bg-slate-500/10 text-slate-500 dark:text-slate-400'
+                              }`}
+                              style={!isCurrent ? { background: 'var(--bg-surface)', borderColor: 'var(--border)' } : undefined}
+                            >
+                              {p.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Jauge visuelle EPST */}
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between text-[10.5px] font-bold">
+                        <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                          Taux de charge hebdomadaire :
+                          <strong className={isSurplus ? 'text-amber-500' : isPlein ? 'text-emerald-500' : 'text-indigo-500'}>
+                            {ratio}% ({volumeHoraire}h sur {normeEpst}h)
+                          </strong>
+                        </span>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                          isSurplus
+                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                            : isPlein
+                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                            : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                        }`}>
+                          {isSurplus ? '⚡ Charge Renforcée / Heures Supp.' : isPlein ? '✓ Temps Plein Standard' : '⏱️ Charge Partielle'}
+                        </span>
+                      </div>
+
+                      {/* Barre de progression */}
+                      <div className="w-full h-2 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-700/60 p-0.5">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${
+                            isSurplus
+                              ? 'bg-gradient-to-r from-emerald-500 via-emerald-400 to-amber-500'
+                              : isPlein
+                              ? 'bg-emerald-500'
+                              : 'bg-gradient-to-r from-indigo-500 to-emerald-500'
+                          }`}
+                          style={{ width: `${Math.min(100, (volumeHoraire / (normeEpst * 1.5)) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
             </div>
           )}
