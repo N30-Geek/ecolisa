@@ -4,7 +4,8 @@ import {
   X, BookOpen, School, Award, Check, Plus, Clock, ShieldCheck,
   AlertCircle, UserCheck, CheckCircle2, Sparkles, Baby, GraduationCap,
   Trash2, Layers, AlertTriangle, Briefcase, Users, FileText,
-  ChevronRight, Info,
+  ChevronRight, Info, Filter, Search, CheckSquare, Square,
+  Zap, ArrowRight, CornerDownRight, BarChart3, HelpCircle
 } from 'lucide-react';
 import { MembrePersonnel, ClasseScolaire } from '../../types';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
@@ -18,29 +19,142 @@ interface TeacherAffectationModalProps {
   onSaveSuccess?: (updated: MembrePersonnel) => void;
 }
 
-// ── Catalogue matières EPST RDC ─────────────────────────────────────────────
-const MATIERES_EPST_SECONDAIRE: string[] = [
-  'Mathématiques', 'Physique Appliquée', 'Chimie Organique & Minérale',
-  'Biologie & Sciences de la Vie (SVT)', 'Français (Grammaire & Littérature)',
-  'Anglais Technique & Littéraire', 'Histoire de la RDC & Générale',
-  'Géographie & Environnement', 'Informatique & TIC',
-  'Éducation Civique & Morale (ECM)', 'Latin & Antiquités',
-  'Philosophie & Éthique', 'Pédagogie & Didactique',
-  'Psychologie de l\'Enfant & Adolescent', 'Comptabilité Générale',
-  'Économie & Gestion d\'Entreprise', 'Droit & Législation Scolaire',
-  'Dessin Technique & Croquis', 'Éducation Physique & Sport (EPS)',
-  'Religion (Morale Chrétienne)', 'Langue Nationale (Lingala / Swahili)',
-];
+// ── PROGRAMME OFFICIEL EPST RDC PAR NIVEAU & OPTION ─────────────────────────
 
-// Niveaux secondaire EPST RDC
-const NIVEAUX_SECONDAIRE: string[] = [
-  '7ème CTEB (1ère Secondaire)',
-  '8ème CTEB (2ème Secondaire)',
-  '1ère Humanités',
-  '2ème Humanités',
-  '3ème Humanités',
-  '4ème Humanités',
-];
+interface SubjectDefinition {
+  nom: string;
+  categorie: 'SCIENCES' | 'LANGUES' | 'HUMAINES' | 'TECHNIQUE' | 'PEDAGOGIE' | 'GENERAL' | 'EVEIL';
+  isMajeure?: boolean;
+}
+
+const PROGRAMME_EPST_PAR_NIVEAU: Record<string, SubjectDefinition[]> = {
+  // ── MATERNELLE ──
+  MATERNELLE: [
+    { nom: "Activités d'Éveil & Psychomotricité", categorie: 'EVEIL', isMajeure: true },
+    { nom: 'Langage & Communication Orale', categorie: 'LANGUES', isMajeure: true },
+    { nom: 'Sensorialité, Formes & Couleurs', categorie: 'EVEIL', isMajeure: true },
+    { nom: 'Dessin, Coloriage & Découpage', categorie: 'EVEIL' },
+    { nom: 'Chants, Rondes & Éducation Musicale', categorie: 'EVEIL' },
+    { nom: 'Initiation aux Premières Notions Mathématiques', categorie: 'SCIENCES' },
+  ],
+
+  // ── PRIMAIRE ──
+  PRIMAIRE: [
+    { nom: 'Français (Lecture, Écriture & Grammaire)', categorie: 'LANGUES', isMajeure: true },
+    { nom: 'Mathématiques (Calcul, Numération & Géométrie)', categorie: 'SCIENCES', isMajeure: true },
+    { nom: 'Éveil Scientifique & Milieu', categorie: 'SCIENCES', isMajeure: true },
+    { nom: 'Éducation Civique & Morale (ECM)', categorie: 'HUMAINES' },
+    { nom: 'Histoire & Géographie de la RDC', categorie: 'HUMAINES' },
+    { nom: 'Calligraphie & Travaux Manuels', categorie: 'GENERAL' },
+    { nom: 'Éducation Physique & Sportive (EPS)', categorie: 'GENERAL' },
+    { nom: 'Langue Nationale (Lingala / Swahili / Tshiluba / Kikongo)', categorie: 'LANGUES' },
+  ],
+
+  // ── 7ème & 8ème Éducation de Base / CTEB (Tronc Commun) ──
+  CTEB_7_8: [
+    { nom: 'Mathématiques (Algèbre & Géométrie)', categorie: 'SCIENCES', isMajeure: true },
+    { nom: 'Français (Grammaire, Textes & Orthographe)', categorie: 'LANGUES', isMajeure: true },
+    { nom: 'Sciences Physiques (Physique & Chimie)', categorie: 'SCIENCES', isMajeure: true },
+    { nom: 'Sciences de la Vie et de la Terre (SVT)', categorie: 'SCIENCES', isMajeure: true },
+    { nom: 'Anglais Général', categorie: 'LANGUES' },
+    { nom: 'Histoire de la RDC & Générale', categorie: 'HUMAINES' },
+    { nom: 'Géographie Physique & Économique', categorie: 'HUMAINES' },
+    { nom: 'Éducation Civique & Morale (ECM)', categorie: 'HUMAINES' },
+    { nom: 'Éducation à la Vie (EDVIE)', categorie: 'HUMAINES' },
+    { nom: 'Technologie, Informatique & TIC', categorie: 'TECHNIQUE', isMajeure: true },
+    { nom: 'Dessin Artistique & Technique', categorie: 'TECHNIQUE' },
+    { nom: 'Éducation Physique & Sport (EPS)', categorie: 'GENERAL' },
+  ],
+
+  // ── HUMANITÉS SCIENTIFIQUES ──
+  SCIENTIFIQUE: [
+    { nom: 'Algèbre & Analyse Mathématique', categorie: 'SCIENCES', isMajeure: true },
+    { nom: 'Physique Appliquée & Mécanique', categorie: 'SCIENCES', isMajeure: true },
+    { nom: 'Chimie Générale, Minérale & Organique', categorie: 'SCIENCES', isMajeure: true },
+    { nom: 'Biologie Générale, Cytologie & Génétique', categorie: 'SCIENCES', isMajeure: true },
+    { nom: "Géométrie dans l'Espace & Trigonométrie", categorie: 'SCIENCES', isMajeure: true },
+    { nom: 'Dessin Scientifique & Croquis', categorie: 'TECHNIQUE' },
+    { nom: 'Géologie & Minéralogie', categorie: 'SCIENCES' },
+    { nom: 'Informatique Scientifique & Programmation', categorie: 'TECHNIQUE' },
+    { nom: 'Français (Dissertation & Littérature)', categorie: 'LANGUES' },
+    { nom: 'Anglais Scientifique & Technique', categorie: 'LANGUES' },
+    { nom: 'Philosophie & Logique', categorie: 'HUMAINES' },
+    { nom: 'Histoire & Géographie', categorie: 'HUMAINES' },
+  ],
+
+  // ── HUMANITÉS COMMERCIALES & GESTION ──
+  COMMERCIALE: [
+    { nom: 'Comptabilité Générale & Analytique', categorie: 'TECHNIQUE', isMajeure: true },
+    { nom: 'Mathématiques Financières & Commerciales', categorie: 'SCIENCES', isMajeure: true },
+    { nom: 'Documents du Commerce (DOCOM)', categorie: 'TECHNIQUE', isMajeure: true },
+    { nom: 'Informatique de Gestion (Tableurs & ERP)', categorie: 'TECHNIQUE', isMajeure: true },
+    { nom: 'Fiscalité & Législation Financière', categorie: 'TECHNIQUE', isMajeure: true },
+    { nom: 'Droit Commercial, Civil & des Sociétés', categorie: 'HUMAINES', isMajeure: true },
+    { nom: 'Économie Générale & Monétaire', categorie: 'HUMAINES', isMajeure: true },
+    { nom: 'Correspondance Commerciale & Admin. (CCA)', categorie: 'LANGUES', isMajeure: true },
+    { nom: 'Anglais Commercial & des Affaires', categorie: 'LANGUES' },
+    { nom: 'Français Général & Rédaction', categorie: 'LANGUES' },
+    { nom: 'Mathématiques Générales', categorie: 'SCIENCES' },
+    { nom: 'Entreprenariat & Gestion des PME', categorie: 'TECHNIQUE' },
+  ],
+
+  // ── HUMANITÉS SECRÉTARIAT & ADMINISTRATION ──
+  SECRETARIAT: [
+    { nom: 'Sténographie & Prise Rapide', categorie: 'TECHNIQUE', isMajeure: true },
+    { nom: 'Organisation de Bureau & Déontologie', categorie: 'TECHNIQUE', isMajeure: true },
+    { nom: 'CCA Française (Rédaction Administrative)', categorie: 'LANGUES', isMajeure: true },
+    { nom: 'CCA Anglaise (Commercial Correspondence)', categorie: 'LANGUES', isMajeure: true },
+    { nom: 'Informatique Bureautique & Traitement Texte', categorie: 'TECHNIQUE', isMajeure: true },
+    { nom: 'Comptabilité Générale', categorie: 'TECHNIQUE' },
+    { nom: 'Droit Administratif, Civil & du Travail', categorie: 'HUMAINES' },
+    { nom: 'Fiscalité', categorie: 'TECHNIQUE' },
+    { nom: 'Statistiques Appliquées au Secrétariat', categorie: 'SCIENCES' },
+    { nom: 'Français Général', categorie: 'LANGUES' },
+    { nom: 'Entreprenariat & Projets de Bureau', categorie: 'TECHNIQUE' },
+  ],
+
+  // ── HUMANITÉS LITTÉRAIRES (LATIN-PHILO) ──
+  LITTERAIRE: [
+    { nom: 'Latin (Grammaire, Textes & Auteurs)', categorie: 'LANGUES', isMajeure: true },
+    { nom: 'Philosophie, Logique & Éthique', categorie: 'HUMAINES', isMajeure: true },
+    { nom: 'Français (Littérature, Dissertation & Textes)', categorie: 'LANGUES', isMajeure: true },
+    { nom: 'Anglais Littéraire & Conversation', categorie: 'LANGUES', isMajeure: true },
+    { nom: 'Histoire Universelle & de la RDC', categorie: 'HUMAINES', isMajeure: true },
+    { nom: 'Géographie Humaine & Économique', categorie: 'HUMAINES' },
+    { nom: 'Grec & Antiquités Classiques', categorie: 'LANGUES' },
+    { nom: 'Mathématiques Générales', categorie: 'SCIENCES' },
+    { nom: 'Sciences Générales & Biologie', categorie: 'SCIENCES' },
+    { nom: 'Éducation Civique & Morale (ECM)', categorie: 'HUMAINES' },
+  ],
+
+  // ── HUMANITÉS PÉDAGOGIQUES ──
+  PEDAGOGIQUE: [
+    { nom: "Pédagogie Générale & Théories de l'Apprentissage", categorie: 'PEDAGOGIE', isMajeure: true },
+    { nom: 'Didactique Spéciale & Pratiques de Classe', categorie: 'PEDAGOGIE', isMajeure: true },
+    { nom: "Psychologie de l'Enfant & de l'Adolescent", categorie: 'PEDAGOGIE', isMajeure: true },
+    { nom: 'Histoire de la Pédagogie & Doctrines', categorie: 'PEDAGOGIE' },
+    { nom: 'Législation & Déontologie Scolaire', categorie: 'PEDAGOGIE' },
+    { nom: 'Français Pédagogique & Grammaire', categorie: 'LANGUES', isMajeure: true },
+    { nom: 'Mathématiques pour Enseignants', categorie: 'SCIENCES' },
+    { nom: 'Éveil Scientifique & Milieu', categorie: 'SCIENCES' },
+    { nom: 'Dessin & Calligraphie Didactique', categorie: 'GENERAL' },
+    { nom: 'Éducation Physique & Sport (EPS)', categorie: 'GENERAL' },
+  ],
+
+  // ── HUMANITÉS TECHNIQUES & INDUSTRIELLES ──
+  TECHNIQUE: [
+    { nom: 'Électricité Générale & Schémas', categorie: 'TECHNIQUE', isMajeure: true },
+    { nom: 'Mécanique Générale & Moteurs', categorie: 'TECHNIQUE', isMajeure: true },
+    { nom: 'Dessin Industriel & Conception', categorie: 'TECHNIQUE', isMajeure: true },
+    { nom: 'Construction Bâtiment & Travaux Publics', categorie: 'TECHNIQUE', isMajeure: true },
+    { nom: 'Électronique & Systèmes Numériques', categorie: 'TECHNIQUE', isMajeure: true },
+    { nom: 'Informatique Industrielle & Réseaux', categorie: 'TECHNIQUE', isMajeure: true },
+    { nom: 'Technologie des Matériaux & Sécurité', categorie: 'TECHNIQUE' },
+    { nom: 'Mathématiques Appliquées', categorie: 'SCIENCES' },
+    { nom: 'Physique & Chimie Industrielle', categorie: 'SCIENCES' },
+    { nom: 'Français & Anglais Technique', categorie: 'LANGUES' },
+  ],
+};
 
 // ── Rôles admin disponibles ───────────────────────────────────────────────────
 const ROLES_ADMIN: SelectOption[] = [
@@ -51,17 +165,56 @@ const ROLES_ADMIN: SelectOption[] = [
   { value: 'ADMIN',       label: 'Secrétaire / Admin Général', icon: FileText },
 ];
 
-// Entrée affectation : Matière × Classe
 interface CourseEntry {
   matiere: string;
-  classe: string; // 'TOUTES' ou nom de classe spécifique
+  classe: string;
 }
 
-// ── Détection du mode (ADMIN / ENSEIGNANT) ────────────────────────────────────
 type ModalMode = 'ADMIN' | 'ENSEIGNANT';
 function detectMode(teacher: MembrePersonnel): ModalMode {
-  const adminRoles = ['PREFET', 'DE', 'SURVEILLANT', 'COMPTABLE', 'ADMIN', 'PROMOTEUR_ADMIN', 'PREFET_DIRECTEUR', 'DIRECTEUR_ETUDES', 'DIRECTEUR_DISCIPLINE', 'COMPTABLE_INTENDANT', 'SECRETAIRE', 'INTENDANT'];
+  const adminRoles = [
+    'PREFET', 'DE', 'SURVEILLANT', 'COMPTABLE', 'ADMIN', 'PROMOTEUR_ADMIN',
+    'PREFET_DIRECTEUR', 'DIRECTEUR_ETUDES', 'DIRECTEUR_DISCIPLINE',
+    'COMPTABLE_INTENDANT', 'SECRETAIRE', 'INTENDANT'
+  ];
   return adminRoles.includes(teacher.role || '') ? 'ADMIN' : 'ENSEIGNANT';
+}
+
+/**
+ * Déduit la clé de programme EPST à partir du nom d'une classe.
+ */
+function detectClassCurriculum(className: string): string {
+  const lower = (className || '').toLowerCase();
+
+  if (lower.includes('mat') || lower.includes('maternelle') || lower.includes('creche')) {
+    return 'MATERNELLE';
+  }
+  if (lower.includes('prim') || lower.includes('primaire')) {
+    return 'PRIMAIRE';
+  }
+  if (lower.includes('7') || lower.includes('8') || lower.includes('cteb') || lower.includes('eb') || lower.includes('base')) {
+    return 'CTEB_7_8';
+  }
+  if (lower.includes('scient') || lower.includes('sc') || lower.includes('bio') || lower.includes('math')) {
+    return 'SCIENTIFIQUE';
+  }
+  if (lower.includes('com') || lower.includes('gest') || lower.includes('gestion') || lower.includes('cg')) {
+    return 'COMMERCIALE';
+  }
+  if (lower.includes('sec') || lower.includes('secret') || lower.includes('admin')) {
+    return 'SECRETARIAT';
+  }
+  if (lower.includes('lat') || lower.includes('phil') || lower.includes('litt') || lower.includes('lp')) {
+    return 'LITTERAIRE';
+  }
+  if (lower.includes('ped') || lower.includes('pédag') || lower.includes('peda')) {
+    return 'PEDAGOGIQUE';
+  }
+  if (lower.includes('tech') || lower.includes('elec') || lower.includes('mec') || lower.includes('bat')) {
+    return 'TECHNIQUE';
+  }
+
+  return 'CTEB_7_8';
 }
 
 export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = ({
@@ -76,34 +229,34 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
   const [dbSubjects, setDbSubjects] = useState<string[]>([]);
   const [allStaffList, setAllStaffList] = useState<MembrePersonnel[]>([]);
 
-  // ── Mode ADMIN ────────────────────────────────────────────────────────────
+  // Mode ADMIN
   const [adminRole, setAdminRole] = useState<string>('PREFET');
   const [adminDepartement, setAdminDepartement] = useState<string>('');
   const [adminResponsabilites, setAdminResponsabilites] = useState<string>('');
 
-  // ── Mode ENSEIGNANT (Maternelle/Primaire) ─────────────────────────────────
+  // Mode ENSEIGNANT (Maternelle/Primaire)
   const [salleUnique, setSalleUnique] = useState<string>('');
 
-  // ── Mode ENSEIGNANT (Secondaire) ─────────────────────────────────────────
-  // Titularisation : une liste de noms de classes
+  // Mode ENSEIGNANT (Secondaire)
   const [titularClasses, setTitularClasses] = useState<string[]>([]);
   const [addTitularValue, setAddTitularValue] = useState<string>('');
 
-  // Affectations matières : liste d'entrées { matiere, classe }
+  // Affectations de cours
   const [courseEntries, setCourseEntries] = useState<CourseEntry[]>([]);
   const [selClasse, setSelClasse] = useState<string>('TOUTES');
-  const [selMatiere, setSelMatiere] = useState<string>('');
+  const [selCategoryFilter, setSelCategoryFilter] = useState<string>('ALL');
+  const [searchSubjectTerm, setSearchSubjectTerm] = useState<string>('');
   const [customCourse, setCustomCourse] = useState<string>('');
 
   // Volume horaire
   const [volumeHoraire, setVolumeHoraire] = useState<number>(18);
 
-  // UI
+  // Notifications & États
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // ── Initialisation à l'ouverture ──────────────────────────────────────────
+  // ── Initialisation ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen || !teacher) return;
 
@@ -112,10 +265,10 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
 
     // ADMIN
     setAdminRole(teacher.role || 'PREFET');
-    setAdminDepartement((teacher as any).departement || '');
-    setAdminResponsabilites((teacher as any).responsabilites || '');
+    setAdminDepartement((teacher as any).departement || teacher.personnelEnCharge || '');
+    setAdminResponsabilites((teacher as any).responsabilites || teacher.notesBiographiques || '');
 
-    // ENSEIGNANT cycle
+    // CYCLE
     const cp = teacher.cyclePrincipal || 'SECONDAIRE';
     if (cp === 'MATERNELLE') setCycle('MATERNELLE');
     else if (cp === 'PRIMAIRE') setCycle('PRIMAIRE');
@@ -126,11 +279,10 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
     const initTituls: string[] = teacher.classesTitularisees || (teacher.classeTitulaireId ? [teacher.classeTitulaireId] : []);
     setTitularClasses(Array.from(new Set(initTituls.filter(Boolean))));
 
-    // Restaurer les affectations précédentes
+    // Cours existants
     const prevEntries: CourseEntry[] = [];
     const prevCours: string[] = teacher.coursAttribues || teacher.disciplines || [];
     prevCours.forEach(c => {
-      // Format: "Matière (Classe)" ou "Matière"
       const match = c.match(/^(.+?)\s+\((.+?)\)$/);
       if (match) {
         prevEntries.push({ matiere: match[1].trim(), classe: match[2].trim() });
@@ -140,14 +292,15 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
     });
     setCourseEntries(prevEntries);
 
-    setVolumeHoraire(teacher.volumeHoraireHebdo || 18);
+    setVolumeHoraire(teacher.volumeHoraireHebdo || (cp === 'SECONDAIRE' ? 18 : 25));
     setErrorMsg(null);
     setSuccessMsg(null);
-    setSelMatiere('');
-    setSelClasse('TOUTES');
+    setSearchSubjectTerm('');
+    setSelCategoryFilter('ALL');
+    setCustomCourse('');
     setAddTitularValue('');
 
-    // Charger données SQLite
+    // Charger les classes et les matières depuis la base SQLite
     Promise.all([
       LocalDatabaseService.getClasses(),
       LocalDatabaseService.getSubjects(),
@@ -158,6 +311,19 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
         setDbSubjects(Array.from(new Set(subs.map(s => s.nom))));
       }
       setAllStaffList(stf || []);
+
+      // Si aucune classe n'est sélectionnée, initialiser intelligemment avec la 1ère classe du cycle
+      if (cls && cls.length > 0) {
+        const matchingClass = cls.find(c => {
+          const cat = detectClassCurriculum(c.nom);
+          return cp === 'SECONDAIRE' ? (cat !== 'MATERNELLE' && cat !== 'PRIMAIRE') : cat === cp;
+        });
+        if (matchingClass) {
+          setSelClasse(matchingClass.nom);
+        } else {
+          setSelClasse('TOUTES');
+        }
+      }
     }).catch(() => {
       setClassesList([]);
       setDbSubjects([]);
@@ -165,7 +331,7 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
     });
   }, [isOpen, teacher]);
 
-  // ── Carte d'occupation des titulaires (hors moi) ──────────────────────────
+  // ── Cartographie de la Titularisation existante (hors agent courant) ───────
   const titularMap = useMemo(() => {
     const map: Record<string, { id: string; name: string }> = {};
     allStaffList.forEach(s => {
@@ -178,8 +344,8 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
     return map;
   }, [allStaffList, teacher.id]);
 
-  // ── Carte d'occupation des matières par classe (hors moi) ─────────────────
-  // map[classe_lower][matiere_lower] = staffName
+  // ── Cartographie Matière × Classe occupée par d'autres profs ──────────────
+  // map[classe_lower][matiere_lower] = "Prof. Prenom Nom"
   const subjectClassMap = useMemo(() => {
     const map: Record<string, Record<string, string>> = {};
     allStaffList.forEach(s => {
@@ -189,8 +355,12 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
         const match = c.match(/^(.+?)\s+\((.+?)\)$/);
         let matiere = '';
         let classe = 'TOUTES';
-        if (match) { matiere = match[1].trim().toLowerCase(); classe = match[2].trim().toLowerCase(); }
-        else { matiere = c.trim().toLowerCase(); }
+        if (match) {
+          matiere = match[1].trim().toLowerCase();
+          classe = match[2].trim().toLowerCase();
+        } else {
+          matiere = c.trim().toLowerCase();
+        }
 
         if (classe !== 'toutes') {
           if (!map[classe]) map[classe] = {};
@@ -201,98 +371,186 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
     return map;
   }, [allStaffList, teacher.id]);
 
-  // ── Options listes déroulantes ────────────────────────────────────────────
-  const allClassNames: string[] = useMemo(() => {
-    return Array.from(new Set(classesList.map(c => c.nom)));
-  }, [classesList]);
+  // ── Classes disponibles selon le cycle sélectionné ─────────────────────────
+  const filteredClassesByCycle = useMemo(() => {
+    if (cycle === 'MATERNELLE') {
+      const dbMat = classesList.filter(c => detectClassCurriculum(c.nom) === 'MATERNELLE').map(c => c.nom);
+      const defaults = ['1ère Maternelle (Petite Section)', '2ème Maternelle (Moyenne Section)', '3ème Maternelle (Grande Section)'];
+      return Array.from(new Set([...dbMat, ...defaults]));
+    }
+    if (cycle === 'PRIMAIRE') {
+      const dbPrim = classesList.filter(c => detectClassCurriculum(c.nom) === 'PRIMAIRE').map(c => c.nom);
+      const defaults = [
+        '1ère Année Primaire A', '1ère Année Primaire B',
+        '2ème Année Primaire A', '2ème Année Primaire B',
+        '3ème Année Primaire A', '3ème Année Primaire B',
+        '4ème Année Primaire A', '4ème Année Primaire B',
+        '5ème Année Primaire A', '5ème Année Primaire B',
+        '6ème Année Primaire A', '6ème Année Primaire B',
+      ];
+      return Array.from(new Set([...dbPrim, ...defaults]));
+    }
+    // SECONDAIRE
+    const dbSec = classesList.filter(c => {
+      const cat = detectClassCurriculum(c.nom);
+      return cat !== 'MATERNELLE' && cat !== 'PRIMAIRE';
+    }).map(c => c.nom);
 
-  const salleUniqueOptions: SelectOption[] = useMemo(() => {
-    const defaults = cycle === 'MATERNELLE'
-      ? ['1ère Maternelle (Petite Section)', '2ème Maternelle (Moyenne Section)', '3ème Maternelle (Grande Section)']
-      : ['1ère Année Primaire A', '1ère Année Primaire B', '2ème Année Primaire A', '2ème Année Primaire B',
-         '3ème Année Primaire A', '3ème Année Primaire B', '4ème Année Primaire A', '4ème Année Primaire B',
-         '5ème Année Primaire A', '5ème Année Primaire B', '6ème Année Primaire A', '6ème Année Primaire B'];
-    const combined = Array.from(new Set([...defaults, ...allClassNames]));
-    return [
-      { value: '', label: `— Choisir la classe ${cycle === 'MATERNELLE' ? 'de Maternelle' : 'Primaire (1ère→6ème)'} —` },
-      ...combined.map(n => ({ value: n, label: n })),
+    const defaults = [
+      '7ème Année Éducation de Base A (CTEB)', '7ème Année Éducation de Base B (CTEB)',
+      '8ème Année Éducation de Base A (CTEB)', '8ème Année Éducation de Base B (CTEB)',
+      '1ère Année Scientifique (3ème Sec.)', '2ème Année Scientifique (4ème Sec.)',
+      '3ème Année Scientifique (5ème Sec.)', '4ème Année Scientifique EXETAT (6ème Sec.)',
+      '1ère Commerciale & Gestion', '2ème Commerciale & Gestion',
+      '3ème Commerciale & Gestion', '4ème Commerciale & Gestion EXETAT',
+      '1ère Littéraire (Latin-Philo)', '2ème Littéraire (Latin-Philo)',
+      '3ème Littéraire (Latin-Philo)', '4ème Littéraire EXETAT',
+      '1ère Pédagogie Générale', '2ème Pédagogie Générale',
+      '3ème Pédagogie Générale', '4ème Pédagogie Générale EXETAT',
+      '1ère Technique Industrielle', '2ème Technique Industrielle',
+      '3ème Technique Industrielle', '4ème Technique Industrielle EXETAT',
     ];
-  }, [cycle, allClassNames]);
+    return Array.from(new Set([...dbSec, ...defaults]));
+  }, [cycle, classesList]);
 
+  // Options pour le sélecteur de classe pour affectation
+  const classeSelectOptions: SelectOption[] = useMemo(() => {
+    return [
+      { value: 'TOUTES', label: '🌐 Toutes les classes du cycle (Transversal / Général)' },
+      ...filteredClassesByCycle.map(c => ({
+        value: c,
+        label: `🏫 ${c}`,
+      })),
+    ];
+  }, [filteredClassesByCycle]);
+
+  // Options pour la titularisation secondaire
   const titularOptions: SelectOption[] = useMemo(() => {
-    const secondary = Array.from(new Set([...NIVEAUX_SECONDAIRE, ...allClassNames]));
     return [
       { value: '', label: '— Sélectionner une classe à titulariser —' },
-      ...secondary
-        .filter(n => !titularClasses.includes(n))
-        .map(n => {
-          const existing = titularMap[n.trim().toLowerCase()];
+      ...filteredClassesByCycle
+        .filter(c => !titularClasses.includes(c))
+        .map(c => {
+          const occ = titularMap[c.trim().toLowerCase()];
           return {
-            value: n,
-            label: existing ? `${n}  ⚠ Titulaire: ${existing.name}` : `${n}  ✓ Disponible`,
+            value: c,
+            label: occ ? `⚠ ${c} (Actuel Titulaire: ${occ.name})` : `✓ ${c} (Disponible)`,
           };
         }),
     ];
-  }, [allClassNames, titularClasses, titularMap]);
+  }, [filteredClassesByCycle, titularClasses, titularMap]);
 
-  const classeForSubjectOptions: SelectOption[] = useMemo(() => {
-    const secondary = Array.from(new Set([...NIVEAUX_SECONDAIRE, ...allClassNames]));
+  // Options pour la salle unique (Maternelle/Primaire)
+  const salleUniqueOptions: SelectOption[] = useMemo(() => {
     return [
-      { value: 'TOUTES', label: 'Toutes les classes (Enseignement Général)' },
-      ...secondary.map(n => ({ value: n, label: n })),
+      { value: '', label: `— Choisir la salle de ${cycle === 'MATERNELLE' ? 'Maternelle' : 'Primaire'} —` },
+      ...filteredClassesByCycle.map(c => ({ value: c, label: `🏫 ${c}` })),
     ];
-  }, [allClassNames]);
+  }, [cycle, filteredClassesByCycle]);
 
-  const matiereOptions: SelectOption[] = useMemo(() => {
-    const all = Array.from(new Set([...MATIERES_EPST_SECONDAIRE, ...dbSubjects]));
-    const used = courseEntries.filter(e => e.classe === selClasse || selClasse === 'TOUTES').map(e => e.matiere.toLowerCase());
-    const result: SelectOption[] = [{ value: '', label: '— Sélectionner la matière à affecter —' }];
-    all.forEach(m => {
-      if (used.includes(m.toLowerCase())) return;
-      let suffix = '';
-      if (selClasse !== 'TOUTES') {
-        const conflict = subjectClassMap[selClasse.toLowerCase()]?.[m.toLowerCase()];
-        if (conflict) suffix = `  ⚠ Prof: ${conflict}`;
-      }
-      result.push({ value: m, label: `${m}${suffix}` });
-    });
-    return result;
-  }, [dbSubjects, courseEntries, selClasse, subjectClassMap]);
+  // ── Matières Intelligentes suggérées selon la classe sélectionnée ──────────
+  const suggestedCurriculumSubjects = useMemo(() => {
+    let curriculumKey = 'CTEB_7_8';
+    if (cycle === 'MATERNELLE') curriculumKey = 'MATERNELLE';
+    else if (cycle === 'PRIMAIRE') curriculumKey = 'PRIMAIRE';
+    else if (selClasse !== 'TOUTES') {
+      curriculumKey = detectClassCurriculum(selClasse);
+    } else {
+      curriculumKey = 'CTEB_7_8';
+    }
 
-  // ── Gestion Titularisation (secondaire) ──────────────────────────────────
+    const officialList = PROGRAMME_EPST_PAR_NIVEAU[curriculumKey] || PROGRAMME_EPST_PAR_NIVEAU['CTEB_7_8'];
+    const officialNames = new Set(officialList.map(s => s.nom.toLowerCase()));
+
+    // Ajouter les matières de la base SQLite non présentes
+    const extraDb = dbSubjects
+      .filter(s => !officialNames.has(s.toLowerCase()))
+      .map(s => ({ nom: s, categorie: 'GENERAL' as const, isMajeure: false }));
+
+    const combined: SubjectDefinition[] = [...officialList, ...extraDb];
+
+    // Filtrer par recherche textuelle
+    let list = combined;
+    if (searchSubjectTerm.trim()) {
+      const q = searchSubjectTerm.toLowerCase();
+      list = list.filter(s => s.nom.toLowerCase().includes(q));
+    }
+
+    // Filtrer par catégorie
+    if (selCategoryFilter !== 'ALL') {
+      list = list.filter(s => s.categorie === selCategoryFilter);
+    }
+
+    return list;
+  }, [cycle, selClasse, dbSubjects, searchSubjectTerm, selCategoryFilter]);
+
+  // ── Actions Titularisation ────────────────────────────────────────────────
   const addTitularClass = (cls: string) => {
     if (!cls || titularClasses.includes(cls)) return;
     setTitularClasses(prev => [...prev, cls]);
     setAddTitularValue('');
   };
-  const removeTitularClass = (cls: string) => setTitularClasses(prev => prev.filter(c => c !== cls));
 
-  // ── Gestion Matières ──────────────────────────────────────────────────────
-  const addCourseEntry = (matiere: string) => {
-    if (!matiere) return;
-
-    // Vérification d'unicité : si on sélectionne une classe spécifique
-    if (selClasse !== 'TOUTES') {
-      const conflict = subjectClassMap[selClasse.toLowerCase()]?.[matiere.toLowerCase()];
-      if (conflict) {
-        setErrorMsg(`⚠ "${matiere}" est déjà enseigné en "${selClasse}" par ${conflict}. Un seul prof par matière/classe.`);
-        setTimeout(() => setErrorMsg(null), 5000);
-        setSelMatiere('');
-        return;
-      }
-      // Doublon dans la liste actuelle
-      const alreadyHere = courseEntries.find(e => e.matiere.toLowerCase() === matiere.toLowerCase() && e.classe === selClasse);
-      if (alreadyHere) { setSelMatiere(''); return; }
-    }
-
-    setCourseEntries(prev => [...prev, { matiere, classe: selClasse }]);
-    setSelMatiere('');
+  const removeTitularClass = (cls: string) => {
+    setTitularClasses(prev => prev.filter(c => c !== cls));
   };
 
-  const addCustomEntry = () => {
+  // ── Actions Affectation de Cours ──────────────────────────────────────────
+  const isSubjectAssignedHere = (matiere: string, targetClasse: string) => {
+    return courseEntries.some(
+      e => e.matiere.toLowerCase() === matiere.toLowerCase() && (e.classe === targetClasse || e.classe === 'TOUTES')
+    );
+  };
+
+  const getSubjectConflict = (matiere: string, targetClasse: string): string | null => {
+    if (targetClasse === 'TOUTES') return null;
+    return subjectClassMap[targetClasse.toLowerCase()]?.[matiere.toLowerCase()] || null;
+  };
+
+  const toggleSubjectForSelectedClass = (matiere: string) => {
+    const conflict = getSubjectConflict(matiere, selClasse);
+    if (conflict) {
+      setErrorMsg(`⚠ Ce cours est déjà attribué à ${conflict} pour la classe "${selClasse}". Règle EPST : 1 seul professeur par matière.`);
+      setTimeout(() => setErrorMsg(null), 4500);
+      return;
+    }
+
+    const alreadyIdx = courseEntries.findIndex(
+      e => e.matiere.toLowerCase() === matiere.toLowerCase() && e.classe === selClasse
+    );
+
+    if (alreadyIdx !== -1) {
+      setCourseEntries(prev => prev.filter((_, i) => i !== alreadyIdx));
+    } else {
+      setCourseEntries(prev => [...prev, { matiere, classe: selClasse }]);
+    }
+  };
+
+  const addAllAvailableSubjectsForCurrentClass = () => {
+    const toAdd: CourseEntry[] = [];
+    suggestedCurriculumSubjects.forEach(s => {
+      const conflict = getSubjectConflict(s.nom, selClasse);
+      const already = isSubjectAssignedHere(s.nom, selClasse);
+      if (!conflict && !already) {
+        toAdd.push({ matiere: s.nom, classe: selClasse });
+      }
+    });
+
+    if (toAdd.length === 0) {
+      setErrorMsg("Toutes les matières de cette catégorie sont déjà attribuées ou en conflit.");
+      setTimeout(() => setErrorMsg(null), 3000);
+      return;
+    }
+
+    setCourseEntries(prev => [...prev, ...toAdd]);
+    setSuccessMsg(`✓ ${toAdd.length} matière(s) affectée(s) en 1 clic pour ${selClasse === 'TOUTES' ? 'le tronc commun' : selClasse}.`);
+    setTimeout(() => setSuccessMsg(null), 3500);
+  };
+
+  const addCustomSubject = () => {
     const trimmed = customCourse.trim();
     if (!trimmed) return;
-    addCourseEntry(trimmed);
+    toggleSubjectForSelectedClass(trimmed);
     setCustomCourse('');
   };
 
@@ -300,7 +558,7 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
     setCourseEntries(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // ── Soumission ────────────────────────────────────────────────────────────
+  // ── Soumission Formulaire ─────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -328,12 +586,11 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
       } else {
         const isPrimMat = cycle === 'MATERNELLE' || cycle === 'PRIMAIRE';
 
-        // Formatter les cours
         const coursFormatted = courseEntries.map(e =>
           e.classe !== 'TOUTES' ? `${e.matiere} (${e.classe})` : e.matiere
         );
 
-        // Dés-titulariser ancien titulaire si conflit
+        // Dé-titulariser proprement tout ancien titulaire conflictuel
         if (!isPrimMat) {
           for (const clsNom of titularClasses) {
             const existing = titularMap[clsNom.trim().toLowerCase()];
@@ -373,11 +630,12 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
 
       const updated = await LocalDatabaseService.updateStaff(teacher.id, updates);
       const merged = { ...teacher, ...updates, ...(updated || {}) };
-      setSuccessMsg('Affectations enregistrées avec succès dans la base de données.');
+
+      setSuccessMsg('Affectations enregistrées avec succès.');
       if (onSaveSuccess) onSaveSuccess(merged as MembrePersonnel);
-      setTimeout(() => onClose(), 700);
+      setTimeout(() => onClose(), 650);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Erreur lors de l\'enregistrement.');
+      setErrorMsg(err?.message || "Erreur lors de l'enregistrement.");
     } finally {
       setSaving(false);
     }
@@ -385,79 +643,92 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
 
   if (!isOpen) return null;
 
-  const isAdminRole = mode === 'ADMIN';
+  const isAdmin = mode === 'ADMIN';
+  const isPrimMat = cycle === 'MATERNELLE' || cycle === 'PRIMAIRE';
 
   return createPortal(
-    <div className="fixed inset-0 w-full h-full z-[9999] bg-slate-950/65 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-fade-in select-none">
+    <div className="fixed inset-0 w-full h-full z-[9999] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-fade-in select-none">
       <div
-        className="w-full max-w-3xl max-h-[94vh] flex flex-col rounded-3xl border shadow-2xl overflow-hidden"
+        className="w-full max-w-4xl max-h-[92vh] flex flex-col rounded-3xl border shadow-2xl overflow-hidden animate-scale-in"
         style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
       >
-        {/* ── EN-TÊTE ── */}
+        {/* ── HEADER MODERNE ── */}
         <div className="flex items-center justify-between p-5 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/25 flex items-center justify-center shrink-0 shadow-xs">
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                Contrat & Affectations Officielles
-                <Sparkles className="inline ml-2 w-4 h-4 text-amber-500" />
-              </h2>
-              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                {teacher.prenom} {teacher.nom} · {teacher.numeroMatriculeEPST || teacher.matricule || 'Matricule non attribué'}
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                  Portail Intelligent d'Affectations & Charges EPST
+                </h2>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/25">
+                  OFFICIEL RDC
+                </span>
+              </div>
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                {teacher.prenom} {teacher.nom} · Matricule: <span className="font-mono text-indigo-600 dark:text-indigo-400">{teacher.numeroMatriculeEPST || teacher.matricule || 'Non attribué'}</span>
               </p>
             </div>
           </div>
-          <button type="button" onClick={onClose}
-            className="p-2 rounded-xl hover:bg-slate-500/10 transition-colors cursor-pointer"
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2.5 rounded-xl hover:bg-slate-500/10 transition-colors cursor-pointer"
             style={{ color: 'var(--text-muted)' }}
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* ── FORMULAIRE ── */}
+        {/* ── FORMULAIRE SCROLLABLE ── */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
 
-          {/* ALERTES */}
+          {/* ALERTES ERREUR / SUCCÈS */}
           {errorMsg && (
-            <div className="p-4 rounded-xl bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 font-bold flex items-start gap-2 animate-fade-in">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{errorMsg}</span>
+            <div className="p-4 rounded-2xl bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 font-bold flex items-start gap-2.5 animate-fade-in shadow-xs">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+              <span className="leading-relaxed">{errorMsg}</span>
             </div>
           )}
           {successMsg && (
-            <div className="p-4 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-bold flex items-center gap-2 animate-fade-in">
+            <div className="p-4 rounded-2xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-bold flex items-center gap-2.5 animate-fade-in shadow-xs">
               <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
               <span>{successMsg}</span>
             </div>
           )}
 
-          {/* ── SÉLECTEUR DE MODE ── */}
+          {/* ── SÉLECTEUR DE CORPS (ENSEIGNANT vs ADMIN) ── */}
           <div>
-            <label className="block font-black uppercase tracking-wider text-[10.5px] mb-2" style={{ color: 'var(--text-secondary)' }}>
-              Type de Poste / Régime de Travail
+            <label className="block font-black uppercase tracking-wider text-[10.5px] mb-2.5" style={{ color: 'var(--text-secondary)' }}>
+              1. Corps Institutionnel & Statut
             </label>
-            <div className="grid grid-cols-2 gap-3">
-              {([
-                { id: 'ENSEIGNANT', label: 'Enseignant / Pédagogique', icon: GraduationCap, desc: 'Maternelle, Primaire, Secondaire' },
-                { id: 'ADMIN', label: 'Personnel Administratif', icon: Briefcase, desc: 'Préfet, Comptable, Secrétaire, DD...' },
-              ] as const).map(m => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[
+                { id: 'ENSEIGNANT', label: 'Corps Enseignant & Pédagogique', desc: 'Maternelle, Primaire, Secondaire (CTEB & Humanités)', icon: GraduationCap },
+                { id: 'ADMIN', label: 'Personnel Administratif & Direction', desc: 'Préfet, Directeur des Études, Surveillant, Comptable, Secrétaire', icon: Briefcase },
+              ].map(m => {
                 const active = mode === m.id;
                 const Icon = m.icon;
                 return (
-                  <button key={m.id} type="button"
-                    onClick={() => setMode(m.id)}
-                    className={`p-4 rounded-2xl border text-left font-bold transition-all cursor-pointer flex items-start gap-3 ${
-                      active ? 'bg-indigo-600 text-white shadow-md border-indigo-500' : 'hover:bg-slate-500/10 text-slate-500'
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMode(m.id as ModalMode)}
+                    className={`p-4 rounded-2xl border text-left font-bold transition-all cursor-pointer flex items-start gap-3.5 ${
+                      active
+                        ? 'bg-indigo-600 text-white shadow-md border-indigo-500 scale-[1.01]'
+                        : 'hover:bg-slate-500/10 text-slate-500'
                     }`}
                     style={!active ? { background: 'var(--bg-sunken)', borderColor: 'var(--border)' } : undefined}
                   >
-                    <Icon className={`w-5 h-5 mt-0.5 shrink-0 ${active ? 'text-white' : 'text-indigo-500'}`} />
+                    <div className={`p-2.5 rounded-xl ${active ? 'bg-white/20 text-white' : 'bg-indigo-500/10 text-indigo-500'}`}>
+                      <Icon className="w-5 h-5" />
+                    </div>
                     <div>
                       <p className={`text-xs font-black ${active ? 'text-white' : ''}`}>{m.label}</p>
-                      <p className={`text-[10.5px] font-medium mt-0.5 ${active ? 'text-white/70' : 'text-slate-400'}`}>{m.desc}</p>
+                      <p className={`text-[10.5px] font-medium mt-0.5 ${active ? 'text-white/80' : 'text-slate-400'}`}>{m.desc}</p>
                     </div>
                   </button>
                 );
@@ -466,46 +737,40 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
           </div>
 
           {/* ═══════════════════════════════════════════════════════════
-              MODE ADMIN
+              A. VUE ADMIN
           ═══════════════════════════════════════════════════════════ */}
-          {isAdminRole && (
+          {isAdmin && (
             <div className="space-y-5 animate-fade-in">
-              {/* Info */}
               <div className="p-4 rounded-2xl bg-violet-500/10 border border-violet-500/25 flex items-start gap-3">
-                <div className="p-2 rounded-xl bg-violet-500/20 shrink-0">
-                  <Briefcase className="w-4 h-4 text-violet-500" />
-                </div>
+                <ShieldCheck className="w-5 h-5 text-violet-500 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-black text-violet-600 dark:text-violet-400 text-xs">Poste Administratif — Règles EPST</p>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed font-medium">
-                    Le personnel admin n'enseigne pas de matières scolaires. Définissez son rôle officiel et ses responsabilités institutionnelles.
+                  <p className="font-black text-violet-600 dark:text-violet-400 text-xs">Régime Administratif EPST</p>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 font-medium leading-relaxed">
+                    Le personnel administratif assume des fonctions régaliennes de gestion, de direction ou d'intendance générale sans attribution directe de cours scolaires.
                   </p>
                 </div>
               </div>
 
-              {/* Rôle admin */}
-              <div className="p-5 rounded-2xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+              {/* Rôle */}
+              <div className="p-5 rounded-2xl border space-y-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                 <h3 className="text-[10.5px] font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4" /> Rôle Officiel & Autorité
+                  <ShieldCheck className="w-4 h-4" /> Attribution du Rôle de Direction
                 </h3>
-                <div className="grid grid-cols-1 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {ROLES_ADMIN.map(r => {
                     const active = adminRole === r.value;
                     const Icon = r.icon as React.ElementType;
                     return (
-                      <button key={r.value} type="button"
+                      <button
+                        key={r.value}
+                        type="button"
                         onClick={() => setAdminRole(r.value)}
                         className={`flex items-center gap-3 p-3.5 rounded-xl border text-xs font-bold transition-all cursor-pointer text-left ${
-                          active
-                            ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
-                            : 'hover:bg-slate-500/10 border-transparent'
+                          active ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs' : 'hover:bg-slate-500/10'
                         }`}
                         style={!active ? { borderColor: 'var(--border)', background: 'var(--bg-surface)' } : undefined}
                       >
-                        {active
-                          ? <CheckCircle2 className="w-4 h-4 text-white shrink-0" />
-                          : <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600 shrink-0" />
-                        }
+                        <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-white' : 'text-indigo-500'}`} />
                         <span className={active ? 'text-white font-black' : ''}>{r.label}</span>
                       </button>
                     );
@@ -514,33 +779,31 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
               </div>
 
               {/* Département & Responsabilités */}
-              <div className="p-5 rounded-2xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                <h3 className="text-[10.5px] font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                  <Users className="w-4 h-4" /> Département & Responsabilités
-                </h3>
-                <div>
-                  <label className="block font-black text-[10px] uppercase text-slate-400 mb-1.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-5 rounded-2xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <label className="block font-black text-[10.5px] uppercase text-slate-400">
                     Département / Service Rattaché
                   </label>
                   <input
                     type="text"
                     value={adminDepartement}
                     onChange={e => setAdminDepartement(e.target.value)}
-                    placeholder="ex: Direction Générale, Comptabilité & Finances, Secrétariat..."
+                    placeholder="Ex: Direction Générale, Intendance, Secrétariat..."
                     className="w-full px-4 py-2.5 rounded-xl text-xs font-bold border outline-none focus:ring-2 focus:ring-indigo-500/30"
                     style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
-                <div>
-                  <label className="block font-black text-[10px] uppercase text-slate-400 mb-1.5">
-                    Responsabilités & Missions
+
+                <div className="p-5 rounded-2xl border space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <label className="block font-black text-[10.5px] uppercase text-slate-400">
+                    Missions & Responsabilités Principales
                   </label>
                   <textarea
                     value={adminResponsabilites}
                     onChange={e => setAdminResponsabilites(e.target.value)}
-                    placeholder="Décrire les responsabilités principales du poste (gestion des finances, discipline, administration des inscriptions, etc.)..."
-                    rows={4}
-                    className="w-full px-4 py-2.5 rounded-xl text-xs font-semibold border outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none leading-relaxed"
+                    rows={3}
+                    placeholder="Supervision pédagogique, tenue des registres, gestion financière..."
+                    className="w-full px-4 py-2 rounded-xl text-xs font-medium border outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none"
                     style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
@@ -549,118 +812,130 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
           )}
 
           {/* ═══════════════════════════════════════════════════════════
-              MODE ENSEIGNANT
+              B. VUE ENSEIGNANT (DYNAMIQUE PAR CYCLE)
           ═══════════════════════════════════════════════════════════ */}
-          {!isAdminRole && (
+          {!isAdmin && (
             <div className="space-y-6 animate-fade-in">
 
-              {/* 1. Cycle pédagogique */}
-              <div className="space-y-2">
-                <label className="block font-black uppercase tracking-wider text-[10.5px]" style={{ color: 'var(--text-secondary)' }}>
-                  Cycle Pédagogique Principal (Régime EPST RDC)
+              {/* SÉLECTEUR DE CYCLE DYNAMIQUE */}
+              <div>
+                <label className="block font-black uppercase tracking-wider text-[10.5px] mb-2.5" style={{ color: 'var(--text-secondary)' }}>
+                  2. Cycle Pédagogique Principal (Régime EPST RDC)
                 </label>
                 <div className="grid grid-cols-3 gap-3">
-                  {([
-                    { id: 'MATERNELLE', label: 'Maternelle', sub: 'Éveil (1ère→3ème)', icon: Baby },
-                    { id: 'PRIMAIRE',   label: 'Primaire',   sub: 'Éd. de Base (1→6)', icon: School },
-                    { id: 'SECONDAIRE', label: 'Secondaire', sub: '7è CTEB → 4è Hum.', icon: GraduationCap },
-                  ] as const).map(c => {
+                  {[
+                    { id: 'MATERNELLE', label: 'Maternelle', sub: 'Éveil Préscolaire (1ère→3ème)', icon: Baby, color: 'text-amber-500' },
+                    { id: 'PRIMAIRE', label: 'Primaire', sub: 'Éducation de Base (1ère→6ème)', icon: School, color: 'text-emerald-500' },
+                    { id: 'SECONDAIRE', label: 'Secondaire', sub: '7è CTEB ➔ 4è Humanités', icon: GraduationCap, color: 'text-indigo-500' },
+                  ].map(c => {
                     const active = cycle === c.id;
                     const Icon = c.icon;
                     return (
-                      <button key={c.id} type="button"
+                      <button
+                        key={c.id}
+                        type="button"
                         onClick={() => {
-                          setCycle(c.id);
-                          if (c.id !== 'SECONDAIRE') setVolumeHoraire(25);
-                          else setVolumeHoraire(18);
+                          setCycle(c.id as any);
+                          if (c.id === 'SECONDAIRE') {
+                            setVolumeHoraire(18);
+                          } else {
+                            setVolumeHoraire(25);
+                          }
+                          setSelClasse('TOUTES');
                         }}
                         className={`p-4 rounded-2xl border text-center font-bold flex flex-col items-center gap-2 transition-all cursor-pointer ${
-                          active ? 'bg-indigo-600 text-white shadow-md border-indigo-500 scale-[1.02]'
-                                 : 'hover:bg-slate-500/10 text-slate-500'
+                          active
+                            ? 'bg-indigo-600 text-white shadow-md border-indigo-500 scale-[1.02]'
+                            : 'hover:bg-slate-500/10 text-slate-500'
                         }`}
                         style={!active ? { background: 'var(--bg-sunken)', borderColor: 'var(--border)' } : undefined}
                       >
-                        <Icon className={`w-5 h-5 ${active ? 'text-white' : 'text-indigo-500'}`} />
+                        <Icon className={`w-5 h-5 ${active ? 'text-white' : c.color}`} />
                         <span className="text-xs font-black">{c.label}</span>
-                        <span className={`text-[10px] font-medium ${active ? 'text-white/70' : 'text-slate-400'}`}>{c.sub}</span>
+                        <span className={`text-[10px] font-medium ${active ? 'text-white/80' : 'text-slate-400'}`}>{c.sub}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* ── CAS MATERNELLE / PRIMAIRE ─────────────────────────── */}
-              {(cycle === 'MATERNELLE' || cycle === 'PRIMAIRE') && (
+              {/* ── 1. CAS MATERNELLE / PRIMAIRE (TITULAIRE UNIQUE DE SALLE) ── */}
+              {isPrimMat && (
                 <div className="p-5 rounded-2xl border space-y-4 bg-gradient-to-br from-emerald-500/10 to-transparent border-emerald-500/25 animate-fade-in">
                   <div className="flex items-start gap-3">
-                    <div className="p-2.5 rounded-xl bg-emerald-500/20 shrink-0">
-                      <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <div className="p-2.5 rounded-xl bg-emerald-500/20 shrink-0 text-emerald-600 dark:text-emerald-400">
+                      <UserCheck className="w-5 h-5" />
                     </div>
                     <div>
                       <h3 className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase">
                         Titulaire Exclusif de Salle — {cycle === 'MATERNELLE' ? 'Maternelle' : 'Primaire'}
                       </h3>
                       <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed font-medium">
-                        En {cycle === 'MATERNELLE' ? 'Maternelle' : 'Primaire'}, l'enseignant prend en charge{' '}
-                        <strong>toutes les matières</strong> de sa salle et en est le <strong>seul titulaire</strong> (régime EPST).
+                        En régime {cycle === 'MATERNELLE' ? 'Maternelle' : 'Primaire'}, l'enseignant prend en charge{' '}
+                        <strong>l'intégralité des matières</strong> de sa salle de classe et en assure la titularisation exclusive.
                       </p>
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <label className="block font-black text-[10px] uppercase text-slate-400">
-                      Salle de Classe Titularisée :
+                      Sélectionner la Salle de Classe Attribuée :
                     </label>
                     <CustomSelect
                       options={salleUniqueOptions}
                       value={salleUnique}
                       onChange={setSalleUnique}
-                      placeholder={`Sélectionner une classe de ${cycle === 'MATERNELLE' ? 'Maternelle' : 'Primaire'}...`}
+                      placeholder={`Choisir une salle de ${cycle === 'MATERNELLE' ? 'Maternelle' : 'Primaire'}...`}
                       searchable
                       creatable
                     />
                   </div>
 
                   {salleUnique && (
-                    <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold text-[11px] flex items-center justify-between">
-                      <span>✓ Titulaire de <strong>{salleUnique}</strong> · {cycle === 'MATERNELLE' ? '25h' : '25h'} / semaine</span>
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 font-bold text-[11px] flex items-center justify-between">
+                      <span>✓ Salle attribuée : <strong>{salleUnique}</strong> · Régime titulaire unique complet</span>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                     </div>
                   )}
 
-                  {/* Volume horaire */}
-                  <div>
-                    <label className="block font-black text-[10px] uppercase text-slate-400 mb-1.5">Volume Horaire / Semaine</label>
-                    <NumberInput value={volumeHoraire} onChange={setVolumeHoraire} min={1} max={40} />
+                  {/* Matières pédagogiques incluses d'office */}
+                  <div className="pt-2">
+                    <p className="font-black uppercase text-[10px] text-slate-400 mb-2">
+                      Matières EPST intégrées d'office au programme de cette salle :
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {(PROGRAMME_EPST_PAR_NIVEAU[cycle] || []).map(m => (
+                        <span key={m.nom} className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 text-[11px] font-bold flex items-center gap-1.5">
+                          <Check className="w-3 h-3 text-emerald-500" /> {m.nom}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* ── CAS SECONDAIRE ───────────────────────────────────── */}
-              {cycle === 'SECONDAIRE' && (
-                <div className="space-y-5 animate-fade-in">
+              {/* ── 2. CAS SECONDAIRE (INTELLIGENT PAR NIVEAU & MATIÈRE) ── */}
+              {!isPrimMat && (
+                <div className="space-y-6 animate-fade-in">
 
-                  {/* A. Titularisation */}
+                  {/* A. Titularisation de promotion */}
                   <div className="p-5 rounded-2xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
                       <h3 className="text-[10.5px] font-black uppercase tracking-wider text-amber-500 flex items-center gap-2">
-                        <Award className="w-4 h-4" /> Titularisation de Classe
+                        <Award className="w-4 h-4" /> 3. Titularisation de Classe (Optionnel au Secondaire)
                       </h3>
-                      <div className="flex items-center gap-2">
-                        <Info className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="text-[10px] text-slate-400 font-semibold">Un seul titulaire par classe</span>
-                      </div>
+                      <span className="text-[10px] text-slate-400 font-semibold">1 titulaire par classe</span>
                     </div>
 
                     <div className="space-y-2">
                       <label className="block font-black text-[10px] uppercase text-slate-400">
-                        Ajouter une classe à titulariser :
+                        Ajouter une classe dont l'enseignant est le titulaire :
                       </label>
                       <CustomSelect
                         options={titularOptions}
                         value={addTitularValue}
                         onChange={v => { if (v) addTitularClass(v); setAddTitularValue(''); }}
-                        placeholder="Sélectionner 7è CTEB, 1ère Hum., etc."
+                        placeholder="Choisir 7è CTEB, 1ère Scientifique, 4è Commerciale..."
                         searchable
                       />
                     </div>
@@ -674,12 +949,15 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
                               <Award className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                               <span>{cls}</span>
                               {conflict && (
-                                <span className="text-[10px] bg-rose-500/15 text-rose-500 px-1.5 py-0.5 rounded-md font-bold flex items-center gap-1">
-                                  <AlertTriangle className="w-3 h-3" /> Ex-{conflict.name}
+                                <span className="text-[9.5px] bg-rose-500/20 text-rose-500 px-1.5 py-0.5 rounded-md font-bold flex items-center gap-1">
+                                  <AlertTriangle className="w-3 h-3" /> Remplace {conflict.name}
                                 </span>
                               )}
-                              <button type="button" onClick={() => removeTitularClass(cls)}
-                                className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-rose-500 active:scale-90 transition-all cursor-pointer ml-1">
+                              <button
+                                type="button"
+                                onClick={() => removeTitularClass(cls)}
+                                className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-rose-500 active:scale-90 transition-all cursor-pointer ml-1"
+                              >
                                 <X className="w-3.5 h-3.5" />
                               </button>
                             </div>
@@ -688,165 +966,272 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
                       </div>
                     ) : (
                       <p className="text-[11px] text-slate-400 italic font-medium">
-                        Aucune titularisation — l'enseignant intervient sans responsabilité de classe titulaire.
+                        Aucune titularisation — Enseignant intervenant sur ses matières.
                       </p>
                     )}
                   </div>
 
-                  {/* B. Affectation Matières × Classe */}
-                  <div className="p-5 rounded-2xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
-                      <h3 className="text-[10.5px] font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                        <BookOpen className="w-4 h-4" /> Affectation Cours par Classe
-                      </h3>
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
-                        {courseEntries.length} Affectation(s)
-                      </span>
-                    </div>
-
-                    {/* Légende règle */}
-                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-2">
-                      <AlertCircle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
-                      <p className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold leading-relaxed">
-                        <strong>Règle EPST :</strong> Une matière ne peut être enseignée que par <strong>un seul professeur</strong> par classe. Les conflits seront signalés en rouge.
-                      </p>
-                    </div>
-
-                    {/* Sélecteur séquentiel : Classe → Matière */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* B. Moteur d'affectation dynamique Matières × Classes */}
+                  <div className="p-5 rounded-2xl border space-y-5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b pb-3" style={{ borderColor: 'var(--border)' }}>
                       <div>
-                        <label className="block font-black text-[10px] uppercase text-slate-400 mb-1.5">
-                          Étape 1 — Classe Cible
-                        </label>
-                        <CustomSelect
-                          options={classeForSubjectOptions}
-                          value={selClasse}
-                          onChange={setSelClasse}
-                          placeholder="Sélectionner la classe..."
-                        />
+                        <h3 className="text-[10.5px] font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
+                          <Zap className="w-4 h-4 text-amber-500" /> 4. Affectation Intelligente des Cours
+                        </h3>
+                        <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                          Sélectionnez la classe cible pour charger automatiquement les matières officielles du programme EPST RDC.
+                        </p>
                       </div>
-                      <div>
-                        <label className="block font-black text-[10px] uppercase text-slate-400 mb-1.5">
-                          Étape 2 — Matière à Affecter
-                        </label>
-                        <CustomSelect
-                          options={matiereOptions}
-                          value={selMatiere}
-                          onChange={v => { if (v) addCourseEntry(v); }}
-                          placeholder="Sélectionner la matière..."
-                          searchable
-                        />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                          {courseEntries.length} Cours Affecté(s)
+                        </span>
                       </div>
                     </div>
 
-                    {/* Saisie matière personnalisée */}
-                    <div className="flex items-center gap-2 pt-1">
+                    {/* Sélecteur de classe dynamique */}
+                    <div>
+                      <label className="block font-black text-[10px] uppercase text-slate-400 mb-1.5">
+                        Étape 1 : Classe ou Promotion Cible
+                      </label>
+                      <CustomSelect
+                        options={classeSelectOptions}
+                        value={selClasse}
+                        onChange={setSelClasse}
+                        placeholder="Sélectionner la classe..."
+                        searchable
+                      />
+                    </div>
+
+                    {/* Filtres & Recherche de Matières */}
+                    <div className="space-y-3 p-4 rounded-xl border" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Filter className="w-3.5 h-3.5 text-slate-400" />
+                          {[
+                            { id: 'ALL', label: 'Toutes' },
+                            { id: 'SCIENCES', label: 'Sciences & Math' },
+                            { id: 'LANGUES', label: 'Langues' },
+                            { id: 'HUMAINES', label: 'Sc. Humaines' },
+                            { id: 'TECHNIQUE', label: 'Technique / Gestion' },
+                          ].map(f => (
+                            <button
+                              key={f.id}
+                              type="button"
+                              onClick={() => setSelCategoryFilter(f.id)}
+                              className={`px-2.5 py-1 rounded-lg text-[10.5px] font-black transition-all cursor-pointer ${
+                                selCategoryFilter === f.id
+                                  ? 'bg-indigo-600 text-white shadow-xs'
+                                  : 'text-slate-400 hover:bg-slate-500/10'
+                              }`}
+                            >
+                              {f.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={addAllAvailableSubjectsForCurrentClass}
+                          className="px-3 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/25 text-[10.5px] font-black hover:bg-indigo-500/20 transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Affecter toutes les disponibles
+                        </button>
+                      </div>
+
+                      {/* Barre de recherche matière */}
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                        <input
+                          type="text"
+                          value={searchSubjectTerm}
+                          onChange={e => setSearchSubjectTerm(e.target.value)}
+                          placeholder="Rechercher une matière du programme (ex: Algèbre, Chimie, Sténographie)..."
+                          className="w-full pl-8 pr-4 py-2 rounded-lg text-xs font-bold border outline-none focus:ring-2 focus:ring-indigo-500/30"
+                          style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        />
+                      </div>
+
+                      {/* Grille des Matières Dynamiques avec état Disponible / Conflit / Affecté */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-56 overflow-y-auto pr-1">
+                        {suggestedCurriculumSubjects.map(sub => {
+                          const conflict = getSubjectConflict(sub.nom, selClasse);
+                          const isAssigned = isSubjectAssignedHere(sub.nom, selClasse);
+
+                          return (
+                            <div
+                              key={sub.nom}
+                              onClick={() => toggleSubjectForSelectedClass(sub.nom)}
+                              className={`p-3 rounded-xl border flex items-center justify-between gap-2 transition-all cursor-pointer text-xs ${
+                                isAssigned
+                                  ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
+                                  : conflict
+                                  ? 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400 opacity-80'
+                                  : 'hover:border-indigo-500/50 hover:bg-indigo-500/5'
+                              }`}
+                              style={!isAssigned && !conflict ? { background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' } : undefined}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                {isAssigned ? (
+                                  <CheckSquare className="w-4 h-4 text-white shrink-0" />
+                                ) : conflict ? (
+                                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                                ) : (
+                                  <Square className="w-4 h-4 text-slate-400 shrink-0" />
+                                )}
+                                <div className="truncate">
+                                  <p className="font-black truncate">{sub.nom}</p>
+                                  <p className={`text-[9.5px] truncate ${isAssigned ? 'text-white/80' : 'text-slate-400'}`}>
+                                    {conflict
+                                      ? `Occupé par ${conflict}`
+                                      : sub.isMajeure
+                                      ? 'Branche Majeure de l’Option'
+                                      : 'Matière Officielle EPST'}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {isAssigned ? (
+                                <span className="text-[10px] font-black bg-white/20 text-white px-2 py-0.5 rounded-md shrink-0">
+                                  Affecté ✓
+                                </span>
+                              ) : conflict ? (
+                                <span className="text-[9.5px] font-bold bg-rose-500/20 text-rose-500 px-1.5 py-0.5 rounded-md shrink-0">
+                                  Conflit
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md shrink-0">
+                                  + Ajouter
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Saisie sur-mesure si besoin */}
+                    <div className="flex items-center gap-2">
                       <input
                         type="text"
                         value={customCourse}
                         onChange={e => setCustomCourse(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomEntry(); } }}
-                        placeholder="Ou saisir une matière sur-mesure (ex: Dessin Industriel)..."
-                        className="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold border outline-none focus:ring-2 focus:ring-indigo-500/30"
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSubject(); } }}
+                        placeholder="Ou saisir un cours spécifique hors programme (ex: Laboratoire de Physique Appliquée)..."
+                        className="flex-1 px-3.5 py-2.5 rounded-xl text-xs font-bold border outline-none focus:ring-2 focus:ring-indigo-500/30"
                         style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                       />
-                      <button type="button" onClick={addCustomEntry}
-                        className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={addCustomSubject}
+                        className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
+                      >
                         <Plus className="w-4 h-4" /> Ajouter
                       </button>
                     </div>
 
-                    {/* Tableau d'affectations */}
+                    {/* Tableau récapitulatif des cours affectés */}
                     {courseEntries.length > 0 ? (
-                      <div className="space-y-2 pt-1">
+                      <div className="space-y-2 pt-2">
                         <label className="block font-black text-[10px] uppercase text-slate-400">
-                          Affectations Confirmées ({courseEntries.length}) :
+                          Cours Confirmés pour cet Enseignant ({courseEntries.length}) :
                         </label>
-                        <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+                        <div className="rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
                           <table className="w-full text-xs">
                             <thead>
                               <tr style={{ background: 'var(--bg-sunken)' }}>
-                                <th className="text-left px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Matière / Cours</th>
-                                <th className="text-left px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Classe(s)</th>
+                                <th className="text-left px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Matière / Discipline</th>
+                                <th className="text-left px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Classe Attribuée</th>
                                 <th className="w-10 px-2"></th>
                               </tr>
                             </thead>
                             <tbody>
-                              {courseEntries.map((entry, idx) => {
-                                const conflictInOthers = entry.classe !== 'TOUTES'
-                                  ? subjectClassMap[entry.classe.toLowerCase()]?.[entry.matiere.toLowerCase()]
-                                  : null;
-                                return (
-                                  <tr key={idx} className="border-t" style={{ borderColor: 'var(--border)' }}>
-                                    <td className="px-4 py-2.5 font-bold" style={{ color: 'var(--text-primary)' }}>
-                                      <span className="flex items-center gap-2">
-                                        <BookOpen className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                                        {entry.matiere}
+                              {courseEntries.map((entry, idx) => (
+                                <tr key={idx} className="border-t" style={{ borderColor: 'var(--border)' }}>
+                                  <td className="px-4 py-2.5 font-bold" style={{ color: 'var(--text-primary)' }}>
+                                    <span className="flex items-center gap-2">
+                                      <BookOpen className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                      {entry.matiere}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2.5">
+                                    {entry.classe === 'TOUTES' ? (
+                                      <span className="px-2 py-0.5 rounded-md bg-slate-500/15 text-slate-500 font-bold text-[10px]">
+                                        Toutes les classes
                                       </span>
-                                    </td>
-                                    <td className="px-4 py-2.5">
-                                      {entry.classe === 'TOUTES' ? (
-                                        <span className="px-2 py-0.5 rounded-md bg-slate-500/15 text-slate-500 font-bold text-[10px]">Toutes les classes</span>
-                                      ) : (
-                                        <span className="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-black text-[10px] border border-indigo-500/20">
-                                          {entry.classe}
-                                        </span>
-                                      )}
-                                      {conflictInOthers && (
-                                        <span className="ml-2 text-[10px] text-rose-500 font-bold flex items-center gap-1 inline-flex">
-                                          <AlertTriangle className="w-3 h-3" /> {conflictInOthers}
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="px-2 py-2.5">
-                                      <button type="button" onClick={() => removeCourseEntry(idx)}
-                                        title="Retirer cette affectation"
-                                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-rose-500 transition-all cursor-pointer">
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-black text-[10px] border border-indigo-500/20">
+                                        {entry.classe}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => removeCourseEntry(idx)}
+                                      title="Retirer cette affectation"
+                                      className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-rose-500 transition-all cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
                             </tbody>
                           </table>
                         </div>
                       </div>
                     ) : (
                       <div className="p-4 rounded-xl border border-dashed text-center text-slate-400 font-semibold" style={{ borderColor: 'var(--border)' }}>
-                        Aucune affectation encore. Utilisez le sélecteur Classe → Matière ci-dessus.
+                        Aucune affectation enregistrée. Sélectionnez une classe et cochez les matières souhaitées ci-dessus.
                       </div>
                     )}
                   </div>
-
-                  {/* Volume Horaire */}
-                  <div className="p-5 rounded-2xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <label className="block font-black text-[10px] uppercase tracking-wider text-slate-400 mb-2">
-                      <Clock className="inline w-3.5 h-3.5 mr-1" />
-                      Volume Horaire Hebdomadaire (Heures / Semaine)
-                    </label>
-                    <NumberInput value={volumeHoraire} onChange={setVolumeHoraire} min={1} max={40} />
-                    <p className="text-[11px] text-slate-400 mt-2 font-medium">
-                      Norme EPST : Secondaire ≈ 18h/semaine pour un prof à temps plein.
-                    </p>
-                  </div>
-
                 </div>
               )}
+
+              {/* Volume Horaire & Jauge Hebdomadaire */}
+              <div className="p-5 rounded-2xl border space-y-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                <div className="flex items-center justify-between">
+                  <label className="block font-black text-[10.5px] uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-emerald-500" />
+                    Volume Horaire Hebdomadaire (Heures / Semaine)
+                  </label>
+                  <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                    {volumeHoraire} Heures / sem. ({volumeHoraire * 4}h / mois)
+                  </span>
+                </div>
+                <NumberInput
+                  value={volumeHoraire}
+                  onChange={setVolumeHoraire}
+                  min={1}
+                  max={45}
+                />
+                <p className="text-[11px] text-slate-400 font-medium">
+                  Norme EPST : Secondaire ≈ 18h/semaine pour un temps plein | Maternelle/Primaire ≈ 25h/semaine.
+                </p>
+              </div>
+
             </div>
           )}
 
-          {/* ── BOUTONS D'ACTION ── */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
-            <button type="button" onClick={onClose}
+          {/* ── FOOTER D'ACTIONS ── */}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t shrink-0" style={{ borderColor: 'var(--border)' }}>
+            <button
+              type="button"
+              onClick={onClose}
               className="px-5 py-2.5 rounded-xl border font-bold text-xs hover:bg-slate-500/10 transition-colors cursor-pointer"
-              style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+              style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+            >
               Annuler
             </button>
-            <button type="submit" disabled={saving}
-              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-md shadow-indigo-500/25 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50">
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md shadow-indigo-500/25 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+            >
               <CheckCircle2 className="w-4 h-4 text-white" />
-              <span>{saving ? 'Enregistrement...' : 'Enregistrer les Affectations'}</span>
+              <span>{saving ? 'Enregistrement en cours...' : 'Enregistrer les Affectations'}</span>
             </button>
           </div>
         </form>
