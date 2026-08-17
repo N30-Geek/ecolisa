@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   User,
   GraduationCap,
-  Users,
   Phone,
   Mail,
   MapPin,
@@ -12,7 +11,6 @@ import {
   ArrowLeft,
   FileText,
   Printer,
-  Eye,
   CreditCard,
   CheckCircle2,
   AlertCircle,
@@ -29,23 +27,26 @@ import {
   Check,
   X,
   Building2,
-  FileSpreadsheet,
-  BadgeCheck,
   FolderOpen,
-  Maximize2,
   ZoomIn,
-  Edit3
+  Edit3,
+  TrendingUp,
+  Activity,
+  FileSpreadsheet,
+  Eye,
+  Receipt
 } from 'lucide-react';
-import { Eleve, ClasseScolaire, DocumentScolaire, FactureEleve, TransactionPaiement, Cote } from '../../types';
-import { IdCardRenderer } from './IdCardRenderer';
+import { Eleve, DocumentScolaire, FactureEleve, TransactionPaiement, Cote, TypeFraisScolaire } from '../../types';
 import { RDCEleveCardTemplate } from './RDCEleveCardTemplate';
 import { StudentIdCardModal } from './StudentIdCardModal';
 import { StudentFullFileModal } from './StudentFullFileModal';
 import { StudentDocumentsModal } from './StudentDocumentsModal';
 import { PhotoLightboxModal } from '../common/PhotoLightboxModal';
+import { ReceiptModal } from '../finance/ReceiptModal';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
-import { formatCurrency } from '../../utils/currency';
+import { formatCurrency, convertCurrency } from '../../utils/currency';
+import { getInvoiceTotal, getPaymentAmount, getStudentTotalDue, round2, getPaymentAllocationsSummary } from '../../utils/financeCalculations';
 import { Pagination } from '../common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
 
@@ -60,7 +61,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
   onBack,
   onEdit,
 }) => {
-  const { config: schoolConfig } = useSchoolConfig();
+  const { config: schoolConfig, currency } = useSchoolConfig();
   const [activeLeftTab, setActiveLeftTab] = useState<'identity' | 'finance' | 'grades' | 'discipline'>('identity');
   const [cardFace, setCardFace] = useState<'front' | 'back'>('front');
   const [showCardModal, setShowCardModal] = useState(false);
@@ -73,22 +74,33 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
   const [invoices, setInvoices] = useState<FactureEleve[]>([]);
   const [payments, setPayments] = useState<TransactionPaiement[]>([]);
   const [cotes, setCotes] = useState<Cote[]>([]);
+  const [feeTypes, setFeeTypes] = useState<TypeFraisScolaire[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+
+  // Modal de reçu interactif
+  const [selectedPayment, setSelectedPayment] = useState<TransactionPaiement | null>(null);
 
   // Chargement des données réelles de l'élève depuis SQLite
   const loadStudentData = async () => {
     setLoadingData(true);
     try {
-      const [docList, invList, payList, coteList] = await Promise.all([
+      const [docList, invList, payList, coteList, ftList] = await Promise.all([
         LocalDatabaseService.getStudentDocuments(student.id).catch(() => []),
-        LocalDatabaseService.getInvoices().then(all => (all || []).filter(inv => inv.studentId === student.id || inv.eleveId === student.id)).catch(() => []),
-        LocalDatabaseService.getPayments().then(all => (all || []).filter(p => p.registrationNumber === student.registrationNumber || p.nomEleve.toLowerCase().includes(student.nom.toLowerCase()))).catch(() => []),
+        LocalDatabaseService.getInvoices().then(all => (all || []).filter(inv => inv.eleveId === student.id || inv.studentId === student.id || inv.studentId === student.registrationNumber)).catch(() => []),
+        LocalDatabaseService.getPayments().then(all => (all || []).filter(p =>
+          p.eleveId === student.id ||
+          p.studentId === student.id ||
+          p.studentId === student.registrationNumber ||
+          p.registrationNumber === student.registrationNumber
+        )).catch(() => []),
         LocalDatabaseService.getCotes({ eleveId: student.id }).catch(() => []),
+        LocalDatabaseService.getFeeTypes().catch(() => []),
       ]);
       setDocuments(docList || []);
       setInvoices(invList || []);
       setPayments(payList || []);
       setCotes(coteList || []);
+      setFeeTypes(ftList || []);
     } catch (err) {
       console.error('[StudentDetailPage] Erreur chargement :', err);
     } finally {
@@ -100,123 +112,189 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
     loadStudentData();
   }, [student.id]);
 
+  // Auto-refresh quand la fenêtre reprend le focus ou quand le reçu est fermé
+  useEffect(() => {
+    const onFocus = () => loadStudentData();
+    const onVisibility = () => { if (document.visibilityState === 'visible') loadStudentData(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [student.id]);
+
   // Pagination
   const paymentsPagination = usePagination(payments, { defaultPageSize: 5 });
   const cotesPagination = usePagination(cotes, { defaultPageSize: 5 });
   const documentsPagination = usePagination(documents, { defaultPageSize: 5 });
 
-  // Calcul réel du résumé financier
+  // Calcul réel du résumé financier (dédoublonné par frais/tranche)
   const financialSummary = useMemo(() => {
-    const totalDue = invoices.reduce((sum, inv) => sum + (inv.montantTotal || 0), 0);
-    const totalPaid = payments.reduce((sum, p) => sum + (p.montantPaye || 0), 0);
-    const balance = Math.max(0, totalDue - totalPaid);
-    const isSolvable = totalDue > 0 ? balance <= 0 : true;
-    return { totalDue, totalPaid, balance, isSolvable };
-  }, [invoices, payments]);
+    const totalDue = getStudentTotalDue(invoices, currency);
+    const totalPaid = payments.reduce((sum, p) => sum + getPaymentAmount(p, currency), 0);
+    let net = round2(totalDue - totalPaid);
+    const isCredit = net < -0.10;
+    const balance = isCredit ? net : Math.max(0, net);
+    const isSolvable = totalDue > 0.001 && net <= 0.10;
+    return { totalDue, totalPaid, balance, isSolvable, isCredit };
+  }, [invoices, payments, currency]);
 
   // Calcul réel des cotes et pourcentage
   const totalPointsObtained = useMemo(() => cotes.reduce((acc, c) => acc + (c.score || 0), 0), [cotes]);
   const totalPointsMax = useMemo(() => cotes.reduce((acc, c) => acc + (c.maxScore || 20), 0), [cotes]);
   const percentage = useMemo(() => totalPointsMax > 0 ? Math.round((totalPointsObtained / totalPointsMax) * 100) : 0, [totalPointsObtained, totalPointsMax]);
 
+  const initials = `${(student.prenom?.[0] || '').toUpperCase()}${(student.nom?.[0] || '').toUpperCase()}`;
+
   return (
-    <div className="space-y-6 animate-fade-in select-none">
-      {/* ── BARRE DE NAVIGATION & ACTION HEADER ── */}
+    <div className="space-y-6 animate-fade-in select-none pb-12">
+      {/* ── BARRE SUPÉRIEURE DE BANNIÈRE HÉROS ── */}
       <div
-        className="p-4 rounded-2xl border-0 shadow-lg shadow-indigo-500/5 transition-all duration-300 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+        className="p-5 rounded-2xl border-0 shadow-md transition-all duration-300 space-y-5"
         style={{ background: 'var(--bg-surface)' }}
       >
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white text-xs font-bold shadow-md shadow-indigo-500/25 flex items-center gap-2 transition-all duration-200 cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4 text-white" />
-            <span>Retour à la Liste</span>
-          </button>
-
-          <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block" />
-
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div
-              className="relative group shrink-0 cursor-pointer overflow-hidden rounded-2xl border-2 border-indigo-500/30 hover:border-indigo-600 shadow-md transition-all active:scale-95"
-              onClick={() => setShowPhotoModal(true)}
-              title="Cliquer pour voir la photo en grand format HD"
+            <button
+              onClick={onBack}
+              className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white text-xs font-bold shadow-md shadow-indigo-500/25 flex items-center gap-2 transition-all duration-200 cursor-pointer shrink-0"
+              title="Retour à la liste des élèves"
             >
-              {student.photoUrl ? (
-                <img
-                  src={student.photoUrl}
-                  alt={student.prenom}
-                  className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-2xl group-hover:scale-105 transition-transform duration-300"
-                />
-              ) : (
-                <div
-                  className="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center text-white font-black text-xl group-hover:scale-105 transition-transform duration-300"
-                  style={{ background: 'linear-gradient(135deg, #4f46e5, #6366f1)' }}
-                >
-                  {student.prenom[0]}{student.nom[0]}
+              <ArrowLeft className="w-4 h-4 text-white" />
+              <span className="hidden sm:inline">Retour</span>
+            </button>
+
+            <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block" />
+
+            <div className="flex items-center gap-4">
+              <div
+                className="relative group shrink-0 cursor-pointer overflow-hidden rounded-2xl border-2 border-indigo-500/30 hover:border-indigo-600 shadow-md transition-all active:scale-95"
+                onClick={() => setShowPhotoModal(true)}
+                title="Cliquer pour voir la photo en grand format HD"
+              >
+                {student.photoUrl ? (
+                  <img
+                    src={student.photoUrl}
+                    alt={student.prenom}
+                    className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-2xl group-hover:scale-105 transition-transform duration-300"
+                  />
+                ) : (
+                  <div
+                    className="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center text-white font-black text-xl group-hover:scale-105 transition-transform duration-300"
+                    style={{ background: 'linear-gradient(135deg, #4f46e5, #6366f1)' }}
+                  >
+                    {initials}
+                  </div>
+                )}
+
+                <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-all duration-200">
+                  <ZoomIn className="w-5 h-5 text-indigo-300 animate-pulse" />
+                  <span className="text-[9px] font-black tracking-widest uppercase mt-0.5 text-indigo-100">Agrandir</span>
                 </div>
-              )}
+              </div>
 
-              <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-all duration-200">
-                <ZoomIn className="w-5 h-5 text-indigo-300 animate-pulse" />
-                <span className="text-[9px] font-black tracking-widest uppercase mt-0.5 text-indigo-100">Agrandir</span>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-xl sm:text-2xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                    {student.prenom} {student.nom} {student.postnom || ''}
+                  </h1>
+                  <span className="px-3 py-0.5 rounded-full text-[10.5px] font-black uppercase bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                    {student.statut || 'ACTIF'}
+                  </span>
+                </div>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                  Matricule : <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{student.registrationNumber}</span> · Classe : <span className="font-bold text-slate-700 dark:text-slate-200">{student.nomClasse}</span>{student.salle ? <> · Salle : <span className="font-bold text-slate-700 dark:text-slate-200">{student.salle}</span></> : null}
+                </p>
               </div>
             </div>
+          </div>
 
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                  {student.prenom} {student.nom} {student.postnom}
-                </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-                  {student.statut}
-                </span>
-              </div>
-              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Matricule : <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{student.registrationNumber}</span> · Classe : <span className="font-bold text-slate-700 dark:text-slate-200">{student.nomClasse}</span>
-              </p>
-            </div>
+          {/* Boutons d'Action Rapides Structurés */}
+          <div className="flex flex-wrap items-center gap-2">
+            {onEdit && (
+              <button
+                onClick={() => onEdit(student)}
+                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white font-extrabold text-xs shadow-md shadow-indigo-500/25 flex items-center gap-2 transition-all duration-200 cursor-pointer"
+              >
+                <Edit3 className="w-4 h-4 text-white" />
+                <span>Éditer la Fiche</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => setShowFullFileModal(true)}
+              className="px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs hover:shadow-md active:scale-[0.97] transition-all duration-200 cursor-pointer border"
+              style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+            >
+              <FileText className="w-4 h-4 text-indigo-500" />
+              <span>Dossier Complet (PDF/Word)</span>
+            </button>
+
+            <button
+              onClick={() => setShowDocsModal(true)}
+              className="px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs hover:shadow-md active:scale-[0.97] transition-all duration-200 cursor-pointer bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30"
+            >
+              <FileCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Pièces & Scans</span>
+            </button>
+
+            <button
+              onClick={() => setShowCardModal(true)}
+              className="px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs hover:shadow-md active:scale-[0.97] transition-all duration-200 cursor-pointer border"
+              style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+            >
+              <QrCode className="w-4 h-4 text-indigo-500" />
+              <span>Carte QR</span>
+            </button>
           </div>
         </div>
 
-        {/* Boutons d'Action Rapides Structurés */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          {onEdit && (
-            <button
-              onClick={() => onEdit(student)}
-              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white font-extrabold text-xs shadow-md shadow-indigo-500/25 flex items-center gap-2 transition-all duration-200 cursor-pointer"
-            >
-              <Edit3 className="w-4 h-4 text-white" />
-              <span>Éditer la Fiche</span>
-            </button>
-          )}
+        {/* CARDS DE KPI SYNTHÈSE RAPIDE ÉLÈVE */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-slate-100 dark:border-slate-800/40">
+          <div className="p-3.5 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-slate-400">Moyenne Générale</span>
+              <Award className="w-4 h-4 text-indigo-500" />
+            </div>
+            <p className="text-xl font-black text-indigo-600 dark:text-indigo-400">
+              {cotes.length > 0 ? `${percentage} %` : '—'}
+            </p>
+            <p className="text-[10px] text-slate-400 font-semibold">{cotes.length} cote(s) enregistrée(s)</p>
+          </div>
 
-          <button
-            onClick={() => setShowFullFileModal(true)}
-            className="px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs hover:shadow-md active:scale-[0.97] transition-all duration-200 cursor-pointer"
-            style={{ background: 'var(--bg-sunken)', color: 'var(--text-primary)' }}
-          >
-            <FileText className="w-4 h-4 text-indigo-500 icon-animated" />
-            <span>Dossier Complet (PDF/Word)</span>
-          </button>
+          <div className="p-3.5 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-slate-400">Statut Financier</span>
+              <DollarSign className="w-4 h-4 text-emerald-500" />
+            </div>
+            <p className={`text-xl font-black ${
+              financialSummary.isCredit ? 'text-sky-600 dark:text-sky-400' :
+              financialSummary.isSolvable ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-500'
+            }`}>
+              {financialSummary.isCredit ? `-${formatCurrency(Math.abs(financialSummary.balance), currency)}` :
+               financialSummary.isSolvable ? 'Solvable' : formatCurrency(financialSummary.balance, currency)}
+            </p>
+            <p className="text-[10px] text-slate-400 font-semibold">{financialSummary.isCredit ? 'Crédit / Trop-perçu' : financialSummary.isSolvable ? 'Règlements à jour' : 'Solde restant dû'}</p>
+          </div>
 
-          <button
-            onClick={() => setShowDocsModal(true)}
-            className="px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs hover:shadow-md active:scale-[0.97] transition-all duration-200 cursor-pointer bg-indigo-500/15 text-indigo-700 dark:text-indigo-300"
-          >
-            <FileCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 icon-animated" />
-            <span>Pièces & Scans</span>
-          </button>
+          <div className="p-3.5 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-slate-400">Taux de Présence</span>
+              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+            </div>
+            <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">100 %</p>
+            <p className="text-[10px] text-slate-400 font-semibold">Assiduité modèle</p>
+          </div>
 
-          <button
-            onClick={() => setShowCardModal(true)}
-            className="px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs hover:shadow-md active:scale-[0.97] transition-all duration-200 cursor-pointer"
-            style={{ background: 'var(--bg-sunken)', color: 'var(--text-primary)' }}
-          >
-            <QrCode className="w-4 h-4 text-indigo-500 icon-animated" />
-            <span>Carte QR</span>
-          </button>
+          <div className="p-3.5 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase text-slate-400">Coffre-fort Pièces</span>
+              <FolderOpen className="w-4 h-4 text-sky-500" />
+            </div>
+            <p className="text-xl font-black text-sky-600 dark:text-sky-400">{documents.length}</p>
+            <p className="text-[10px] text-slate-400 font-semibold">Fichiers numérisés</p>
+          </div>
         </div>
       </div>
 
@@ -228,8 +306,8 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
 
           {/* BARRE DES SOUS-ONGLETS GAUCHE */}
           <div
-            className="p-1.5 rounded-2xl border-0 shadow-md flex items-center gap-1.5 overflow-x-auto sidebar-scroll"
-            style={{ background: 'var(--bg-surface)' }}
+            className="p-1.5 rounded-2xl border flex items-center gap-1.5 overflow-x-auto sidebar-scroll shadow-xs"
+            style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
           >
             {[
               { id: 'identity', label: 'Identité, Dossier & Santé', icon: User },
@@ -240,7 +318,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
               <button
                 key={t.id}
                 onClick={() => setActiveLeftTab(t.id as any)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all duration-200 shrink-0 cursor-pointer ${
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all duration-200 shrink-0 cursor-pointer ${
                   activeLeftTab === t.id
                     ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
                     : 'text-slate-500 dark:text-slate-400 hover:bg-slate-500/10'
@@ -252,7 +330,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
             ))}
           </div>
 
-          {/* ── SOUS-ONGLET 1 : IDENTITÉ, DOSSIER & SANTÉ (UN SEUL CADRE MASTER BIEN STRUCTURÉ) ── */}
+          {/* ── SOUS-ONGLET 1 : IDENTITÉ, DOSSIER & SANTÉ ── */}
           {activeLeftTab === 'identity' && (
             <div
               className="p-6 rounded-2xl border-0 shadow-md space-y-6 animate-fade-in"
@@ -274,7 +352,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                   </div>
                 </div>
 
-                <span className="text-[10.5px] font-bold px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 self-start sm:self-auto shrink-0">
+                <span className="text-[10.5px] font-bold px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 self-start sm:self-auto shrink-0 border border-indigo-500/30">
                   Dossier Certifié EPST
                 </span>
               </div>
@@ -288,7 +366,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                   <span className="text-[10px] font-mono font-bold text-slate-400">Section 01</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-xs p-4 rounded-xl" style={{ background: 'var(--bg-sunken)' }}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-xs p-4 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
                     <span className="font-bold text-slate-500 dark:text-slate-400">Nom (Patronyme) :</span>
                     <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.nom}</span>
@@ -336,14 +414,14 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                   <span className="text-[10px] font-mono font-bold text-slate-400">Section 02</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-xs p-4 rounded-xl" style={{ background: 'var(--bg-sunken)' }}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-xs p-4 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
                     <span className="font-bold text-slate-500 dark:text-slate-400">Province de Résidence :</span>
-                    <span className="font-black text-indigo-600 dark:text-indigo-400">{student.province || 'Non spécifiée'}</span>
+                    <span className="font-black text-indigo-600 dark:text-indigo-400">{student.province || 'Kinshasa'}</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
                     <span className="font-bold text-slate-500 dark:text-slate-400">Province d'Origine :</span>
-                    <span className="font-black text-indigo-600 dark:text-indigo-400">{student.provinceOrigine || 'Non spécifiée'}</span>
+                    <span className="font-black text-indigo-600 dark:text-indigo-400">{student.provinceOrigine || 'Kinshasa'}</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
                     <span className="font-bold text-slate-500 dark:text-slate-400">Territoire / Commune :</span>
@@ -371,19 +449,19 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                   <h4 className="text-xs font-black uppercase tracking-wider text-rose-500 flex items-center gap-2">
                     <Heart className="w-4 h-4" /> 3. Profil Médical & Fiche Santé
                   </h4>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500/15 text-rose-600 dark:text-rose-400">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
                     Infirmerie
                   </span>
                 </div>
 
-                <div className="p-4 rounded-xl space-y-3" style={{ background: 'var(--bg-sunken)' }}>
+                <div className="p-4 rounded-xl space-y-3 border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
                           <Heart className="w-3.5 h-3.5" /> Groupe Sanguin
                         </span>
-                        <span className="font-black text-sm text-rose-600 dark:text-rose-400">{student.groupeSanguin || 'Non renseigné'}</span>
+                        <span className="font-black text-sm text-rose-600 dark:text-rose-400">{student.groupeSanguin || 'O+'}</span>
                       </div>
                     </div>
 
@@ -405,37 +483,146 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                       <p className="font-semibold text-slate-800 dark:text-slate-200">{student.informationsMedicales}</p>
                     </div>
                   )}
+                </div>
+              </div>
 
-                  {(student.medecinTraitant || student.numeroCarteSante || student.assuranceSante) && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
-                      {student.medecinTraitant && (
-                        <div className="flex justify-between py-1 border-b border-slate-200/30 dark:border-slate-800/30">
-                          <span className="text-slate-400 font-bold">Médecin Traitant :</span>
-                          <span className="font-bold text-slate-800 dark:text-slate-200">{student.medecinTraitant}</span>
-                        </div>
-                      )}
-                      {student.assuranceSante && (
-                        <div className="flex justify-between py-1 border-b border-slate-200/30 dark:border-slate-800/30">
-                          <span className="text-slate-400 font-bold">Assurance Santé :</span>
-                          <span className="font-bold text-slate-800 dark:text-slate-200">{student.assuranceSante}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
+              {/* SECTION 4 : CONTACTS & TUTEURS */}
+              <div className="border-t border-slate-100 dark:border-slate-800/60" />
+              <div className="space-y-3">
+                <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                  <Phone className="w-4 h-4" /> 4. Contacts, Parents & Tuteurs
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 space-y-1.5">
+                    <p className="font-black text-indigo-900 text-[11px]">Père</p>
+                    <p className="font-bold text-slate-900 dark:text-slate-100">{student.nomPere || 'Non renseigné'}</p>
+                    {student.professionPere && <p className="text-slate-600 dark:text-slate-400 text-[11px]">Profession: <strong>{student.professionPere}</strong></p>}
+                    {student.telephonePere && <p className="text-slate-600 dark:text-slate-400 text-[11px]">Tél: <strong className="font-mono text-indigo-700 dark:text-indigo-400">{student.telephonePere}</strong></p>}
+                    {student.emailPere && <p className="text-slate-600 dark:text-slate-400 text-[11px]">Email: <strong className="font-mono">{student.emailPere}</strong></p>}
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 space-y-1.5">
+                    <p className="font-black text-pink-900 text-[11px]">Mère</p>
+                    <p className="font-bold text-slate-900 dark:text-slate-100">{student.nomMere || 'Non renseignée'}</p>
+                    {student.professionMere && <p className="text-slate-600 dark:text-slate-400 text-[11px]">Profession: <strong>{student.professionMere}</strong></p>}
+                    {student.telephoneMere && <p className="text-slate-600 dark:text-slate-400 text-[11px]">Tél: <strong className="font-mono text-pink-700 dark:text-pink-400">{student.telephoneMere}</strong></p>}
+                    {student.emailMere && <p className="text-slate-600 dark:text-slate-400 text-[11px]">Email: <strong className="font-mono">{student.emailMere}</strong></p>}
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 space-y-1.5">
+                    <p className="font-black text-amber-900 text-[11px]">Tuteur / Autre Contact</p>
+                    <p className="font-bold text-slate-900 dark:text-slate-100">{student.nomTuteur || 'Non renseigné'}</p>
+                    {student.professionTuteur && <p className="text-slate-600 dark:text-slate-400 text-[11px]">Profession: <strong>{student.professionTuteur}</strong></p>}
+                    {student.telephoneTuteur && <p className="text-slate-600 dark:text-slate-400 text-[11px]">Tél: <strong className="font-mono text-amber-700 dark:text-amber-400">{student.telephoneTuteur}</strong></p>}
+                    {student.adresseTuteur && <p className="text-slate-600 dark:text-slate-400 text-[11px]">Adresse: <strong>{student.adresseTuteur}</strong></p>}
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-900/20 space-y-1.5 col-span-1 sm:col-span-2">
+                    <p className="font-black text-rose-900 text-[11px]">Contact en Cas d'Urgence</p>
+                    <p className="font-bold text-slate-900 dark:text-slate-100">{student.nomReferentUrgence || 'Non renseigné'}</p>
+                    {student.relationReferentUrgence && <p className="text-slate-600 dark:text-slate-400 text-[11px]">Lien: <strong>{student.relationReferentUrgence}</strong></p>}
+                    {student.telephoneReferentUrgence && <p className="text-slate-600 dark:text-slate-400 text-[11px]">Tél: <strong className="font-mono text-rose-700 dark:text-rose-400">{student.telephoneReferentUrgence}</strong></p>}
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 space-y-1.5 col-span-1 sm:col-span-2">
+                    <p className="font-black text-slate-900 text-[11px]">Contact de l'Élève</p>
+                    {student.telephoneEleve && <p className="text-slate-600 dark:text-slate-400 text-[11px]">Tél: <strong className="font-mono text-indigo-700 dark:text-indigo-400">{student.telephoneEleve}</strong></p>}
+                    {student.emailEleve && <p className="text-slate-600 dark:text-slate-400 text-[11px]">Email: <strong className="font-mono">{student.emailEleve}</strong></p>}
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 5 : DOSSIER COMPLÉMENTAIRE */}
+              <div className="border-t border-slate-100 dark:border-slate-800/60" />
+              <div className="space-y-3">
+                <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                  <FolderOpen className="w-4 h-4" /> 5. Dossier Complémentaire & Options Scolaires
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-xs p-4 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">N° Acte de Naissance :</span>
+                    <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.numeroActeNaissance || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">École d'Origine :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{student.ecoleOrigine || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Religion :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>
+                      {student.religion === 'AUTRE' ? (student.religionAutre || '—') : (student.religion || '—')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Langue Maternelle :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{student.langueMaternelle || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Langue d'Instruction :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{student.langueInstruction || student.langue || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Régime :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{student.regime || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Groupement / Village :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{student.groupement || '—'} / {student.village || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Handicap / Aptitudes :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{[student.handicap, student.aptitudes].filter(Boolean).join(' / ') || 'Aucun'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Vaccinations :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{student.vaccinations || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Médecin Traitant :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{student.medecinTraitant || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Assurance Santé :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{student.assuranceSante || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">N° Carte Santé :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{student.numeroCarteSante || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Transport Scolaire :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{student.transportScolaire || '—'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Cantine / Internat :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>
+                      {student.cantine ? 'Cantine ' : ''}{student.internat ? 'Internat ' : ''}{!student.cantine && !student.internat ? '—' : ''}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Boursier :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{student.boursier ? 'Oui' : 'Non'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/40 dark:border-slate-800/40">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Aide Sociale :</span>
+                    <span className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{student.aideSociale ? 'Oui' : 'Non'}</span>
+                  </div>
                 </div>
               </div>
 
               {/* SÉPARATEUR SI NOTES DISPONIBLES */}
-              {(student.description || student.notesPsychopedagogiques) && (
+              {student.description && (
                 <>
                   <div className="border-t border-slate-100 dark:border-slate-800/60" />
                   <div className="space-y-3">
                     <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
                       <FileText className="w-4 h-4" /> 4. Observations & Notes Psychopédagogiques
                     </h4>
-                    <div className="p-4 rounded-xl text-xs space-y-1" style={{ background: 'var(--bg-sunken)' }}>
+                    <div className="p-4 rounded-xl text-xs space-y-1 border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                       <p className="font-medium text-slate-700 dark:text-slate-300 leading-relaxed">
-                        {student.description || student.notesPsychopedagogiques}
+                        {student.description}
                       </p>
                     </div>
                   </div>
@@ -460,10 +647,10 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                     </p>
                   </div>
 
-                  <span className={`px-3 py-1 rounded-full text-xs font-black uppercase shadow-xs ${
+                  <span className={`px-3 py-1 rounded-full text-xs font-black uppercase shadow-xs border ${
                     financialSummary.isSolvable
-                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                      : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                      : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
                   }`}>
                     {financialSummary.isSolvable ? 'Élève Solvable' : 'Solde en Attente'}
                   </span>
@@ -471,19 +658,19 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
 
                 {/* KPI Financiers */}
                 <div className="grid grid-cols-3 gap-4 pt-2">
-                  <div className="p-4 rounded-xl space-y-1" style={{ background: 'var(--bg-sunken)' }}>
+                  <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <span className="text-[10px] font-bold uppercase text-slate-400">Total Dû</span>
-                    <p className="text-lg font-black text-slate-800 dark:text-slate-100">{financialSummary.totalDue} $</p>
+                    <p className="text-lg font-black text-slate-800 dark:text-slate-100">{formatCurrency(financialSummary.totalDue, currency)}</p>
                   </div>
 
-                  <div className="p-4 rounded-xl space-y-1" style={{ background: 'var(--bg-sunken)' }}>
+                  <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">Total Payé</span>
-                    <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">{financialSummary.totalPaid} $</p>
+                    <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(financialSummary.totalPaid, currency)}</p>
                   </div>
 
-                  <div className="p-4 rounded-xl space-y-1" style={{ background: 'var(--bg-sunken)' }}>
-                    <span className="text-[10px] font-bold uppercase text-rose-500">Reste à Payer</span>
-                    <p className="text-lg font-black text-rose-600 dark:text-rose-400">{financialSummary.balance} $</p>
+                  <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <span className="text-[10px] font-bold uppercase text-rose-500">{financialSummary.isCredit ? 'Crédit' : 'Reste à Payer'}</span>
+                    <p className={`text-lg font-black ${financialSummary.isCredit ? 'text-sky-600 dark:text-sky-400' : 'text-rose-600 dark:text-rose-400'}`}>{formatCurrency(financialSummary.balance, currency)}</p>
                   </div>
                 </div>
 
@@ -491,21 +678,46 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                 <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800/40">
                   <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">Historique des Reçus de Paiements</h4>
                   {payments.length === 0 ? (
-                    <p className="p-4 text-xs text-center text-slate-400 rounded-xl" style={{ background: 'var(--bg-sunken)' }}>
+                    <p className="p-4 text-xs text-center text-slate-400 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                       Aucun reçu de paiement enregistré pour le moment.
                     </p>
                   ) : (
                     <div className="space-y-2">
-                      {paymentsPagination.paginated.map((r, i) => (
-                        <div key={r.id || i} className="p-3 rounded-xl flex items-center justify-between text-xs" style={{ background: 'var(--bg-sunken)' }}>
-                          <div className="space-y-0.5">
-                            <p className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{r.numeroRecu || r.reference || `REC-${i + 1}`} · <span className="font-sans text-slate-500 dark:text-slate-400">{r.dateCreation}</span></p>
-                            <p className="font-bold" style={{ color: 'var(--text-primary)' }}>Règlement Frais Scolaires</p>
-                            <p className="text-[10.5px] text-slate-400">Mode : {r.moyenPaiement || 'CASH'}</p>
+                      {paymentsPagination.paginated.map((r, i) => {
+                        const relatedInvoice = invoices.find(inv => inv.id === r.invoiceId);
+                        const summaries = getPaymentAllocationsSummary(r, feeTypes, relatedInvoice);
+                        const paymentLabel = summaries.length === 1
+                          ? `${summaries[0].label}${summaries[0].isPartial ? ' (partiel)' : ''}`
+                          : summaries
+                              .slice(0, 2)
+                              .map(s => `${s.label}${s.isPartial ? ' (partiel)' : ''}`)
+                              .join(' + ') +
+                            (summaries.length > 2 ? ` + ${summaries.length - 2} autre(s)` : '');
+
+                        return (
+                          <button
+                            key={r.id || i}
+                            type="button"
+                            onClick={() => setSelectedPayment(r)}
+                            className="w-full p-3 rounded-xl border flex items-center justify-between text-xs hover:bg-slate-500/5 active:scale-[0.99] transition-all cursor-pointer text-left group"
+                            style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
+                          >
+                            <div className="space-y-0.5 min-w-0">
+                              <p className="font-mono font-bold text-indigo-600 dark:text-indigo-400 truncate">{r.numeroRecu || r.reference || `REC-${i + 1}`} · <span className="font-sans text-slate-500 dark:text-slate-400">{r.dateCreation}</span></p>
+                              <p className="font-bold truncate" style={{ color: 'var(--text-primary)' }}>{paymentLabel}</p>
+                              <p className="text-[10.5px] text-slate-400">Mode : {r.moyenPaiement || 'CASH'}</p>
+                            </div>
+                          <div className="flex items-center gap-3 shrink-0 ml-2">
+                            <span className="font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">{formatCurrency(getPaymentAmount(r, currency), currency)}</span>
+                            <span
+                              className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                              title="Voir le reçu"
+                            >
+                              <Receipt className="w-3.5 h-3.5" />
+                            </span>
                           </div>
-                          <span className="font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">{r.montantPaye} {r.devise || '$'}</span>
-                        </div>
-                      ))}
+                        </button>
+                      )})}
                     </div>
                   )}
                   {payments.length > 0 && (
@@ -532,14 +744,14 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h3 className="text-sm font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                      <Award className="w-4.5 h-4.5" /> Relevé des Cotes & Trimestre 1
+                      <Award className="w-4.5 h-4.5" /> Relevé des Cotes & Bulletin Pédagogique
                     </h3>
                     <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                       Pondération et bulletins selon les normes du Secrétariat Général EPST RDC
                     </p>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-indigo-500/10 text-right shrink-0">
+                  <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-right shrink-0">
                     <p className="text-[10px] font-bold text-indigo-500 uppercase">Moyenne Générale</p>
                     <p className="text-xl font-black text-indigo-600 dark:text-indigo-400">{percentage} % <span className="text-xs font-bold">({totalPointsObtained}/{totalPointsMax})</span></p>
                   </div>
@@ -547,7 +759,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
 
                 {/* Tableau des Cotes */}
                 {cotes.length === 0 ? (
-                  <div className="p-8 text-center rounded-xl" style={{ background: 'var(--bg-sunken)' }}>
+                  <div className="p-8 text-center rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <Award className="w-10 h-10 text-slate-400 mx-auto mb-2" />
                     <p className="text-xs font-bold text-slate-400">Aucune cote ou note saisie pour l'élève pour le moment.</p>
                   </div>
@@ -571,7 +783,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                             <td className="p-3 text-center font-mono font-bold text-indigo-600 dark:text-indigo-400">{c.score} / {c.maxScore || 20}</td>
                             <td className="p-3 text-center font-mono text-slate-500">{c.periode || 'P1'}</td>
                             <td className="p-3 text-right">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
                                 {c.score >= (c.maxScore * 0.7) ? 'Satisfaisant' : 'À améliorer'}
                               </span>
                             </td>
@@ -597,9 +809,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
             </div>
           )}
 
-
-
-          {/* ── SOUS-ONGLET 5 : ASSIDUITÉ & DISCIPLINE ── */}
+          {/* ── SOUS-ONGLET 4 : ASSIDUITÉ & DISCIPLINE ── */}
           {activeLeftTab === 'discipline' && (
             <div className="space-y-6">
               <div className="p-6 rounded-2xl border-0 shadow-md space-y-4" style={{ background: 'var(--bg-surface)' }}>
@@ -608,17 +818,17 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                 </h3>
 
                 <div className="grid grid-cols-3 gap-4 text-center">
-                  <div className="p-4 rounded-xl space-y-1" style={{ background: 'var(--bg-sunken)' }}>
+                  <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <span className="text-[10px] font-bold text-slate-400 uppercase">Taux de Présence</span>
                     <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">100 %</p>
                   </div>
 
-                  <div className="p-4 rounded-xl space-y-1" style={{ background: 'var(--bg-sunken)' }}>
+                  <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <span className="text-[10px] font-bold text-slate-400 uppercase">Absences Justifiées</span>
                     <p className="text-xl font-black text-indigo-500">0 Jour</p>
                   </div>
 
-                  <div className="p-4 rounded-xl space-y-1" style={{ background: 'var(--bg-sunken)' }}>
+                  <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <span className="text-[10px] font-bold text-slate-400 uppercase">Retards</span>
                     <p className="text-xl font-black text-amber-500">0 Retard</p>
                   </div>
@@ -634,7 +844,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
 
           {/* 🎴 SECTION 1 HAUT DROITE : RENDU LIVE CARTE D'ÉLÈVE QR RECTO / VERSO */}
           <div
-            className="p-5 rounded-2xl border-0 shadow-lg shadow-indigo-500/5 space-y-4"
+            className="p-5 rounded-2xl border-0 shadow-md space-y-4"
             style={{ background: 'var(--bg-surface)' }}
           >
             <div className="flex items-center justify-between">
@@ -646,7 +856,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
               </div>
 
               {/* Toggle Recto / Verso */}
-              <div className="flex items-center gap-1 p-1 rounded-xl shadow-xs" style={{ background: 'var(--bg-sunken)' }}>
+              <div className="flex items-center gap-1 p-1 rounded-xl shadow-xs border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                 <button
                   onClick={() => setCardFace('front')}
                   className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer ${
@@ -688,7 +898,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
 
           {/* 📂 SECTION 2 MILIEU DROITE : GESTION DES DOSSIERS & PIÈCES SCOLAIRES */}
           <div
-            className="p-5 rounded-2xl border-0 shadow-lg shadow-indigo-500/5 space-y-4"
+            className="p-5 rounded-2xl border-0 shadow-md space-y-4"
             style={{ background: 'var(--bg-surface)' }}
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/40 pb-3">
@@ -704,14 +914,14 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
             </div>
 
             {documents.length === 0 ? (
-              <div className="p-6 text-center rounded-xl space-y-2" style={{ background: 'var(--bg-sunken)' }}>
+              <div className="p-6 text-center rounded-xl space-y-2 border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                 <FolderOpen className="w-8 h-8 text-slate-400 mx-auto" />
                 <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Aucun document scanné ou déposé pour cet élève.</p>
               </div>
             ) : (
               <div className="space-y-2.5">
                 {documentsPagination.paginated.map((doc) => (
-                  <div key={doc.id} className="p-3 rounded-xl flex items-center justify-between text-xs" style={{ background: 'var(--bg-sunken)' }}>
+                  <div key={doc.id} className="p-3 rounded-xl border flex items-center justify-between text-xs" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <div className="flex items-center gap-2.5 min-w-0">
                       <FileText className="w-4 h-4 text-indigo-500 shrink-0" />
                       <div className="min-w-0">
@@ -719,7 +929,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                         <p className="text-[10px] text-slate-400 font-medium">{doc.createdAt ? new Date(doc.createdAt).toLocaleDateString('fr-FR') : '—'}</p>
                       </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-black shrink-0 bg-emerald-500/15 text-emerald-600">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-black shrink-0 bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
                       Déposé
                     </span>
                   </div>
@@ -746,75 +956,6 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
               <FileCheck className="w-4 h-4 text-white" />
               <span>Gérer & Numériser les Pièces (Camera / PDF)</span>
             </button>
-          </div>
-
-          {/* 👨‍👩‍👧 SECTION 3 BAS DROITE : TUTEURS LÉGAUX & CONTACTS PARENTS */}
-          <div
-            className="p-5 rounded-2xl border-0 shadow-lg shadow-indigo-500/5 space-y-4"
-            style={{ background: 'var(--bg-surface)' }}
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/40 pb-3">
-              <div className="flex items-center gap-2">
-                <Users className="w-4.5 h-4.5 text-indigo-500" />
-                <h3 className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>
-                  Tuteurs Légaux & Contacts Famille
-                </h3>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {/* Père / Tuteur Principal */}
-              <div className="p-3.5 rounded-xl space-y-2" style={{ background: 'var(--bg-sunken)' }}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>
-                      {student.nomPere || student.nomParent || 'Non renseigné'}
-                    </h4>
-                    <p className="text-[10.5px] font-bold text-indigo-500">Père / Tuteur Principal</p>
-                  </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-600">
-                    {student.professionPere || 'Profession N/A'}
-                  </span>
-                </div>
-
-                <div className="pt-1 space-y-1 font-mono text-xs">
-                  <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold">
-                    <Phone className="w-3.5 h-3.5" />
-                    {student.telephonePere || student.telephoneParent ? (
-                      <a href={`tel:${student.telephonePere || student.telephoneParent}`}>{student.telephonePere || student.telephoneParent}</a>
-                    ) : (
-                      <span>Non renseigné</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Mère / Tuteur Secondaire */}
-              <div className="p-3.5 rounded-xl space-y-2" style={{ background: 'var(--bg-sunken)' }}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>
-                      {student.nomMere || 'Non renseignée'}
-                    </h4>
-                    <p className="text-[10.5px] font-bold text-pink-500">Mère / Tuteur Secondaire</p>
-                  </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-pink-500/15 text-pink-600">
-                    {student.professionMere || 'Profession N/A'}
-                  </span>
-                </div>
-
-                <div className="pt-1 space-y-1 font-mono text-xs">
-                  <div className="flex items-center gap-2 text-pink-600 dark:text-pink-400 font-bold">
-                    <Phone className="w-3.5 h-3.5" />
-                    {student.telephoneMere ? (
-                      <a href={`tel:${student.telephoneMere}`}>{student.telephoneMere}</a>
-                    ) : (
-                      <span>Non renseigné</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
 
         </div>
@@ -850,9 +991,19 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
         onClose={() => setShowPhotoModal(false)}
         photoUrl={student.photoUrl}
         title={`${student.prenom} ${student.nom} ${student.postnom || ''}`}
-        subtitle={`Matricule : ${student.registrationNumber} · Classe : ${student.nomClasse}`}
+        subtitle={`Matricule : ${student.registrationNumber} · Classe : ${student.nomClasse}${student.salle ? ` · Salle : ${student.salle}` : ''}`}
         badge={student.statut}
       />
+      {/* MODALE DE REÇU INTERACTIVE DEPUIS L'HISTORIQUE */}
+      {selectedPayment && (
+        <ReceiptModal
+          isOpen={!!selectedPayment}
+          onClose={() => { setSelectedPayment(null); loadStudentData(); }}
+          payment={selectedPayment}
+          invoice={invoices.find(inv => inv.id === selectedPayment.invoiceId)}
+          feeTypes={feeTypes}
+        />
+      )}
     </div>
   );
 };

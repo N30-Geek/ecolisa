@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   LayoutDashboard,
@@ -27,6 +27,7 @@ import {
   WifiOff,
   Sun,
   Moon,
+  AlertTriangle,
   PanelLeftClose,
   PanelLeftOpen,
   Sparkles,
@@ -44,12 +45,15 @@ import {
   Menu,
   Briefcase,
   Layers,
-  HardDrive
+  HardDrive,
+  DollarSign
 } from 'lucide-react';
 import { RôleSystème } from '../../types';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { CommandPalette } from './CommandPalette';
 import { LocalDatabaseService } from '../../services/localDatabase';
+import { hasTabAccess } from '../../utils/permissions';
+import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 
 interface NavbarProps {
   userRole: RôleSystème;
@@ -67,6 +71,7 @@ interface NavbarProps {
   isSidebarCollapsed?: boolean;
   toggleSidebar?: () => void;
   onLogout?: () => void;
+  onOpenAccountSwitcher?: () => void;
 }
 
 const roleLabels: Record<RôleSystème, string> = {
@@ -74,7 +79,10 @@ const roleLabels: Record<RôleSystème, string> = {
   PREFET_DIRECTEUR: 'Préfet / Directeur',
   DIRECTEUR_ETUDES: 'Directeur des Études',
   DIRECTEUR_DISCIPLINE: 'Dir. de Discipline',
-  COMPTABLE: 'Comptable / Intendant',
+  COMPTABLE: 'Comptable Intendant',
+  SECRETAIRE: 'Secrétariat',
+  INTENDANT: 'Intendant Financier',
+  CENSEUR: 'Censeur des Études',
   TITULAIRE: 'Titulaire de Classe',
   ENSEIGNANT: 'Enseignant',
   PARENT_ELEVE: 'Parent / Élève',
@@ -152,7 +160,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   toggleTheme,
   isSidebarCollapsed,
   toggleSidebar,
-  onLogout
+  onLogout,
+  onOpenAccountSwitcher
 }) => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
@@ -161,6 +170,27 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isSyncing, setIsSyncing] = useState(false);
   const [notifFilter, setNotifFilter] = useState<'all' | 'finance' | 'system'>('all');
   const [yearOptions, setYearOptions] = useState<SelectOption[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [readNotifIds, setReadNotifIds] = useState<Set<string>>(new Set());
+
+  const { currencies, displayCurrency, setDisplayCurrency } = useSchoolConfig();
+  const NOTIF_READ_KEY = 'ecolisa_notifications_read';
+  const NOTIF_FINANCE_KEY = 'ecolisa_financial_notifications';
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const notifMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setShowProfileMenu(false);
+      }
+      if (notifMenuRef.current && !notifMenuRef.current.contains(e.target as Node)) {
+        setShowNotifMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -201,17 +231,75 @@ export const Navbar: React.FC<NavbarProps> = ({
     }, 1200);
   };
 
-  const notifications = [
-    { id: '1', type: 'finance', text: '12 reçus de paiement FlexPay validés', time: 'Il y a 5 min', icon: Banknote, iconColor: '#10b981' },
-    { id: '2', type: 'system', text: 'Exetat RDC : Inscriptions ouvertes', time: 'Il y a 20 min', icon: FileText, iconColor: '#6366f1' },
-    { id: '3', type: 'system', text: 'Sauvegarde SQLite P2P réussie (0.4ms)', time: 'Il y a 1h', icon: CheckCircle2, iconColor: '#3b82f6' },
-  ];
+  // Charger les alertes financières du centre de notifications
+  useEffect(() => {
+    const loadRead = () => {
+      try {
+        const raw = localStorage.getItem(NOTIF_READ_KEY);
+        const ids: string[] = raw ? JSON.parse(raw) : [];
+        setReadNotifIds(new Set(ids));
+      } catch {
+        setReadNotifIds(new Set());
+      }
+    };
+    const loadNotifs = () => {
+      try {
+        const raw = localStorage.getItem(NOTIF_FINANCE_KEY);
+        const financial = raw ? JSON.parse(raw) : [];
+        const system = [
+          { id: 'sys-1', type: 'system', text: 'Exetat RDC : Inscriptions ouvertes', time: 'Il y a 20 min', icon: 'FileText', iconColor: '#6366f1' },
+          { id: 'sys-2', type: 'system', text: 'Sauvegarde SQLite P2P réussie (0.4ms)', time: 'Il y a 1h', icon: 'CheckCircle2', iconColor: '#3b82f6' },
+        ];
+        setNotifications([...financial, ...system]);
+      } catch {
+        setNotifications([]);
+      }
+    };
+    loadRead();
+    loadNotifs();
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === NOTIF_FINANCE_KEY) loadNotifs();
+      if (e.key === NOTIF_READ_KEY) loadRead();
+    };
+    window.addEventListener('storage', onStorage);
+    const timer = setInterval(() => { loadNotifs(); loadRead(); }, 5000);
+    return () => { window.removeEventListener('storage', onStorage); clearInterval(timer); };
+  }, []);
+
+  const unreadNotifs = useMemo(() => notifications.filter(n => !readNotifIds.has(n.id)), [notifications, readNotifIds]);
+
+  const markAllAsRead = () => {
+    const allIds = notifications.map(n => n.id);
+    const updated = new Set([...readNotifIds, ...allIds]);
+    setReadNotifIds(updated);
+    localStorage.setItem(NOTIF_READ_KEY, JSON.stringify(Array.from(updated)));
+  };
+
+  const iconMap: Record<string, React.ElementType> = {
+    Banknote,
+    FileText,
+    CheckCircle2,
+    AlertTriangle,
+  };
 
   const filteredNotifs = notifications.filter((n) => {
     if (notifFilter === 'finance') return n.type === 'finance';
     if (notifFilter === 'system') return n.type === 'system';
     return true;
   });
+
+  const financeCount = useMemo(() => notifications.filter(n => n.type === 'finance' && !readNotifIds.has(n.id)).length, [notifications, readNotifIds]);
+  const systemCount = useMemo(() => notifications.filter(n => n.type === 'system' && !readNotifIds.has(n.id)).length, [notifications, readNotifIds]);
+
+  const currentUser = LocalDatabaseService.getCurrentUser();
+  const userName = currentUser?.nom || 'Utilisateur ECOLISA';
+  const userInitials = userName.split(' ').map(n => n.charAt(0)).join('').substring(0, 2).toUpperCase() || 'U';
+
+  const filteredNavCategories = useMemo(() => {
+    return NAV_CATEGORIES.filter(cat =>
+      cat.tabs.some(t => hasTabAccess(userRole, t))
+    );
+  }, [userRole]);
 
   return (
     <>
@@ -278,6 +366,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 placeholder="Aucune année créée"
                 icon={Calendar}
                 className="w-44"
+              />
+            </div>
+
+            {/* Selecteur de Devise d'Affichage Utilisateur */}
+            <div className="hidden lg:block ml-2 shrink-0">
+              <CustomSelect
+                options={currencies.map((c) => ({ value: c.code, label: `${c.code} (${c.symbol})` }))}
+                value={displayCurrency}
+                onChange={(val) => setDisplayCurrency(val)}
+                placeholder="Devise"
+                icon={DollarSign}
+                className="w-32"
               />
             </div>
           </div>
@@ -358,7 +458,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
 
             {/* Centre de Notifications */}
-            <div className="relative">
+            <div className="relative" ref={notifMenuRef}>
               <button
                 onClick={() => {
                   setShowNotifMenu(!showNotifMenu);
@@ -368,12 +468,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 title="Notifications Système"
               >
                 <Bell className="w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />
-                {notifications.length > 0 && (
+                {unreadNotifs.length > 0 && (
                   <span
                     className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full text-white text-[8px] font-black flex items-center justify-center"
                     style={{ background: '#ef4444', border: '1.5px solid var(--bg-surface)' }}
                   >
-                    {notifications.length}
+                    {unreadNotifs.length}
                   </span>
                 )}
               </button>
@@ -381,7 +481,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Popover Notifications */}
               {showNotifMenu && (
                 <div
-                  className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl border shadow-2xl z-50 overflow-hidden animate-scale-in"
+                  className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl border z-50 overflow-hidden animate-scale-in"
                   style={{
                     background: 'var(--sidebar-popover-bg)',
                     borderColor: 'var(--sidebar-popover-border)',
@@ -396,19 +496,59 @@ export const Navbar: React.FC<NavbarProps> = ({
                         Notifications Système
                       </h3>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        {notifications.length} nouvelles mises à jour récents
+                        {unreadNotifs.length} non lue{unreadNotifs.length > 1 ? 's' : ''} sur {notifications.length}
                       </p>
                     </div>
+                    {unreadNotifs.length > 0 && (
+                      <button
+                        onClick={markAllAsRead}
+                        className="text-[10px] font-black px-2 py-1 rounded-md border transition-colors hover:bg-indigo-500/10"
+                        style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        title="Marquer toutes les notifications comme lues"
+                      >
+                        <CheckCircle2 className="w-3 h-3 inline-block mr-1" />
+                        Tout marquer lu
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Filtres de notifications */}
+                  <div className="flex items-center gap-1 p-2 border-b" style={{ borderColor: 'var(--border)' }}>
+                    {([
+                      { key: 'all', label: `Toutes (${notifications.length})` },
+                      { key: 'finance', label: `Finance (${financeCount})` },
+                      { key: 'system', label: `Système (${systemCount})` },
+                    ] as const).map(t => (
+                      <button
+                        key={t.key}
+                        onClick={() => setNotifFilter(t.key)}
+                        className="text-[10px] font-black px-2 py-1 rounded-md transition-colors"
+                        style={{
+                          background: notifFilter === t.key ? 'rgba(99,102,241,0.15)' : 'transparent',
+                          color: notifFilter === t.key ? '#6366f1' : 'var(--text-muted)',
+                        }}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
                   </div>
 
                   <div className="divide-y divide-slate-500/10 max-h-72 overflow-y-auto">
                     {filteredNotifs.map((n) => {
-                      const NotifIcon = n.icon;
+                      const NotifIcon = iconMap[n.icon] || (n.type === 'finance' ? AlertTriangle : Bell);
+                      const isUnread = !readNotifIds.has(n.id);
                       return (
                         <div
                           key={n.id}
-                          className="flex items-start gap-3 p-3 hover:bg-indigo-500/10 cursor-pointer transition-colors"
+                          className="flex items-start gap-3 p-3 hover:bg-indigo-500/10 cursor-pointer transition-colors relative"
                         >
+                          {isUnread && (
+                            <span
+                              className="absolute left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full"
+                              style={{ background: '#ef4444' }}
+                              title="Non lue"
+                            />
+                          )}
                           <div
                             className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 border"
                             style={{
@@ -427,13 +567,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                         </div>
                       );
                     })}
+                    {filteredNotifs.length === 0 && (
+                      <div className="p-6 text-center">
+                        <CheckCircle2 className="w-6 h-6 mx-auto mb-2 opacity-40" style={{ color: 'var(--text-muted)' }} />
+                        <p className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>
+                          Aucune notification {notifFilter !== 'all' ? `dans ${notifFilter === 'finance' ? 'Finance' : 'Système'}` : ''}.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
             </div>
 
             {/* Menu Profil Utilisateur */}
-            <div className="relative">
+            <div className="relative" ref={profileMenuRef}>
               <button
                 onClick={() => {
                   setShowProfileMenu(!showProfileMenu);
@@ -446,11 +594,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }}
               >
                 <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center font-black text-xs text-white shadow-xs">
-                  P
+                  {userInitials}
                 </div>
                 <div className="text-left hidden md:block leading-tight">
-                  <p className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>
-                    Promoteur Racine
+                  <p className="text-xs font-black truncate max-w-[120px]" style={{ color: 'var(--text-primary)' }}>
+                    {userName}
                   </p>
                   <p className="text-[9px] font-extrabold text-indigo-600 dark:text-indigo-400">{roleLabels[userRole]}</p>
                 </div>
@@ -472,31 +620,68 @@ export const Navbar: React.FC<NavbarProps> = ({
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-white text-sm shadow-xs">
-                        P
+                        {userInitials}
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs font-black truncate" style={{ color: 'var(--text-primary)' }}>
-                          Promoteur Administrateur
+                          {userName}
                         </p>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">admin@ecolisa.cd</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{currentUser?.email || 'session.active@ecolisa.cd'}</p>
                       </div>
                     </div>
 
                     <div className="pt-2 border-t border-slate-500/10">
-                      <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">
-                        Changer de Rôle Système :
-                      </label>
-                      <CustomSelect
-                        options={roleOptions}
-                        value={userRole}
-                        onChange={(val) => setUserRole(val as RôleSystème)}
-                        icon={User}
-                        className="w-full"
-                      />
+                      {currentUser?.role === 'PROMOTEUR_ADMIN' ? (
+                        <>
+                          <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                            Simulation de Rôle (Admin) :
+                          </label>
+                          <CustomSelect
+                            options={roleOptions}
+                            value={userRole}
+                            onChange={(val) => setUserRole(val as RôleSystème)}
+                            icon={User}
+                            className="w-full"
+                          />
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400">
+                          <span className="text-[10px] font-black uppercase tracking-wide flex items-center gap-1">
+                            <Shield className="w-3 h-3" /> Accès Réel Verrouillé
+                          </span>
+                          <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded bg-indigo-600 text-white">
+                            {userRole}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   <div className="p-1.5 space-y-0.5 text-xs font-extrabold">
+                    <button
+                      onClick={() => {
+                        onNavigate?.('users');
+                        setShowProfileMenu(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-black hover:bg-slate-500/10 transition-all text-left cursor-pointer"
+                      style={{ color: 'var(--text-primary)' }}
+                    >
+                      <User className="w-4 h-4 text-indigo-500" />
+                      <span>Comptes Utilisateurs & Accès</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        onNavigate?.('audit');
+                        setShowProfileMenu(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-black hover:bg-slate-500/10 transition-all text-left cursor-pointer"
+                      style={{ color: 'var(--text-primary)' }}
+                    >
+                      <ShieldCheck className="w-4 h-4 text-violet-500" />
+                      <span>Journal d'Audit Système</span>
+                    </button>
+
                     <button
                       onClick={() => {
                         onNavigate?.('settings');
@@ -505,8 +690,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-black hover:bg-slate-500/10 transition-all text-left cursor-pointer"
                       style={{ color: 'var(--text-primary)' }}
                     >
-                      <Settings className="w-4 h-4 text-indigo-500" />
-                      <span>Paramètres Système & Accès</span>
+                      <Settings className="w-4 h-4 text-slate-500" />
+                      <span>Paramètres Établissement</span>
                     </button>
 
                     <button
@@ -523,14 +708,30 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                     <div className="my-1 border-t" style={{ borderColor: 'var(--border)' }} />
 
+                    {onOpenAccountSwitcher && (
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          onOpenAccountSwitcher();
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-black text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-all text-left cursor-pointer"
+                      >
+                        <Users className="w-4 h-4 text-indigo-500" />
+                        <span>Changer de Compte</span>
+                      </button>
+                    )}
+
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         setShowProfileMenu(false);
+                        try {
+                          await LocalDatabaseService.logAction('DECONNEXION', 'SYSTEME', undefined, undefined, { role: userRole });
+                        } catch {}
                         if (onLogout) onLogout();
                       }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-black text-red-500 hover:bg-red-500/10 transition-all text-left cursor-pointer"
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-black text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-all text-left cursor-pointer"
                     >
-                      <LogOut className="w-4 h-4 text-red-500" />
+                      <LogOut className="w-4 h-4 text-rose-500" />
                       <span>Verrouiller la Session</span>
                     </button>
                   </div>
@@ -542,7 +743,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* LIGNE INFÉRIEURE : BARRE DE NAVIGATION PRINCIPALE DES PÔLES (MENU STRIP DE GRANDE CLASSE) */}
         <div className="flex items-center gap-1 overflow-x-auto sidebar-scroll pt-1.5 border-t" style={{ borderColor: 'var(--border)' }}>
-          {NAV_CATEGORIES.map((cat) => {
+          {filteredNavCategories.map((cat) => {
             const CatIcon = cat.icon;
             const isCatActive = cat.tabs.includes(activeTab);
             return (
@@ -558,17 +759,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           })}
         </div>
       </header>
-
-      {/* OVERLAY FERMETURE MENUS */}
-      {(showProfileMenu || showNotifMenu) && (
-        <div
-          className="fixed inset-0 z-40 bg-black/10"
-          onClick={() => {
-            setShowNotifMenu(false);
-            setShowProfileMenu(false);
-          }}
-        />
-      )}
 
       {/* PALETTE DE COMMANDES (CTRL+K) */}
       <CommandPalette

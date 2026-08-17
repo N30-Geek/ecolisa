@@ -5,6 +5,7 @@ import { MembrePersonnel, RôleSystème } from '../../types';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
 import { NumberInput } from '../common/NumberInput';
+import { PhoneInput } from '../common/PhoneInput';
 import { WebcamCaptureModal } from '../common/WebcamCaptureModal';
 
 interface StaffModalProps {
@@ -128,7 +129,7 @@ export const StaffModal: React.FC<StaffModalProps> = ({
         specialite: formData.specialite || '',
         dateEmbauche: formData.dateEmbauche || new Date().toISOString().split('T')[0],
         salaireBase: Number(formData.salaireBase) || 0,
-        devise: (formData.devise as 'USD' | 'CDF') || 'USD',
+        devise: (formData.devise as string) || 'USD',
         statut: (formData.statut as any) || 'ACTIF',
         avatarUrl: formData.photoUrl || formData.avatarUrl || '',
         photoUrl: formData.photoUrl || formData.avatarUrl || '',
@@ -389,6 +390,133 @@ export const StaffModal: React.FC<StaffModalProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Affectation Spécifique Pédagogique (si Enseignant) */}
+              {formData.role === 'ENSEIGNANT' && (
+                <div className="p-4 rounded-xl border space-y-4 animate-fade-in" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                      Affectation Pédagogique par Cycle & Classe
+                    </h4>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 border border-indigo-500/20">
+                      Accès Restreint aux Cours Attributes
+                    </span>
+                  </div>
+
+                  {/* Choix du Cycle */}
+                  <div>
+                    <label className="text-xs font-bold block mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                      Cycle d'Enseignement Principal *
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { id: 'MATERNELLE', label: '🎨 Maternelle' },
+                        { id: 'PRIMAIRE', label: '📘 Primaire' },
+                        { id: 'SECONDAIRE', label: '🔬 Secondaire (CTEB & Humanités)' },
+                      ].map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setFormData({
+                            ...formData,
+                            cyclePrincipal: c.id as any,
+                            estTitulaire: c.id === 'MATERNELLE' || c.id === 'PRIMAIRE' ? true : formData.estTitulaire,
+                          })}
+                          className={`py-2 px-3 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                            formData.cyclePrincipal === c.id || (!formData.cyclePrincipal && c.id === 'SECONDAIRE')
+                              ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
+                              : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-800 hover:bg-indigo-500/10'
+                          }`}
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* CAS MATERNELLE OU PRIMAIRE : Salle unique & titulaire automatique */}
+                  {(formData.cyclePrincipal === 'MATERNELLE' || formData.cyclePrincipal === 'PRIMAIRE') && (
+                    <div className="space-y-3 p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs animate-fade-in">
+                      <p className="font-bold text-indigo-700 dark:text-indigo-300">
+                        ℹ️ En {formData.cyclePrincipal === 'MATERNELLE' ? 'Maternelle' : 'Primaire'}, l'enseignant est l'unique maître/titulaire de sa classe et dispense toutes les matières.
+                      </p>
+                      <div>
+                        <label className="text-xs font-bold block mb-1" style={{ color: 'var(--text-primary)' }}>
+                          Salle / Classe Attribuée (ex: 1ère Année A / Salle 04)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Nom de la salle ou promotion (ex: 3ème Primaire B)"
+                          value={formData.salleUniqueId || formData.classeTitulaireId || ''}
+                          onChange={e => setFormData({ ...formData, salleUniqueId: e.target.value, classeTitulaireId: e.target.value, estTitulaire: true })}
+                          className="w-full px-3 py-2 rounded-lg border text-xs font-bold outline-none"
+                          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CAS SECONDAIRE : Classes, Cours & Titularisation */}
+                  {(formData.cyclePrincipal === 'SECONDAIRE' || !formData.cyclePrincipal) && (
+                    <div className="space-y-3 animate-fade-in">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-bold block mb-1" style={{ color: 'var(--text-primary)' }}>
+                            Classes Attribuées (séparées par des virgules)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="ex: 7e CTEB A, 8e CTEB B, 1e Math-Physique"
+                            value={(formData.classesAssignees || []).join(', ')}
+                            onChange={e => setFormData({ ...formData, classesAssignees: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                            className="w-full px-3 py-2 rounded-lg border text-xs font-bold outline-none"
+                            style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold block mb-1" style={{ color: 'var(--text-primary)' }}>
+                            Cours / Matières Attribués (séparés par des virgules)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="ex: Mathématiques, Physique, Chimie"
+                            value={(formData.coursAttribues || formData.disciplines || []).join(', ')}
+                            onChange={e => setFormData({
+                              ...formData,
+                              coursAttribues: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
+                              disciplines: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
+                            })}
+                            className="w-full px-3 py-2 rounded-lg border text-xs font-bold outline-none"
+                            style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-4 pt-1">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
+                          <input
+                            type="checkbox"
+                            checked={!!formData.estTitulaire}
+                            onChange={e => setFormData({ ...formData, estTitulaire: e.target.checked })}
+                            className="w-4 h-4 rounded border-slate-300 accent-indigo-600"
+                          />
+                          Est Titulaire de Classe ou d'Option
+                        </label>
+                        {formData.estTitulaire && (
+                          <input
+                            type="text"
+                            placeholder="Classe/Option titularisée (ex: 4e Humanités Math-Physique)"
+                            value={formData.classeTitulaireId || formData.optionTitulaireCode || ''}
+                            onChange={e => setFormData({ ...formData, classeTitulaireId: e.target.value, optionTitulaireCode: e.target.value })}
+                            className="flex-1 px-3 py-1.5 rounded-lg border text-xs font-bold outline-none"
+                            style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Coordonnées & Rémunération */}
@@ -402,13 +530,10 @@ export const StaffModal: React.FC<StaffModalProps> = ({
                   <label className="text-xs font-bold block mb-1.5" style={{ color: 'var(--text-primary)' }}>
                     Téléphone Principal (WhatsApp)
                   </label>
-                  <input
-                    type="tel"
-                    placeholder="ex: +243 81 234 56 78"
+                  <PhoneInput
                     value={formData.telephone || ''}
-                    onChange={(e) => setFormData({ ...formData, telephone: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border text-xs font-bold transition-all focus:ring-2 focus:ring-indigo-500 outline-none"
-                    style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                    onChange={(val) => setFormData({ ...formData, telephone: val })}
+                    className="w-full"
                   />
                 </div>
 
@@ -449,7 +574,7 @@ export const StaffModal: React.FC<StaffModalProps> = ({
                   <CustomSelect
                     options={currencyOptions}
                     value={formData.devise || 'USD'}
-                    onChange={(v) => setFormData({ ...formData, devise: v as 'USD' | 'CDF' })}
+                    onChange={(v) => setFormData({ ...formData, devise: v as string })}
                   />
                 </div>
               </div>

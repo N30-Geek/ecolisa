@@ -38,6 +38,8 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
+import { Currency } from '../../utils/currency';
+import { PhoneInput } from '../common/PhoneInput';
 import { PROVINCES_RDC, NATIONAL_EPST_OPTIONS } from '../../data/referentielEPST';
 import { LocalDatabaseService } from '../../services/localDatabase';
 
@@ -102,6 +104,15 @@ export interface CardCustomization {
   cardBgColor?: string;
 }
 
+export interface NumberFormatConfig {
+  thousandsSeparator: ',' | ' ' | '.' | '';
+  decimalSeparator: '.' | ',';
+  decimalPlaces: number;
+  showCurrencySymbol: boolean;
+  currencyPosition: 'before' | 'after';
+  preset?: 'US' | 'FR' | 'DE' | 'NONE' | 'CUSTOM';
+}
+
 export interface SchoolConfig {
   schoolName: string;
   secopeCode: string;
@@ -118,8 +129,13 @@ export interface SchoolConfig {
   logoUrl: string;
   selectedCycles: string[];
   selectedOptions: string[];
-  currency: 'USD' | 'CDF';
+  /** @deprecated utilisez currencies/referenceCurrency/displayCurrency */
+  currency: string;
+  /** @deprecated remplacé par les taux dans currencies */
   exchangeRate: number;
+  currencies?: Currency[];
+  referenceCurrency?: string;
+  displayCurrency?: string;
   subscriptionPlan: 'MENSUEL' | 'ANNUEL' | 'PERPETUEL';
   paymentMethod: 'MOBILE_MONEY' | 'VIREMENT_BANCAIRE';
   promoterName: string;
@@ -130,6 +146,9 @@ export interface SchoolConfig {
   activeSchoolYear: string;
   hwid: string;
   cardCustomization?: CardCustomization;
+  thermalPrinterName?: string;
+  directSilentPrint?: boolean;
+  numberFormat?: NumberFormatConfig;
 }
 
 interface OnboardingWizardProps {
@@ -230,7 +249,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
   // Étape 4 : Licence du Logiciel, Abonnement & Monnaie (Local-First)
   const [subscriptionPlan, setSubscriptionPlan] = useState<'MENSUEL' | 'ANNUEL' | 'PERPETUEL'>('ANNUEL');
   const [paymentMethod, setPaymentMethod] = useState<'MOBILE_MONEY' | 'VIREMENT_BANCAIRE'>('MOBILE_MONEY');
-  const [currency, setCurrency] = useState<'USD' | 'CDF'>('USD');
+  const [currency, setCurrency] = useState<string>('USD');
   const [exchangeRate, setExchangeRate] = useState<number>(2850);
   const [activeSchoolYear, setActiveSchoolYear] = useState<string>('2025–2026');
 
@@ -243,6 +262,43 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         if (h) setHwid(h);
       });
     }
+
+    // Charger la configuration existante si déjà créée (pour édition)
+    LocalDatabaseService.getConfig('school_config').then((cfg: SchoolConfig | null) => {
+      const existing = cfg || (() => {
+        try {
+          const raw = localStorage.getItem('ecolisa_school_config');
+          return raw ? JSON.parse(raw) : null;
+        } catch { return null; }
+      })();
+
+      if (existing) {
+        if (existing.schoolName) setSchoolName(existing.schoolName);
+        if (existing.secopeCode) setSecopeCode(existing.secopeCode);
+        if (existing.schoolType) setSchoolType(existing.schoolType);
+        if (existing.schoolStatus) setSchoolStatus(existing.schoolStatus);
+        if (existing.regime) setRegime(existing.regime);
+        if (existing.arreteAgrement) setArreteAgrement(existing.arreteAgrement);
+        if (existing.province) setProvince(existing.province);
+        if (existing.subDivision) setSubDivision(existing.subDivision);
+        if (existing.address) setAddress(existing.address);
+        if (existing.phone) setPhone(existing.phone);
+        if (existing.email) setEmail(existing.email);
+        if (existing.motto) setMotto(existing.motto);
+        if (existing.logoUrl) setLogoUrl(existing.logoUrl);
+        if (existing.selectedCycles) setSelectedCycles(existing.selectedCycles);
+        if (existing.selectedOptions) setSelectedOptions(existing.selectedOptions);
+        if (existing.promoterName) setPromoterName(existing.promoterName);
+        if (existing.promoterRole) setPromoterRole(existing.promoterRole);
+        if (existing.promoterEmail) setPromoterEmail(existing.promoterEmail);
+        if (existing.promoterPhone2FA) setPromoterPhone2FA(existing.promoterPhone2FA);
+        if (existing.promoterPinCode) setPromoterPinCode(existing.promoterPinCode);
+        if (existing.currency) setCurrency(existing.currency);
+        if (existing.exchangeRate) setExchangeRate(existing.exchangeRate);
+        if (existing.subscriptionPlan) setSubscriptionPlan(existing.subscriptionPlan);
+        if (existing.activeSchoolYear) setActiveSchoolYear(existing.activeSchoolYear);
+      }
+    });
   }, []);
 
   const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -347,54 +403,121 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
       origin: { y: 0.55 },
     });
 
+    // Construire le tableau de devises complété avec le taux de change configuré
+    const configuredCurrencies: Currency[] = [
+      { code: 'USD', name: 'Dollar américain', symbol: '$', rateToReference: 1, isReference: currency === 'USD' },
+      { code: 'CDF', name: 'Franc congolais', symbol: 'Fc', rateToReference: exchangeRate || 2850, isReference: currency === 'CDF' },
+      { code: 'XAF', name: 'Franc CFA BEAC', symbol: 'FCFA', rateToReference: 600 },
+      { code: 'FCFA', name: 'Franc CFA BCEAO', symbol: 'FCFA', rateToReference: 655 },
+      { code: 'EUR', name: 'Euro', symbol: '€', rateToReference: 0.92 },
+    ];
+
     const fullConfig: SchoolConfig = {
-      schoolName,
-      secopeCode,
+      schoolName: schoolName.trim(),
+      secopeCode: secopeCode.trim(),
       schoolType,
       schoolStatus,
       regime,
-      arreteAgrement,
+      arreteAgrement: arreteAgrement.trim(),
       province,
-      subDivision,
-      address,
-      phone,
-      email,
-      motto,
+      subDivision: subDivision.trim(),
+      address: address.trim(),
+      phone: phone.trim(),
+      email: email.trim(),
+      motto: motto.trim(),
       logoUrl,
       selectedCycles,
       selectedOptions,
       currency,
-      exchangeRate,
+      exchangeRate: exchangeRate || 2850,
+      currencies: configuredCurrencies,
+      referenceCurrency: currency || 'USD',
+      displayCurrency: currency || 'USD',
       subscriptionPlan,
       paymentMethod,
-      promoterName,
+      promoterName: promoterName.trim(),
       promoterRole,
-      promoterEmail,
-      promoterPhone2FA,
-      promoterPinCode,
+      promoterEmail: promoterEmail.trim(),
+      promoterPhone2FA: promoterPhone2FA.trim(),
+      promoterPinCode: promoterPinCode.trim(),
       activeSchoolYear,
       hwid,
     };
 
-    // 1. Créer le compte administrateur principal dans SQLite (mdp haché côté main process)
     const [prenom, ...restNom] = promoterName.trim().split(' ');
-    await LocalDatabaseService.addUser({
-      id:        `usr_admin_${Date.now()}`,
-      email:     promoterEmail.trim(),
-      nom:       restNom.join(' ') || prenom,
-      prenom:    restNom.length > 0 ? prenom : '',
-      role:      promoterRole as any,
-      pinCode:   promoterPinCode,
-      statut:    'ACTIF',
-      telephone: promoterPhone2FA,
-      password:  promoterPassword, // hashé dans le main process (scrypt 512-bit)
-    } as any);
+    const nomFamille = restNom.join(' ') || prenom;
+    const prenomAdmin = restNom.length > 0 ? prenom : '';
 
-    // 2. Sauvegarder la config dans SQLite via IPC
+    // Vérifier si un compte admin existe déjà pour mettre à jour plutôt que dupliquer
+    const existingUsers = await LocalDatabaseService.getUsers();
+    const existingAdmin = existingUsers.find(u => u.role === 'PROMOTEUR_ADMIN');
+
+    if (existingAdmin) {
+      await LocalDatabaseService.updateUser(existingAdmin.id, {
+        email:     promoterEmail.trim(),
+        nom:       nomFamille,
+        prenom:    prenomAdmin,
+        pinCode:   promoterPinCode.trim(),
+        telephone: promoterPhone2FA.trim(),
+        ...(promoterPassword ? { password: promoterPassword, generatedPassword: promoterPassword } : {}),
+      } as any);
+    } else {
+      // 1. Créer le compte utilisateur administrateur dans SQLite
+      await LocalDatabaseService.addUser({
+        id:        `usr_admin_${Date.now()}`,
+        email:     promoterEmail.trim(),
+        nom:       nomFamille,
+        prenom:    prenomAdmin,
+        role:      promoterRole as any,
+        pinCode:   promoterPinCode.trim(),
+        statut:    'ACTIF',
+        telephone: promoterPhone2FA.trim(),
+        password:  promoterPassword, // hashé dans le main process (scrypt 512-bit)
+      } as any);
+    }
+
+    // 2. ÉGALEMENT enregistrer/mettre à jour le Promoteur/Admin dans le Registre RH du Personnel (MembrePersonnel)
+    const existingStaff = await LocalDatabaseService.getStaff();
+    const existingAdminStaff = existingStaff.find(s => s.role === 'PROMOTEUR_ADMIN' || s.email === promoterEmail.trim());
+
+    if (existingAdminStaff) {
+      await LocalDatabaseService.updateStaff(existingAdminStaff.id, {
+        nom: nomFamille,
+        prenom: prenomAdmin,
+        email: promoterEmail.trim(),
+        telephone: promoterPhone2FA.trim(),
+        titreOfficiel: 'Promoteur & Administrateur Général',
+      });
+    } else {
+      await LocalDatabaseService.addStaff({
+        id: `staff_admin_${Date.now()}`,
+        matricule: `ADM-${Math.floor(100 + Math.random() * 900)}`,
+        nom: nomFamille,
+        prenom: prenomAdmin,
+        email: promoterEmail.trim(),
+        telephone: promoterPhone2FA.trim(),
+        role: promoterRole,
+        titreOfficiel: 'Promoteur & Administrateur Général',
+        qualification: 'Administration Scolaire & Direction',
+        statut: 'ACTIF',
+        typeContrat: 'PERMANENT',
+        dateEmbauche: new Date().toISOString().split('T')[0],
+        createdAt: new Date().toISOString(),
+      } as any);
+    }
+
+    // 3. Sauvegarder la config dans SQLite via IPC
     await LocalDatabaseService.setConfig('school_config', fullConfig);
     await LocalDatabaseService.setConfig('onboarding_completed', true);
     // Garder une copie légère dans localStorage pour la compatibilité UI
     localStorage.setItem('ecolisa_school_config', JSON.stringify(fullConfig));
+    localStorage.setItem('ecolisa_user_display_currency', currency || 'USD');
+
+    // Déclencher les événements globaux de synchronisation
+    try {
+      window.dispatchEvent(new Event('ecolisa:config:change'));
+      window.dispatchEvent(new Event('ecolisa:currency:change'));
+    } catch {}
 
     onComplete(fullConfig);
   };
@@ -683,13 +806,10 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                   <label className="text-xs font-extrabold uppercase text-slate-800 dark:text-slate-200 tracking-wide">
                     Téléphone Secrétariat
                   </label>
-                  <input
-                    type="text"
+                  <PhoneInput
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+243 81 000 0000"
-                    className="w-full px-4 py-2.5 rounded-xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-                    style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                    onChange={setPhone}
+                    className="w-full"
                   />
                 </div>
 

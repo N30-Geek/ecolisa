@@ -21,6 +21,8 @@ import { Eleve, FactureEleve, TransactionPaiement, Cote } from '../../types';
 import { BulletinCTBEModal } from './BulletinCTBEModal';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
+import { formatCurrency, convertCurrency } from '../../utils/currency';
+import { getInvoiceTotal, getPaymentAmount, getStudentTotalDue, round2 } from '../../utils/financeCalculations';
 
 interface StudentFullFileModalProps {
   isOpen: boolean;
@@ -33,7 +35,7 @@ export const StudentFullFileModal: React.FC<StudentFullFileModalProps> = ({
   onClose,
   student
 }) => {
-  const { config } = useSchoolConfig();
+  const { config, currency } = useSchoolConfig();
   const [showCTBEBulletin, setShowCTBEBulletin] = useState(false);
 
   // Chargement des données réelles depuis la base de données SQLite
@@ -49,8 +51,13 @@ export const StudentFullFileModal: React.FC<StudentFullFileModalProps> = ({
       setLoadingData(true);
       try {
         const [invList, payList, coteList] = await Promise.all([
-          LocalDatabaseService.getInvoices().then(all => (all || []).filter(i => i.studentId === student.id || i.eleveId === student.id)).catch(() => []),
-          LocalDatabaseService.getPayments().then(all => (all || []).filter(p => p.registrationNumber === student.registrationNumber || p.nomEleve?.toLowerCase().includes(student.nom.toLowerCase()))).catch(() => []),
+          LocalDatabaseService.getInvoices().then(all => (all || []).filter(i => i.eleveId === student.id || i.studentId === student.id || i.studentId === student.registrationNumber)).catch(() => []),
+          LocalDatabaseService.getPayments().then(all => (all || []).filter(p =>
+            p.eleveId === student.id ||
+            p.studentId === student.id ||
+            p.studentId === student.registrationNumber ||
+            p.registrationNumber === student.registrationNumber
+          )).catch(() => []),
           LocalDatabaseService.getCotes({ eleveId: student.id }).catch(() => []),
         ]);
         if (!isMounted) return;
@@ -86,17 +93,21 @@ export const StudentFullFileModal: React.FC<StudentFullFileModalProps> = ({
 
   // Synthèse Financière Réelle
   const financialSummary = useMemo(() => {
-    const totalDue = invoices.reduce((sum, inv) => sum + (inv.montantTotal || 0), 0);
-    const totalPaid = payments.reduce((sum, p) => sum + (p.montantPaye || 0), 0);
-    const balance = Math.max(0, totalDue - totalPaid);
-    const isSolvable = totalDue > 0 ? balance <= 0 : true;
-    const statusText = totalDue === 0 && totalPaid === 0
+    const totalDue = getStudentTotalDue(invoices, currency);
+    const totalPaid = payments.reduce((sum, p) => sum + getPaymentAmount(p, currency), 0);
+    const net = round2(totalDue - totalPaid);
+    const isCredit = net < -0.10;
+    const balance = isCredit ? net : Math.max(0, net);
+    const isSolvable = totalDue > 0.001 && net <= 0.10;
+    const statusText = totalDue <= 0.001 && totalPaid <= 0.001
       ? 'Aucune facture émise'
+      : isCredit
+      ? `Crédit : ${formatCurrency(Math.abs(balance), currency)} (payé ${formatCurrency(totalPaid, currency)} / dû ${formatCurrency(totalDue, currency)})`
       : isSolvable
-      ? `100% Soldé (${totalPaid} $ / ${totalDue} $)`
-      : `Solde en attente (${totalPaid} $ / ${totalDue} $ — Solde : ${balance} $)`;
-    return { totalDue, totalPaid, balance, isSolvable, statusText };
-  }, [invoices, payments]);
+      ? `100% Soldé (${formatCurrency(totalPaid, currency)} / ${formatCurrency(totalDue, currency)})`
+      : `Solde en attente (${formatCurrency(totalPaid, currency)} / ${formatCurrency(totalDue, currency)} — Solde : ${formatCurrency(balance, currency)})`;
+    return { totalDue, totalPaid, balance, isSolvable, isCredit, statusText };
+  }, [invoices, payments, currency]);
 
   if (!isOpen) return null;
 
@@ -183,7 +194,7 @@ export const StudentFullFileModal: React.FC<StudentFullFileModalProps> = ({
         <h2>1. ÉTAT CIVIL & IDENTITÉ OFFICIELLE</h2>
         <table class="data-grid">
           <tr><th width="35%">Nom Complet de l'Élève</th><td><b>${student.nom} ${student.postnom || ''} ${student.prenom}</b></td></tr>
-          <tr><th>Classe Actuelle & Section</th><td><b>${student.nomClasse}</b></td></tr>
+          <tr><th>Classe Actuelle & Section</th><td><b>${student.nomClasse}${student.salle ? ' — Salle ' + student.salle : ''}</b></td></tr>
           <tr><th>Date & Lieu de Naissance</th><td>${student.dateNaissance || 'Non renseignée'} à ${student.lieuNaissance || 'Non renseigné'}</td></tr>
           <tr><th>Sexe / Genre</th><td>${student.sexe === 'M' ? 'Masculin' : 'Féminin'}</td></tr>
           <tr><th>Adresse Physique Domicile</th><td>${student.adressePhysique || 'Non renseignée'}</td></tr>
@@ -197,7 +208,7 @@ export const StudentFullFileModal: React.FC<StudentFullFileModalProps> = ({
         <h2>2. TUTEURS LÉGAUX & CONTACTS FAMILLE</h2>
         <table class="data-grid">
           <tr>
-            <th width="35%">Père / Tuteur Principal</th>
+            <th width="35%">Père</th>
             <td><b>${student.nomPere || student.nomParent || 'Non renseigné'}</b><br/>Profession: ${student.professionPere || 'Non renseignée'}<br/>Tél: <b>${student.telephonePere || student.telephoneParent || 'Non renseigné'}</b><br/>Email: ${student.emailPere || student.emailParent || 'Non renseigné'}</td>
           </tr>
           <tr>
@@ -419,7 +430,7 @@ export const StudentFullFileModal: React.FC<StudentFullFileModalProps> = ({
               </div>
               <div className="flex border-b border-slate-200 py-1">
                 <span className="w-36 text-slate-500 font-bold">Classe Actuelle:</span>
-                <span className="font-black text-indigo-700">{student.nomClasse}</span>
+                <span className="font-black text-indigo-700">{student.nomClasse}{student.salle ? ` — Salle ${student.salle}` : ''}</span>
               </div>
               <div className="flex border-b border-slate-200 py-1">
                 <span className="w-36 text-slate-500 font-bold">Date & Lieu de Naissance:</span>
@@ -454,7 +465,7 @@ export const StudentFullFileModal: React.FC<StudentFullFileModalProps> = ({
 
             <div className="grid grid-cols-2 gap-4 text-xs">
               <div className="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-1">
-                <p className="font-black text-indigo-900 text-xs">Père / Tuteur Principal Légal</p>
+                <p className="font-black text-indigo-900 text-xs">Père</p>
                 <p className="font-bold text-slate-900">{student.nomPere || student.nomParent || 'Non renseigné'}</p>
                 <p className="text-slate-600 text-[11px]">Profession: <strong>{student.professionPere || 'Non renseignée'}</strong></p>
                 <p className="text-slate-600 text-[11px]">Téléphone: <strong className="font-mono text-indigo-700">{student.telephonePere || student.telephoneParent || 'Non renseigné'}</strong></p>
@@ -514,6 +525,95 @@ export const StudentFullFileModal: React.FC<StudentFullFileModalProps> = ({
                 <p className="text-[10px] font-black uppercase text-slate-500">Compte Minerval</p>
                 <p className="text-sm font-black text-emerald-700 mt-0.5">{financialSummary.statusText}</p>
                 <p className="text-[10px] font-bold text-slate-400">Paiements enregistrés</p>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 5 : DOSSIER COMPLÉMENTAIRE & INFORMATIONS DIVERSES */}
+          <div className="mb-6 space-y-3">
+            <h2 className="text-xs font-black uppercase tracking-wider text-indigo-900 border-b pb-1 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-indigo-700" /> 5. DOSSIER COMPLÉMENTAIRE & OPTIONS SCOLAIRES
+            </h2>
+
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">N° Acte de Naissance :</span>
+                <span className="font-black text-slate-900">{student.numeroActeNaissance || '—'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">École d'Origine :</span>
+                <span className="font-bold text-slate-900">{student.ecoleOrigine || '—'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Religion :</span>
+                <span className="font-bold text-slate-900">
+                  {student.religion === 'AUTRE' ? (student.religionAutre || '—') : (student.religion || '—')}
+                </span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Langue Maternelle :</span>
+                <span className="font-bold text-slate-900">{student.langueMaternelle || '—'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Langue d'Instruction :</span>
+                <span className="font-bold text-slate-900">{student.langueInstruction || student.langue || '—'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Régime :</span>
+                <span className="font-bold text-slate-900">{student.regime || '—'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Tél. de l'Élève :</span>
+                <span className="font-mono font-bold text-slate-900">{student.telephoneEleve || '—'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Email de l'Élève :</span>
+                <span className="font-mono font-bold text-slate-900">{student.emailEleve || '—'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Transport Scolaire :</span>
+                <span className="font-bold text-slate-900">{student.transportScolaire || '—'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Cantine / Internat :</span>
+                <span className="font-bold text-slate-900">
+                  {student.cantine ? 'Cantine ' : ''}{student.internat ? 'Internat' : ''}{!student.cantine && !student.internat ? '—' : ''}
+                </span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Boursier :</span>
+                <span className="font-bold text-slate-900">{student.boursier ? 'Oui' : 'Non'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Aide Sociale :</span>
+                <span className="font-bold text-slate-900">{student.aideSociale ? 'Oui' : 'Non'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Handicap / Aptitudes :</span>
+                <span className="font-bold text-slate-900">{[student.handicap, student.aptitudes].filter(Boolean).join(' / ') || 'Aucun'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Vaccinations :</span>
+                <span className="font-bold text-slate-900">{student.vaccinations || '—'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Médecin Traitant :</span>
+                <span className="font-bold text-slate-900">{student.medecinTraitant || '—'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Assurance Santé :</span>
+                <span className="font-bold text-slate-900">{student.assuranceSante || '—'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">N° Carte Santé :</span>
+                <span className="font-mono font-bold text-slate-900">{student.numeroCarteSante || '—'}</span>
+              </div>
+              <div className="flex border-b border-slate-200 py-1.5">
+                <span className="w-40 text-slate-500 font-bold">Contact en Urgence :</span>
+                <span className="font-bold text-slate-900">
+                  {student.nomReferentUrgence || '—'}
+                  {student.telephoneReferentUrgence ? ` · ${student.telephoneReferentUrgence}` : ''}
+                </span>
               </div>
             </div>
           </div>

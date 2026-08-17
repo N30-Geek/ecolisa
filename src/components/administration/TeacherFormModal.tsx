@@ -5,6 +5,7 @@ import { MembrePersonnel, GradeEnseignant, TypeContratPersonnel } from '../../ty
 import { CustomSelect } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
 import { NumberInput } from '../common/NumberInput';
+import { PhoneInput } from '../common/PhoneInput';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -97,12 +98,24 @@ export const TeacherFormModal: React.FC<TeacherFormModalProps> = ({
     const d = disciplineInput.trim();
     if (!d) return;
     const current = form.disciplines || [];
-    if (!current.includes(d)) set('disciplines', [...current, d]);
+    const currentCours = form.coursAttribues || [];
+    if (!current.includes(d)) {
+      setForm(prev => ({
+        ...prev,
+        disciplines: [...current, d],
+        coursAttribues: [...currentCours, d],
+      }));
+    }
     setDisciplineInput('');
   };
 
-  const removeDiscipline = (d: string) =>
-    set('disciplines', (form.disciplines || []).filter(x => x !== d));
+  const removeDiscipline = (d: string) => {
+    setForm(prev => ({
+      ...prev,
+      disciplines: (prev.disciplines || []).filter(x => x !== d),
+      coursAttribues: (prev.coursAttribues || []).filter(x => x !== d),
+    }));
+  };
 
   const handleSave = async () => {
     setLoading(true);
@@ -220,22 +233,18 @@ export const TeacherFormModal: React.FC<TeacherFormModalProps> = ({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelCls} style={labelStyle}>Téléphone principal <span className="text-red-500">*</span></label>
-          <input
-            className={inputCls}
-            style={inputStyle}
+          <PhoneInput
             value={form.telephone}
-            onChange={e => set('telephone', e.target.value)}
-            placeholder="+243 81x xxx xxxx"
+            onChange={val => set('telephone', val)}
+            className="w-full"
           />
         </div>
         <div>
           <label className={labelCls} style={labelStyle}>Téléphone secondaire</label>
-          <input
-            className={inputCls}
-            style={inputStyle}
+          <PhoneInput
             value={form.telephoneSecondaire || ''}
-            onChange={e => set('telephoneSecondaire', e.target.value)}
-            placeholder="+243 97x xxx xxxx"
+            onChange={val => set('telephoneSecondaire', val)}
+            className="w-full"
           />
         </div>
       </div>
@@ -459,7 +468,7 @@ export const TeacherFormModal: React.FC<TeacherFormModalProps> = ({
           <label className={labelCls} style={labelStyle}>Devise</label>
           <CustomSelect
             value={form.devise}
-            onChange={v => set('devise', v as 'USD' | 'CDF')}
+            onChange={v => set('devise', v as string)}
             options={[
               { value: 'USD', label: 'Dollar américain (USD)' },
               { value: 'CDF', label: 'Franc congolais (CDF)' },

@@ -9,6 +9,7 @@ import { MembrePersonnel, TypeContratPersonnel, GradeEnseignant } from '../../ty
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
 import { NumberInput } from '../common/NumberInput';
+import { PhoneInput } from '../common/PhoneInput';
 import { WebcamCaptureModal } from '../common/WebcamCaptureModal';
 
 interface StaffFormPageProps {
@@ -285,7 +286,7 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
         mobileMoneyOperateur: formData.mobileMoneyOperateur || '',
         mobileMoneyNumero: formData.mobileMoneyNumero || '',
         salaireBase: Number(formData.salaireBase) || 0,
-        devise: (formData.devise as 'USD' | 'CDF') || 'USD',
+        devise: (formData.devise as string) || 'USD',
         statut: (formData.statut as any) || 'ACTIF',
         // Santé & Urgences
         groupeSanguin: (formData.groupeSanguin as any) || 'O+',
@@ -356,7 +357,7 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
           style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
         >
           <ArrowLeft className="w-4 h-4 text-indigo-500" />
-          <span>Retour au Répertoire du Personnel</span>
+          <span>{staffToEdit ? 'Retour au Profil' : 'Retour au Répertoire'}</span>
         </button>
 
         <div className="flex items-center gap-3">
@@ -404,7 +405,7 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                 }`}
               >
                 <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[11px]">1</span>
-                <span className="truncate">1. Identité & Famille</span>
+                <span className="truncate">Identité & Famille</span>
               </button>
 
               <button
@@ -417,7 +418,7 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                 }`}
               >
                 <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[11px]">2</span>
-                <span className="truncate">2. Contrat & Paie</span>
+                <span className="truncate">Contrat & Paie</span>
               </button>
 
               <button
@@ -430,7 +431,7 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                 }`}
               >
                 <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[11px]">3</span>
-                <span className="truncate">3. Santé & Urgences</span>
+                <span className="truncate">Santé & Urgences</span>
               </button>
             </div>
           </div>
@@ -648,14 +649,11 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Téléphone Principal <span className="text-rose-500">*</span>
                       </label>
-                      <input
-                        type="tel"
-                        required
+                      <PhoneInput
                         value={formData.telephone || ''}
-                        onChange={(e) => setFormData({ ...formData, telephone: e.target.value })}
-                        placeholder="+243 ..."
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        onChange={(val) => setFormData({ ...formData, telephone: val })}
+                        required
+                        className="w-full"
                       />
                     </div>
 
@@ -663,13 +661,10 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Téléphone Secondaire / WhatsApp
                       </label>
-                      <input
-                        type="tel"
+                      <PhoneInput
                         value={formData.telephoneSecondaire || ''}
-                        onChange={(e) => setFormData({ ...formData, telephoneSecondaire: e.target.value })}
-                        placeholder="+243 ..."
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        onChange={(val) => setFormData({ ...formData, telephoneSecondaire: val })}
+                        className="w-full"
                       />
                     </div>
 
@@ -908,17 +903,72 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                   </div>
                 </div>
 
-                {/* Section Rémunération & Coordonnées Bancaires */}
+                {/* Section Rémunération & Calculateur Taux Horaire */}
                 <div className="p-4 rounded-xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-2">
-                    <Wallet className="w-4 h-4" />
-                    <span>Conditions Salariales & Versement</span>
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                      <Wallet className="w-4 h-4" />
+                      <span>Conditions Salariales & Calculateur de Paie</span>
+                    </h3>
+                  </div>
+
+                  {/* Calculateur interactif de Paie par Taux Horaire */}
+                  <div className="p-3.5 rounded-xl border bg-amber-500/10 border-amber-500/20 space-y-3">
+                    <p className="text-[11px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                      Calculateur Automatique (Volume Hebdomadaire & Taux Horaire)
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                      <div>
+                        <label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-primary)' }}>
+                          Volume Hebdo (h / sem.)
+                        </label>
+                        <NumberInput
+                          value={formData.volumeHoraireHebdo || 18}
+                          onChange={v => setFormData(prev => ({
+                            ...prev,
+                            volumeHoraireHebdo: v,
+                            salaireBase: prev.modeRemuneration === 'TAUX_HORAIRE' ? Math.round(v * 4 * (prev.tauxHoraireBase || 6.5)) : prev.salaireBase
+                          }))}
+                          min={1}
+                          integer
+                          placeholder="18"
+                          className="w-full px-3 py-1.5 rounded-lg text-xs font-bold border"
+                          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-primary)' }}>
+                          Taux Horaire ($ / h)
+                        </label>
+                        <NumberInput
+                          value={formData.tauxHoraireBase || 6.5}
+                          onChange={v => setFormData(prev => ({
+                            ...prev,
+                            tauxHoraireBase: v,
+                            salaireBase: prev.modeRemuneration === 'TAUX_HORAIRE' ? Math.round((prev.volumeHoraireHebdo || 18) * 4 * v) : prev.salaireBase
+                          }))}
+                          min={0}
+                          placeholder="6.5"
+                          className="w-full px-3 py-1.5 rounded-lg text-xs font-bold border"
+                          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        />
+                      </div>
+
+                      <div className="p-2.5 rounded-lg border bg-emerald-500/10 border-emerald-500/20 flex flex-col justify-center">
+                        <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400">Paie Mensuelle Estimée</span>
+                        <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
+                          {Math.round((formData.volumeHoraireHebdo || 18) * 4 * (formData.tauxHoraireBase || 6.5))} {formData.devise || 'USD'}
+                        </span>
+                        <span className="text-[9.5px] text-slate-400 font-semibold">({(formData.volumeHoraireHebdo || 18) * 4}h prestées / mois)</span>
+                      </div>
+                    </div>
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Salaire de Base Mensuel
+                        Salaire de Base Mensuel Fixé
                       </label>
                       <NumberInput
                         value={formData.salaireBase || 0}
@@ -999,13 +1049,11 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                         <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                           Numéro Mobile Money Enregistré
                         </label>
-                        <input
-                          type="tel"
+                        <PhoneInput
                           value={formData.mobileMoneyNumero || ''}
-                          onChange={(e) => setFormData({ ...formData, mobileMoneyNumero: e.target.value })}
-                          placeholder="+243 81..."
-                          className="w-full px-3.5 py-2 rounded-lg text-xs font-mono font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                          onChange={(val) => setFormData({ ...formData, mobileMoneyNumero: val })}
+                          placeholder="81 000 0000"
+                          className="w-full"
                         />
                       </div>
                     </div>
@@ -1143,14 +1191,11 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Téléphone Direct d'Urgence <span className="text-rose-500">*</span>
                       </label>
-                      <input
-                        type="tel"
-                        required
+                      <PhoneInput
                         value={formData.contactUrgenceTelephone || ''}
-                        onChange={(e) => setFormData({ ...formData, contactUrgenceTelephone: e.target.value })}
-                        placeholder="+243 ..."
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        onChange={(val) => setFormData({ ...formData, contactUrgenceTelephone: val })}
+                        required
+                        className="w-full"
                       />
                     </div>
 
@@ -1210,13 +1255,10 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Téléphone / Contact du Référent
                       </label>
-                      <input
-                        type="tel"
+                      <PhoneInput
                         value={formData.referenceContact || ''}
-                        onChange={(e) => setFormData({ ...formData, referenceContact: e.target.value })}
-                        placeholder="+243 ..."
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        onChange={(val) => setFormData({ ...formData, referenceContact: val })}
+                        className="w-full"
                       />
                     </div>
                   </div>

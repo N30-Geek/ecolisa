@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Building2,
   GraduationCap,
@@ -17,6 +17,7 @@ import {
   DollarSign,
   FileCheck,
   CreditCard,
+  Printer,
   SlidersHorizontal,
   Trash2
 } from 'lucide-react';
@@ -26,6 +27,8 @@ import { PROVINCES_RDC } from '../../data/referentielEPST';
 import { SchoolConfig } from '../onboarding/OnboardingWizard';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { CardSettingsPanel } from './CardSettingsPanel';
+import { CurrencySettingsPanel } from './CurrencySettingsPanel';
+import { Currency, DEFAULT_CURRENCIES, NumberFormatConfig, DEFAULT_NUMBER_FORMAT } from '../../utils/currency';
 
 const PROVINCE_OPTIONS: SelectOption[] = PROVINCES_RDC.map((p) => ({
   value: p,
@@ -60,8 +63,80 @@ interface SettingsManagerProps {
 }
 
 export const SettingsManager: React.FC<SettingsManagerProps> = ({ onOpenOnboarding }) => {
-  const [activeTab, setActiveTab] = useState<'school' | 'cycles' | 'promoter' | 'finance' | 'preferences' | 'system'>('school');
+  const [activeTab, setActiveTab] = useState<'school' | 'cycles' | 'promoter' | 'finance' | 'printer' | 'preferences' | 'system'>('school');
   const [isSaved, setIsSaved] = useState(false);
+  const [systemPrinters, setSystemPrinters] = useState<SelectOption[]>([]);
+
+  const [isRefreshingPrinters, setIsRefreshingPrinters] = useState(false);
+
+  const fetchPrinters = async () => {
+    setIsRefreshingPrinters(true);
+    const electron = (window as any).electronAPI;
+    try {
+      if (electron?.getPrinters) {
+        const list = await electron.getPrinters();
+        if (Array.isArray(list) && list.length > 0) {
+          const options = list.map((p: any) => ({
+            value: p.name,
+            label: `🖨️ ${p.displayName || p.name}${p.isDefault ? ' (Par défaut OS)' : ''}`,
+          }));
+          setSystemPrinters(options);
+
+          const defaultPrinter = list.find((p: any) => p.isDefault);
+          if (defaultPrinter && !config.thermalPrinterName) {
+            setConfig(prev => ({ ...prev, thermalPrinterName: defaultPrinter.name }));
+          }
+          setIsRefreshingPrinters(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Erreur getPrinters :', e);
+    }
+    setSystemPrinters([
+      { value: '', label: '🖨️ Imprimante par défaut Windows (Dialogue OS)' },
+    ]);
+    setIsRefreshingPrinters(false);
+  };
+
+  useEffect(() => {
+    fetchPrinters();
+  }, []);
+
+  const [currencies, setCurrencies] = useState<Currency[]>(() => {
+    const raw = localStorage.getItem('ecolisa_school_config');
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as Partial<SchoolConfig>;
+        if (parsed.currencies?.length) return parsed.currencies;
+      } catch {}
+    }
+    return DEFAULT_CURRENCIES;
+  });
+  const [referenceCurrency, setReferenceCurrency] = useState(() => {
+    const ref = currencies.find((c) => c.isReference)?.code || currencies[0]?.code || 'USD';
+    return ref;
+  });
+  const [displayCurrency, setDisplayCurrency] = useState(() => {
+    const raw = localStorage.getItem('ecolisa_school_config');
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as Partial<SchoolConfig>;
+        return parsed.displayCurrency || referenceCurrency;
+      } catch {}
+    }
+    return referenceCurrency;
+  });
+  const [numberFormat, setNumberFormat] = useState<NumberFormatConfig>(() => {
+    const raw = localStorage.getItem('ecolisa_school_config');
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as Partial<SchoolConfig>;
+        return { ...DEFAULT_NUMBER_FORMAT, ...parsed.numberFormat };
+      } catch {}
+    }
+    return DEFAULT_NUMBER_FORMAT;
+  });
 
   const defaultCardCustomization = {
     selectedFields: ['nom', 'postnom', 'prenom', 'dateNaissance', 'sexe', 'adressePhysique', 'provinceOrigine', 'nomClasse', 'registrationNumber'],
@@ -120,6 +195,9 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onOpenOnboardi
       selectedOptions: ['MATH_PHYS', 'COMMERCE', 'BIO_CHIMIE'],
       currency: 'USD',
       exchangeRate: 2850,
+      currencies: DEFAULT_CURRENCIES,
+      referenceCurrency: 'USD',
+      displayCurrency: 'USD',
       subscriptionPlan: 'ANNUEL',
       paymentMethod: 'MOBILE_MONEY',
       promoterName: 'Dr. Jean-Baptiste KABANGE',
@@ -134,8 +212,19 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onOpenOnboardi
   });
 
   const handleSave = async () => {
-    localStorage.setItem('ecolisa_school_config', JSON.stringify(config));
-    await LocalDatabaseService.setConfig('school_config', config);
+    const updated = {
+      ...config,
+      currencies,
+      referenceCurrency,
+      displayCurrency,
+      numberFormat,
+      exchangeRate: (currencies.find((c) => c.code === 'CDF')?.rateToReference) || config.exchangeRate || 2850,
+    };
+    localStorage.setItem('ecolisa_school_config', JSON.stringify(updated));
+    await LocalDatabaseService.setConfig('school_config', updated);
+    try {
+      window.dispatchEvent(new Event('ecolisa:config:change'));
+    } catch {}
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3000);
   };
@@ -199,8 +288,9 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onOpenOnboardi
           { id: 'cycles', label: '2. Cycles & Options EPST', icon: GraduationCap },
           { id: 'promoter', label: '3. Compte Promoteur & 2FA', icon: ShieldCheck },
           { id: 'finance', label: '4. Devise & Caisse', icon: Wallet },
-          { id: 'preferences', label: '5. Préférences', icon: SlidersHorizontal },
-          { id: 'system', label: '6. HWID & Système', icon: Cpu },
+          { id: 'printer', label: '5. Imprimante & Tickets', icon: Printer },
+          { id: 'preferences', label: '6. Cartes & Modèles', icon: SlidersHorizontal },
+          { id: 'system', label: '7. HWID & Système', icon: Cpu },
         ].map((t) => {
           const TabIcon = t.icon;
           const isActive = activeTab === t.id;
@@ -468,47 +558,118 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({ onOpenOnboardi
           </div>
         )}
 
-        {/* ONGLET 4 : DEVISE & CAISSE */}
+        {/* ONGLET 4 : DEVISE, CAISSE & IMPRIMANTE THERMIQUE */}
         {activeTab === 'finance' && (
-          <div className="space-y-4 animate-fade-in">
-            <h3 className="text-xs font-black uppercase text-indigo-400 tracking-wider">
-              Paramètres Monétaires & Comptabilité
-            </h3>
+          <div className="space-y-6">
+            <CurrencySettingsPanel
+              currencies={currencies}
+              onChange={setCurrencies}
+              referenceCurrency={referenceCurrency}
+              onReferenceChange={setReferenceCurrency}
+              displayCurrency={displayCurrency}
+              onDisplayChange={setDisplayCurrency}
+              numberFormat={numberFormat}
+              onNumberFormatChange={setNumberFormat}
+            />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase text-slate-400 tracking-wider">
-                  Devise Principale de Gestion
-                </label>
-                <CustomSelect
-                  options={[
-                    { value: 'USD', label: 'Dollar Américain (USD $)' },
-                    { value: 'CDF', label: 'Franc Congolais (CDF FC)' },
-                  ]}
-                  value={config.currency}
-                  onChange={(val) => setConfig({ ...config, currency: val as 'USD' | 'CDF' })}
-                  className="w-full"
-                />
-              </div>
+            {/* SECTEUR IMPRESSION THERMIQUE & REÇUS DE CAISSE */}
+            <div className="pt-4 border-t space-y-4" style={{ borderColor: 'var(--border)' }}>
+              <h3 className="text-xs font-black uppercase text-indigo-400 tracking-wider flex items-center gap-2">
+                <Printer className="w-4 h-4" /> Paramètres Imprimante Thermique & Impression Directe
+              </h3>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase text-slate-400 tracking-wider">
-                  Taux de Change Indicatif (1 USD en CDF)
-                </label>
-                <NumberInput
-                  value={config.exchangeRate}
-                  onChange={v => setConfig({ ...config, exchangeRate: v })}
-                  min={0}
-                  placeholder="Taux"
-                  className="w-full px-3.5 py-2 rounded-lg border font-black text-xs"
-                  style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-slate-400 tracking-wider">
+                    Imprimante Thermique (détection automatique OS)
+                  </label>
+                  <input
+                    type="text"
+                    value={config.thermalPrinterName || ''}
+                    placeholder="Sélectionnée automatiquement depuis l'onglet Imprimante"
+                    onChange={(e) => setConfig({ ...config, thermalPrinterName: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-lg border font-mono font-bold text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                    style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                  />
+                </div>
+
+                <div className="space-y-1.5 flex flex-col justify-end">
+                  <label className="flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-all" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <input
+                      type="checkbox"
+                      checked={config.directSilentPrint ?? true}
+                      onChange={(e) => setConfig({ ...config, directSilentPrint: e.target.checked })}
+                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-slate-200">Impression Directe Silencieuse (Sans Modale OS)</div>
+                      <div className="text-[10px] text-slate-400">Envoie le reçu directement à l'imprimante configurée</div>
+                    </div>
+                  </label>
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* ONGLET 5 : PRÉFÉRENCES */}
+        {/* ONGLET 5 : IMPRIMANTE THERMIQUE & TICKETS DE CAISSE */}
+        {activeTab === 'printer' && (
+          <div className="space-y-6 animate-fade-in">
+            <h3 className="text-xs font-black uppercase text-indigo-400 tracking-wider flex items-center gap-2">
+              <Printer className="w-4 h-4" /> Sélection & Configuration de l'Imprimante Thermique
+            </h3>
+
+            <div className="p-5 rounded-2xl border space-y-4" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase text-slate-400 tracking-wider">
+                      Sélectionner l'Imprimante de Caisse dans la Liste :
+                    </label>
+                    <button
+                      type="button"
+                      onClick={fetchPrinters}
+                      disabled={isRefreshingPrinters}
+                      className="text-xs font-bold text-indigo-500 hover:text-indigo-400 flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>{isRefreshingPrinters ? '⏳ Recherche...' : '🔄 Actualiser'}</span>
+                    </button>
+                  </div>
+                  <CustomSelect
+                    options={systemPrinters}
+                    value={config.thermalPrinterName || systemPrinters[0]?.value || ''}
+                    onChange={(val) => setConfig({ ...config, thermalPrinterName: val })}
+                    placeholder="Choisir l'imprimante thermique détectée..."
+                    searchable
+                    creatable
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Sélectionnez l'imprimante physique installée sur votre ordinateur (détection automatique des imprimantes matérielles).
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 flex flex-col justify-center">
+                  <label className="flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all hover:bg-slate-500/5" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+                    <input
+                      type="checkbox"
+                      checked={config.directSilentPrint ?? true}
+                      onChange={(e) => setConfig({ ...config, directSilentPrint: e.target.checked })}
+                      className="w-4 h-4 mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-slate-200">Impression Directe Silencieuse (Sans Fenêtre OS)</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        Lorsque vous cliquez sur "Imprimer", le reçu est envoyé directement à l'imprimante sélectionnée sans ouvrir la modale système.
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ONGLET 6 : CARTES & MODÈLES */}
         {activeTab === 'preferences' && (
           <CardSettingsPanel
             value={config.cardCustomization || defaultCardCustomization}

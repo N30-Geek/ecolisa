@@ -24,6 +24,8 @@ export interface CongePersonnel {
   dateDemande: string;
   documentJustificatifUrl?: string;
   documentJustificatifNom?: string;
+  /** true = retenue appliquée sur le salaire (uniquement pour statut REFUSE) */
+  impactePaie?: boolean;
 }
 
 const typeCongeOptions: SelectOption[] = [
@@ -147,6 +149,8 @@ export const LeavesManager: React.FC = () => {
         return {
           ...l,
           statut: newStatut,
+          // Lors d'un refus : l'absence est non justifiée => retenue automatique
+          impactePaie: newStatut === 'REFUSE' ? true : false,
           approuvePar: currentUser ? `${currentUser.nom} (${currentUser.role})` : 'Direction Établissement',
         };
       }
@@ -313,6 +317,14 @@ export const LeavesManager: React.FC = () => {
 
                 {/* Pièce Justificative & Actions */}
                 <div className="pt-2 border-t space-y-2" style={{ borderColor: 'var(--border)' }}>
+                  {isRejected && leave.impactePaie && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/30">
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                      <span className="text-[10.5px] font-black text-rose-600 dark:text-rose-400">
+                        Retenue sur salaire — {leave.nombreJours} j. non justifié{leave.nombreJours > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  )}
                   {leave.documentJustificatifNom && (
                     <div className="flex items-center gap-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 font-bold">
                       <FileText className="w-3.5 h-3.5" />

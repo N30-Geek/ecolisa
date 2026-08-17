@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { CustomSelect } from '../common/CustomSelect';
 import { StudentIdCardModal } from './StudentIdCardModal';
@@ -50,6 +50,7 @@ import {
 } from 'lucide-react';
 import { Eleve, Discipline, ClasseScolaire, CycleScolaire, MembrePersonnel } from '../../types';
 import { LocalDatabaseService } from '../../services/localDatabase';
+import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { StudentRegistrationModal } from './StudentRegistrationModal';
 import { ClassesPromotionsManager } from './ClassesPromotionsManager';
 import { StudentsManager } from './StudentsManager';
@@ -57,11 +58,14 @@ import { SchoolYearsTab } from './SchoolYearsTab';
 import { SubjectsManager } from './SubjectsManager';
 import { ScheduleManager } from './ScheduleManager';
 import { GradesManager } from './GradesManager';
+import { EvaluationsExamsManager } from './EvaluationsExamsManager';
+import { StudentDetailPage } from './StudentDetailPage';
 import { TeacherManager } from '../administration/TeacherManager';
 
 interface AcademicManagerProps {
   activeSubTab?: string;
   activeSchoolYear?: string;
+  registrationRequest?: number;
 }
 
 // â”€â”€â”€ Modèle Année Scolaire â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -70,7 +74,7 @@ export interface FraisAnnexeConfig {
   id: string;
   intitule: string;
   montant: number;
-  devise: 'USD' | 'CDF';
+  devise: string;
   obligatoire: boolean;
   typeFrais: 'INSCRIPTION' | 'REINSCRIPTION' | 'CONNEXION' | 'CARTE' | 'KIT' | 'AUTRE';
 }
@@ -212,638 +216,6 @@ const statusBadge = (statut: string) => {
   return <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${s.cls}`}>{s.label}</span>;
 };
 
-// â”€â”€â”€ PAGE DÉDIÉE DE CONSULTATION COMPLÈTE DE L'ÉLÈVE (AVEC BOUTON RETOUR) â”€â”€
-
-const StudentDetailPage: React.FC<{ student: Eleve; onBack: () => void }> = ({ student, onBack }) => {
-  const [tab, setTab] = useState<'identity' | 'parents' | 'grades' | 'attendance' | 'finance' | 'card'>('identity');
-  const [showCardModal, setShowCardModal] = useState(false);
-  const [showFullFileModal, setShowFullFileModal] = useState(false);
-
-  return (
-    <div className="space-y-5 animate-fade-in">
-      {/* BARRE SUPÉRIEURE AVEC BOUTON RETOUR & ACTIONS */}
-      <div
-        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border-0 shadow-md shadow-indigo-500/5 transition-all duration-300"
-        style={{ background: 'var(--bg-surface)' }}
-      >
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white text-xs font-bold shadow-md shadow-indigo-500/25 flex items-center gap-2 transition-all duration-200 cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4 text-white" />
-            <span>Retour à la Liste</span>
-          </button>
-          <div className="h-5 w-px hidden sm:block bg-slate-200 dark:bg-slate-800" />
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            Dossier Académique Officiel · EPST RDC
-          </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => setShowFullFileModal(true)}
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white font-bold text-xs shadow-md shadow-indigo-500/25 hover:shadow-lg flex items-center gap-2 transition-all duration-200 cursor-pointer"
-          >
-            <FileText className="w-4 h-4 text-white" /> Exporter Dossier Complet
-          </button>
-          <button
-            className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-slate-500/10 active:scale-[0.97] transition-all duration-200 cursor-pointer shadow-xs"
-            style={{ background: 'var(--bg-sunken)', color: 'var(--text-primary)' }}
-          >
-            <Printer className="w-4 h-4 text-indigo-500" /> Bulletin PDF
-          </button>
-          <button
-            onClick={() => setShowCardModal(true)}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.97] text-white text-xs font-bold shadow-md shadow-emerald-500/25 flex items-center gap-2 transition-all duration-200 cursor-pointer"
-          >
-            <Eye className="w-4 h-4 text-white" /> Aperçu Carte Recto/Verso
-          </button>
-        </div>
-      </div>
-
-      {/* CARTE D'ENTÊTE PROFIL ÉLÈVE */}
-      <div
-        className="p-5 rounded-2xl border shadow-xs relative overflow-hidden transition-colors"
-        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
-      >
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
-          <div className="flex items-center gap-4">
-            {student.photoUrl ? (
-              <img src={student.photoUrl} alt={student.prenom} className="w-16 h-16 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shadow-xs shrink-0" />
-            ) : (
-              <div
-                className="w-16 h-16 rounded-xl flex items-center justify-center text-white text-xl font-bold shadow-xs shrink-0"
-                style={{ background: 'linear-gradient(135deg, #4f46e5, #6366f1)' }}
-              >
-                {student.prenom[0]}{student.nom[0]}
-              </div>
-            )}
-            <div className="space-y-1">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                  {student.prenom} {student.nom} {student.postnom}
-                </h1>
-                {statusBadge(student.statut)}
-              </div>
-              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Classe: <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{student.nomClasse}</span> · Sexe: <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{student.sexe === 'M' ? 'Masculin' : 'Féminin'}</span>
-              </p>
-              <div className="flex items-center gap-2 pt-0.5 flex-wrap">
-                <span className="font-mono text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
-                  📋 Matricule EPST: {student.registrationNumber}
-                </span>
-                <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-md border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-secondary)' }}>
-                  ðŸ—“ï¸ Né(e) le {student.dateNaissance} ({student.lieuNaissance})
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* BADGES CÔTÉ DROIT : SITUATION FINANCIÈRE & MOYENNE GÉNÉRALE */}
-          <div className="flex items-stretch gap-3 flex-wrap sm:flex-nowrap shrink-0 w-full lg:w-auto">
-            {/* BADGE SITUATION FINANCIÈRE */}
-            <div className="flex-1 lg:flex-none flex items-center gap-3 px-3.5 py-2.5 rounded-xl border bg-emerald-500/10 border-emerald-500/20">
-              <div className="p-2 rounded-lg bg-emerald-600 text-white shrink-0 flex items-center justify-center">
-                <CreditCard className="w-4.5 h-4.5 text-white" />
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300 tracking-wider">Situation Financière</p>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-emerald-900 dark:text-emerald-100">$280 / $280</span>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-600 text-white">100% SOLDÉ</span>
-                </div>
-              </div>
-            </div>
-
-            {/* BADGE MOYENNE GÉNÉRALE */}
-            <div className="flex-1 lg:flex-none flex items-center gap-3 px-3.5 py-2.5 rounded-xl border bg-indigo-500/10 border-indigo-500/20">
-              <div className="text-right space-y-0.5">
-                <p className="text-[10px] font-bold uppercase text-indigo-700 dark:text-indigo-300 tracking-wider">Moyenne Générale S1</p>
-                <p className="text-lg font-bold text-indigo-900 dark:text-indigo-100">81.4 %</p>
-                <p className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400">Rang : 3ème / 32 élèves</p>
-              </div>
-              <div className="p-2 rounded-lg bg-amber-500 text-white shrink-0 flex items-center justify-center">
-                <Award className="w-4.5 h-4.5 text-white" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* GRILLE PRINCIPALE SPLITTÉE EN DEUX PARTIES */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 select-none">
-
-        {/* ========================================================================= */}
-        {/* COLONNE GAUCHE (LA PLUS LARGE - 8 COLS) : INFORMATIONS ET DOSSIER GLOBAL   */}
-        {/* ========================================================================= */}
-        <div className="lg:col-span-7 xl:col-span-8 space-y-6">
-
-          {/* BARRE D'ONGLETS DU DOSSIER ÉLÈVE */}
-          <div className="flex items-center gap-2 p-1.5 rounded-2xl border shadow-sm overflow-x-auto sidebar-scroll" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-            {[
-              { id: 'identity', label: 'Identité & Origine RDC', icon: User },
-              { id: 'grades', label: 'Cotes & Performance', icon: ClipboardList },
-              { id: 'attendance', label: 'Assiduité & Présences', icon: Clock },
-            ].map(t => {
-              const TabIcon = t.icon;
-              const isActive = tab === t.id;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id as any)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap cursor-pointer ${
-                    isActive
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-500/10'
-                  }`}
-                >
-                  <TabIcon className="w-4 h-4" />
-                  <span>{t.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* CONTENU VARIABLE DE LA COLONNE GAUCHE SELON L'ONGLET */}
-          <div className="p-6 rounded-3xl border shadow-md" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-
-            {/* 1. IDENTITÉ, ORIGINE RDC & SANTÉ */}
-            {tab === 'identity' && (
-              <div className="space-y-8 animate-fade-in">
-                {/* FICHE HAUTE VISIBILITÉ MÉDICALE */}
-                <div
-                  className="p-6 rounded-3xl border shadow-lg space-y-4 relative overflow-hidden"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(239,68,68,0.06), rgba(245,158,11,0.06))',
-                    borderColor: 'rgba(239,68,68,0.3)',
-                  }}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4" style={{ borderColor: 'var(--border)' }}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-rose-500 text-white flex items-center justify-center shadow-lg shadow-rose-500/30 font-black">
-                        <Heart className="w-5.5 h-5.5" />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-black uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-2">
-                          Fiche d'Urgence Médicale & Santé Infirmerie
-                        </h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">
-                          Informations vitales accessibles aux secouristes et à la direction scolaire
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs font-black uppercase text-slate-500 dark:text-slate-400">Rhésus :</span>
-                      <span className="px-3 py-1 rounded-full text-xs font-black bg-rose-600 text-white shadow-md">
-                        ðŸ©¸ Groupe {student.groupeSanguin || 'O+'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                    <div className="p-4 rounded-2xl border bg-rose-500/10 border-rose-500/30 space-y-1.5">
-                      <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-black text-xs uppercase tracking-wider">
-                        <BadgeAlert className="w-4 h-4" /> Allergies Connues
-                      </div>
-                      <p className="text-sm font-black text-rose-700 dark:text-rose-300">
-                        {student.allergies || 'Aucune allergie majeure signalée'}
-                      </p>
-                    </div>
-
-                    <div className="p-4 rounded-2xl border bg-amber-500/10 border-amber-500/30 space-y-1.5">
-                      <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-black text-xs uppercase tracking-wider">
-                        <ShieldCheck className="w-4 h-4" /> Antécédents & Aptitude
-                      </div>
-                      <p className="text-sm font-extrabold text-amber-800 dark:text-amber-200">
-                        {student.informationsMedicales || 'Aptitude physique excellente (Vaccins à jour)'}
-                      </p>
-                    </div>
-
-                    <div className="p-4 rounded-2xl border bg-indigo-500/10 border-indigo-500/30 space-y-1.5">
-                      <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-black text-xs uppercase tracking-wider">
-                        <Phone className="w-4 h-4" /> Téléphone Urgence
-                      </div>
-                      <p className="text-sm font-mono font-black text-indigo-700 dark:text-indigo-300">
-                        {student.telephoneParent || '+243 81 555 0192'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* TABLEAU SPÉCIFIQUE DE L'ÉTAT CIVIL */}
-                <div className="p-6 rounded-3xl border space-y-6" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                  <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: 'var(--border)' }}>
-                    <h3 className="text-sm font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                      <User className="w-4.5 h-4.5" /> Fiche Officielle d'État Civil & Naissance
-                    </h3>
-                    <span className="text-xs font-black px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-500 border border-indigo-500/30">
-                      Dossier Établissement Certifié
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8 text-xs">
-                    <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nom (Patronyme) :</span>
-                      <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.nom}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Postnom :</span>
-                      <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.postnom || '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Prénom :</span>
-                      <span className="font-black text-sm text-indigo-500">{student.prenom}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Sexe & Genre :</span>
-                      <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.sexe === 'M' ? 'Masculin (M)' : 'Féminin (F)'}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date de Naissance :</span>
-                      <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.dateNaissance}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Lieu de Naissance :</span>
-                      <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.lieuNaissance}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nationalité :</span>
-                      <span className="font-black text-sm text-emerald-600 dark:text-emerald-400">{student.nationalite || 'Congolaise (RDC)'}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Statut Scolaire :</span>
-                      <span className="font-black text-sm text-emerald-500">{student.statut}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* TABLEAU D'ORIGINE GÉOGRAPHIQUE & DÉCOUPAGE RDC */}
-                <div className="p-6 rounded-3xl border space-y-6" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-                  <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: 'var(--border)' }}>
-                    <h3 className="text-sm font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                      <MapPin className="w-4.5 h-4.5" /> Origine Géographique & Découpage Territorial EPST RDC
-                    </h3>
-                    <span className="text-xs font-black px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-500 border border-indigo-500/30">
-                      26 Provinces RDC
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8 text-xs">
-                    <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Province Actuelle (Résidence) :</span>
-                      <span className="font-black text-sm text-indigo-500">{student.province || 'Kinshasa'}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Province d'Origine :</span>
-                      <span className="font-black text-sm text-indigo-500">{student.provinceOrigine || 'Kasaï-Central'}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Territoire / Commune :</span>
-                      <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.territoireCommune || 'Commune de la Gombe'}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Chefferie / Secteur :</span>
-                      <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.chefferieSecteur || 'Secteur de Tshibata'}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Groupement :</span>
-                      <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.groupement || 'Groupement Bena-Tshadi'}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                      <span className="font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Village :</span>
-                      <span className="font-black text-sm" style={{ color: 'var(--text-primary)' }}>{student.village || 'Village Mukendi-Ville'}</span>
-                    </div>
-                  </div>
-
-                  <div className="p-4 rounded-2xl border bg-slate-500/5 space-y-1" style={{ borderColor: 'var(--border)' }}>
-                    <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Adresse Physique de Résidence Exacte</p>
-                    <p className="text-sm font-black text-indigo-500">{student.adressePhysique || 'N° 45, Av. des Huileries, Q. Golf, C. Gombe, Kinshasa'}</p>
-                  </div>
-                </div>
-
-                {student.notesPsychopedagogiques && (
-                  <div className="p-5 rounded-3xl border bg-indigo-500/10 border-indigo-500/20 space-y-2">
-                    <p className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                      📋 Observations & Diagnostic Psychopédagogique
-                    </p>
-                    <p className="text-xs leading-relaxed font-bold" style={{ color: 'var(--text-primary)' }}>
-                      {student.notesPsychopedagogiques}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 2. COTES & PERFORMANCE */}
-            {tab === 'grades' && (
-              <div className="space-y-4 animate-fade-in">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-black uppercase tracking-wider text-indigo-400 flex items-center gap-2">
-                    <ClipboardList className="w-4 h-4" /> Relevé des Cotes & Notes du 1er Semestre (S1)
-                  </h3>
-                  <span className="text-xs font-black text-emerald-400">Total : 81.4% (Très Bien)</span>
-                </div>
-
-                <div className="overflow-x-auto rounded-2xl border" style={{ borderColor: 'var(--border)' }}>
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b uppercase text-[10px] font-black text-slate-400" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                        <th className="p-3">Discipline / Cours</th>
-                        <th className="p-3">Coeff. EPST</th>
-                        <th className="p-3">Interrogation</th>
-                        <th className="p-3">Examen</th>
-                        <th className="p-3 text-right">Moyenne %</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
-                      {([] as any[]).map((sub: any) => (
-                        <tr key={sub.id} className="hover:bg-slate-500/5">
-                          <td className="p-3 font-bold" style={{ color: 'var(--text-primary)' }}>{sub.nom}</td>
-                          <td className="p-3 font-black text-indigo-400">Coeff. {sub.coefficient}</td>
-                          <td className="p-3 font-extrabold text-slate-300">17 / 20</td>
-                          <td className="p-3 font-extrabold text-slate-300">34 / 40</td>
-                          <td className="p-3 text-right font-black text-emerald-400 text-sm">85 %</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* 3. ASSIDUITÉ & PRÉSENCES */}
-            {tab === 'attendance' && (
-              <div className="space-y-4 animate-fade-in">
-                <h3 className="text-sm font-black uppercase tracking-wider text-indigo-400 flex items-center gap-2">
-                  <Clock className="w-4 h-4" /> Registre de Présences & Bilan Disciplinaire
-                </h3>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div className="p-4 rounded-2xl border bg-emerald-500/10 border-emerald-500/20">
-                    <p className="text-3xl font-black text-emerald-400">142</p>
-                    <p className="text-xs font-bold text-slate-300 mt-1">Jours de Présence</p>
-                  </div>
-                  <div className="p-4 rounded-2xl border bg-amber-500/10 border-amber-500/20">
-                    <p className="text-3xl font-black text-amber-400">3</p>
-                    <p className="text-xs font-bold text-slate-300 mt-1">Absences Justifiées</p>
-                  </div>
-                  <div className="p-4 rounded-2xl border bg-red-500/10 border-red-500/20">
-                    <p className="text-3xl font-black text-red-400">1</p>
-                    <p className="text-xs font-bold text-slate-300 mt-1">Absence Injustifiée</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* COLONNE DROITE (4 COLS) : CARTE QR CODE, DOCUMENTS & CONTACTS PARENTS      */}
-        {/* ========================================================================= */}
-        <div className="lg:col-span-5 xl:col-span-4 space-y-6">
-
-          {/* 1. APERÇU DE LA CARTE D'ÉLÈVE QR CODE OFFICIELLE */}
-          <div className="p-5 rounded-3xl border shadow-lg space-y-4 relative overflow-hidden" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
-              <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                <QrCode className="w-4 h-4 text-indigo-500" /> Carte d'Élève Officielle (QR Code)
-              </h3>
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
-                Active 2025–2026
-              </span>
-            </div>
-
-            {/* DESIGN BADGE ÉLÈVE VIP HAUTE DÉFINITION */}
-            <div
-              onClick={() => setShowCardModal(true)}
-              className="p-5 rounded-3xl border shadow-xl relative overflow-hidden text-left bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white border-indigo-500/40 space-y-4 cursor-pointer hover:border-indigo-400 transition-all group"
-            >
-              <div className="flex items-center justify-between border-b border-indigo-500/30 pb-3">
-                <div className="flex items-center gap-2">
-                  <School className="w-5 h-5 text-indigo-400" />
-                  <div>
-                    <h4 className="text-[11px] font-black uppercase tracking-tight text-indigo-200">CS SAINT-MICHEL EPST RDC</h4>
-                    <p className="text-[9px] text-slate-400">Carte Identité Scolaire Certifiée</p>
-                  </div>
-                </div>
-                <Award className="w-5 h-5 text-amber-400 shrink-0" />
-              </div>
-
-              <div className="flex items-center gap-3">
-                {student.photoUrl ? (
-                  <img src={student.photoUrl} alt={student.prenom} className="w-16 h-16 rounded-2xl object-cover border-2 border-indigo-400 shadow-md shrink-0" />
-                ) : (
-                  <div className="w-16 h-16 rounded-2xl bg-indigo-600 flex items-center justify-center text-white text-xl font-black shadow-md shrink-0">
-                    {student.prenom[0]}{student.nom[0]}
-                  </div>
-                )}
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <p className="text-sm font-black tracking-tight leading-tight truncate group-hover:text-indigo-300 transition-colors">
-                    {student.prenom} {student.nom}
-                  </p>
-                  <p className="text-xs font-bold text-indigo-300">{student.nomClasse}</p>
-                  <p className="text-[10px] text-slate-300 font-mono">Né(e): {student.dateNaissance}</p>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-indigo-500/30 flex items-center justify-between">
-                <div>
-                  <p className="text-[9px] uppercase font-bold text-slate-400">Matricule EPST</p>
-                  <p className="text-xs font-black font-mono text-indigo-300">{student.registrationNumber}</p>
-                </div>
-                <div className="p-1 rounded-lg bg-white shrink-0 shadow-md">
-                  <QrCode className="w-7 h-7 text-slate-950" />
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setShowCardModal(true)}
-              className="w-full py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer border border-indigo-400/40"
-            >
-              <Eye className="w-4 h-4 text-white" /> Aperçu HD Recto / Verso & Impression EPST
-            </button>
-          </div>
-
-          {/* 2. DOSSIER DES DOCUMENTS SCOLAIRES NUMÉRISÉS (COPIE DE SES DOCUMENTS) */}
-          <div className="p-5 rounded-3xl border shadow-lg space-y-4" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
-              <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-indigo-500" /> Dossier Documents Scolaires (Pièces Jointes)
-              </h3>
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-500 border border-indigo-500/30">
-                5 Fichiers
-              </span>
-            </div>
-
-            <div className="space-y-2.5">
-              {[
-                { title: "Copie Acte de Naissance Légalisé", size: "1.4 Mo", format: "PDF", status: "Validé EPST", date: "12 Sept 2025" },
-                { title: "Certificat d'Études Primaires (TENAFEP)", size: "850 Ko", format: "PDF", status: "Certifié", date: "10 Sept 2025" },
-                { title: "Bulletin Officiel de la 6ème Année", size: "2.1 Mo", format: "PDF", status: "Scellé", date: "05 Sept 2025" },
-                { title: "Fiche Médicale d'Infirmerie Signée", size: "620 Ko", format: "PDF", status: "Conforme", date: "02 Sept 2025" },
-                { title: "Attestation de Fréquentation & Reçu", size: "410 Ko", format: "PDF", status: "Archivé", date: "01 Sept 2025" },
-              ].map((doc, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-2xl border flex items-center justify-between gap-3 hover:border-indigo-500/40 transition-all group cursor-pointer"
-                  style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-xl bg-indigo-500/15 text-indigo-500 flex items-center justify-center shrink-0 font-bold">
-                      <FileCheck className="w-4.5 h-4.5" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold truncate group-hover:text-indigo-500 transition-colors" style={{ color: 'var(--text-primary)' }}>
-                        {doc.title}
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
-                        <span className="font-mono">{doc.size}</span>
-                        <span>¢</span>
-                        <span>{doc.date}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[9.5px] font-black px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
-                      {doc.status}
-                    </span>
-                    <button className="p-1.5 rounded-lg bg-slate-500/10 hover:bg-indigo-500 hover:text-white transition-colors cursor-pointer" title="Télécharger la copie">
-                      <Download className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <button className="w-full py-2.5 rounded-2xl border border-dashed border-indigo-500/40 text-indigo-500 hover:bg-indigo-500/10 text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer">
-              <Plus className="w-4 h-4" /> Joindre un Nouveau Document Scolaire (PDF/Image)
-            </button>
-          </div>
-
-          {/* 3. INFORMATIONS DES PARENTS & TUTEURS LÉGAUX */}
-          <div className="p-6 rounded-3xl border shadow-lg space-y-5" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
-              <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                <Users className="w-4.5 h-4.5 text-indigo-500" /> Tuteurs Légaux & Contacts Famille
-              </h3>
-              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
-                Communication Directe
-              </span>
-            </div>
-
-            <div className="space-y-5 divide-y divide-slate-200/50 dark:divide-slate-800">
-              {/* PÈRE */}
-              <div className="space-y-3 pt-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow-md shrink-0">
-                      <User className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                        {student.nomPere || student.nomParent || '—'}
-                      </h4>
-                      <p className="text-xs font-extrabold text-indigo-500">Père / Tuteur Principal Légal</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-black px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-500 border border-indigo-500/30">
-                    {student.professionPere || '—'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 gap-2 pt-1">
-                  <div className="flex items-center justify-between py-1.5 px-3 rounded-xl hover:bg-slate-500/5 transition-all">
-                    <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                      <Phone className="w-3.5 h-3.5 text-indigo-500" /> WhatsApp / Tél :
-                    </span>
-                    <a href={`tel:${student.telephonePere || student.telephoneParent}`} className="font-mono font-black text-indigo-500 hover:underline text-xs">
-                      {student.telephonePere || student.telephoneParent || '—'}
-                    </a>
-                  </div>
-                  <div className="flex items-center justify-between py-1.5 px-3 rounded-xl hover:bg-slate-500/5 transition-all">
-                    <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                      <Mail className="w-3.5 h-3.5 text-indigo-500" /> Email Direct :
-                    </span>
-                    <a href={`mailto:${student.emailPere || student.emailParent}`} className="font-mono font-black text-indigo-500 hover:underline text-xs">
-                      {student.emailPere || student.emailParent || '—'}
-                    </a>
-                  </div>
-                </div>
-              </div>
-
-              {/* MÈRE */}
-              <div className="space-y-3 pt-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-pink-600 text-white flex items-center justify-center font-black text-sm shadow-md shrink-0">
-                      <User className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                        {student.nomMere || '—'}
-                      </h4>
-                      <p className="text-xs font-extrabold text-pink-500">Mère / Tuteur Secondaire</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-black px-3 py-1 rounded-full bg-pink-500/15 text-pink-500 border border-pink-500/30">
-                    {student.professionMere || '—'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 gap-2 pt-1">
-                  <div className="flex items-center justify-between py-1.5 px-3 rounded-xl hover:bg-slate-500/5 transition-all">
-                    <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                      <Phone className="w-3.5 h-3.5 text-pink-500" /> WhatsApp / Tél :
-                    </span>
-                    <a href={`tel:${student.telephoneMere}`} className="font-mono font-black text-pink-500 hover:underline text-xs">
-                      {student.telephoneMere || '+243 99 444 8812'}
-                    </a>
-                  </div>
-                  <div className="flex items-center justify-between py-1.5 px-3 rounded-xl hover:bg-slate-500/5 transition-all">
-                    <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                      <Mail className="w-3.5 h-3.5 text-pink-500" /> Email Direct :
-                    </span>
-                    <a href={`mailto:${student.emailMere}`} className="font-mono font-black text-pink-500 hover:underline text-xs">
-                      {student.emailMere || 'c.bakamba@yahoo.fr'}
-                    </a>
-                  </div>
-                </div>
-              </div>
-
-              {/* ADRESSE DOMICILE FAMILIAL */}
-              <div className="pt-4 space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-black uppercase text-indigo-500 tracking-wider">
-                  <MapPin className="w-4 h-4 text-indigo-500" /> Domicile Familial Officiel
-                </div>
-                <p className="text-xs font-extrabold leading-relaxed pl-6" style={{ color: 'var(--text-primary)' }}>
-                  {student.adressePhysique || 'N° 45, Av. des Huileries, Q. Golf, C. Gombe, Kinshasa'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-      </div>
-
-      <StudentIdCardModal
-        isOpen={showCardModal}
-        onClose={() => setShowCardModal(false)}
-        student={student}
-      />
-
-      <StudentFullFileModal
-        isOpen={showFullFileModal}
-        onClose={() => setShowFullFileModal(false)}
-        student={student}
-      />
-    </div>
-  );
-};
-
 // â”€â”€â”€ ONGLET 1 : ÉLÈVES & INSCRIPTIONS AVEC PAGINATION & FICHE COMPLÈTE DÉDIÉE â”€â”€
 
 const StudentsTab: React.FC = () => {
@@ -851,12 +223,22 @@ const StudentsTab: React.FC = () => {
   const [search, setSearch] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Eleve | null>(null);
+  const [editingStudent, setEditingStudent] = useState<Eleve | null>(null);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
+
+  const loadData = useCallback(async () => {
+    const list = await LocalDatabaseService.getEleves();
+    setStudents(list || []);
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const filtered = useMemo(() => {
     return students.filter(s => {
@@ -878,9 +260,15 @@ const StudentsTab: React.FC = () => {
     { value: '', label: 'Toutes les classes' },
   ], []);
 
-  const handleRegisterNewStudent = (newStudent: Eleve) => {
-    setStudents(prev => [newStudent, ...prev]);
+  const handleRegisterNewStudent = async (newStudent: Eleve) => {
+    await loadData();
     setShowRegisterModal(false);
+  };
+
+  const handleUpdateStudent = async (updated: Eleve) => {
+    await loadData();
+    setEditingStudent(null);
+    setSelectedStudent(updated);
   };
 
   // Si un élève est sélectionné, on affiche la PAGE DÉDIÉE DE L'ÉLÈVE
@@ -889,6 +277,10 @@ const StudentsTab: React.FC = () => {
       <StudentDetailPage
         student={selectedStudent}
         onBack={() => setSelectedStudent(null)}
+        onEdit={(st) => {
+          setSelectedStudent(null);
+          setEditingStudent(st);
+        }}
       />
     );
   }
@@ -925,7 +317,7 @@ const StudentsTab: React.FC = () => {
           { label: 'Total Élèves Inscrits', val: `${students.length}`, color: '#6366f1', icon: GraduationCap },
           { label: 'Statut Actif', val: `${students.filter(s => s.statut === 'ACTIF').length}`, color: '#10b981', icon: Check },
           { label: 'Filles (Parité EPST)', val: `${students.filter(s => s.sexe === 'F').length}`, color: '#ec4899', icon: Users },
-          { label: 'Finalistes Exetat', val: '136', color: '#8b5cf6', icon: Star },
+          { label: 'Finalistes Exetat', val: `${students.filter(s => s.statut === 'FINALISTE').length}`, color: '#8b5cf6', icon: Star },
         ].map((s, i) => (
           <div
             key={i}
@@ -1109,6 +501,13 @@ const StudentsTab: React.FC = () => {
                               <span>Voir la Fiche Élève</span>
                             </button>
                             <button
+                              onClick={() => { setEditingStudent(s); setOpenActionMenuId(null); }}
+                              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-500/15 text-amber-600 dark:text-amber-400 transition-colors cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                              <span>Éditer le Dossier Élève</span>
+                            </button>
+                            <button
                               onClick={() => { setSelectedStudent(s); setOpenActionMenuId(null); }}
                               className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 transition-colors cursor-pointer"
                             >
@@ -1124,8 +523,9 @@ const StudentsTab: React.FC = () => {
                             </button>
                             <div className="my-1 border-t" style={{ borderColor: 'var(--border)' }} />
                             <button
-                              onClick={() => {
-                                setStudents(students.filter(st => st.id !== s.id));
+                              onClick={async () => {
+                                await LocalDatabaseService.deleteEleve(s.id);
+                                await loadData();
                                 setOpenActionMenuId(null);
                               }}
                               className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/15 transition-colors cursor-pointer"
@@ -1161,12 +561,17 @@ const StudentsTab: React.FC = () => {
         />
       </div>
 
-      {/* Onboarding Wizard Inscription Élève */}
-      {showRegisterModal && (
+      {/* Onboarding Wizard Inscription / Modification Élève */}
+      {(showRegisterModal || editingStudent) && (
         <StudentRegistrationModal
-          onBack={() => setShowRegisterModal(false)}
+          initialStudent={editingStudent || undefined}
+          onBack={() => {
+            setShowRegisterModal(false);
+            setEditingStudent(null);
+          }}
           onRegister={handleRegisterNewStudent}
-                  />
+          onUpdate={handleUpdateStudent}
+        />
       )}
     </div>
   );
@@ -1361,6 +766,8 @@ const SubjectsTab: React.FC = () => {
 // â”€â”€â”€ ONGLET 4 : GESTION DE L'ANNÉE SCOLAIRE, TARIFICATION & STRUCTURE EPST â”€â”€
 
 const LegacySchoolYearsTab: React.FC = () => {
+  const { format } = useSchoolConfig();
+  const fmt = (n: number, source?: string) => format(n, source);
   const [years, setYears] = useState<AnneeScolaireConfig[]>([]);
   const [selectedYearId, setSelectedYearId] = useState<string>('');
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
@@ -1711,7 +1118,7 @@ const LegacySchoolYearsTab: React.FC = () => {
                               {fa.typeFrais}
                             </span>
                           </td>
-                          <td className="p-3 font-black text-indigo-600 dark:text-indigo-400">${fa.montant} {fa.devise}</td>
+                          <td className="p-3 font-black text-indigo-600 dark:text-indigo-400">{fmt(fa.montant, fa.devise)}</td>
                           <td className="p-3">
                             <span className="px-2 py-0.5 rounded text-[9.5px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
                               {fa.obligatoire ? 'OBLIGATOIRE' : 'OPTIONNEL'}
@@ -2059,7 +1466,7 @@ const LegacySchoolYearsTab: React.FC = () => {
                             <span className="text-[10px] text-slate-500 dark:text-slate-400 ml-2">({fa.typeFrais})</span>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="font-black text-indigo-600 dark:text-indigo-400">${fa.montant} {fa.devise}</span>
+                            <span className="font-black text-indigo-600 dark:text-indigo-400">{fmt(fa.montant, fa.devise)}</span>
                             <button
                               type="button"
                               onClick={() => handleRemoveFraisAnnexe(fa.id)}
@@ -2470,15 +1877,18 @@ const GradesTab: React.FC = () => (
 
 // â”€â”€â”€ MAIN MANAGER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export const AcademicManager: React.FC<AcademicManagerProps> = ({ activeSubTab = 'students', activeSchoolYear }) => {
+export const AcademicManager: React.FC<AcademicManagerProps> = ({ activeSubTab = 'students', activeSchoolYear, registrationRequest }) => {
+  const { currency, exchangeRate, format } = useSchoolConfig();
+  const fmt = (n: number, source?: string) => format(n, source);
   const tabs = [
     { id: 'students', label: 'Élèves & Inscriptions', icon: GraduationCap },
-    { id: 'classes', label: 'Classes & Local', icon: BookOpen },
-    { id: 'subjects', label: 'Matières & Coefficients', icon: Layers },
-    { id: 'years', label: 'Année Scolaire & Périodes', icon: Calendar },
-    { id: 'teachers', label: 'Enseignants & Personnel', icon: Users },
-    { id: 'schedule', label: 'Emploi du Temps', icon: Calendar },
-    { id: 'grades', label: 'Cotes & Bulletins', icon: ClipboardList },
+    { id: 'classes',  label: 'Classes & Local',         icon: BookOpen       },
+    { id: 'subjects', label: 'Matières & Coefficients', icon: Layers         },
+    { id: 'years',    label: 'Année Scolaire & Périodes',icon: Calendar      },
+    { id: 'teachers', label: 'Enseignants & Personnel', icon: Users          },
+    { id: 'examens',  label: 'Évaluations & Examens',   icon: Award          },
+    { id: 'grades',   label: 'Cotes & Bulletins',       icon: ClipboardList  },
+    { id: 'schedule', label: 'Emploi du Temps',          icon: Calendar      },
   ];
 
   const [localTab, setLocalTab] = useState(activeSubTab);
@@ -2489,14 +1899,15 @@ export const AcademicManager: React.FC<AcademicManagerProps> = ({ activeSubTab =
 
   const renderTab = () => {
     switch (localTab) {
-      case 'students': return <StudentsManager activeSchoolYear={activeSchoolYear} />;
-      case 'classes':  return <ClassesPromotionsManager activeSchoolYear={activeSchoolYear} onNavigateToStudents={(clsId) => setLocalTab('students')} />;
+      case 'students': return <StudentsManager activeSchoolYear={activeSchoolYear} registrationRequest={registrationRequest} />;
+      case 'classes':  return <ClassesPromotionsManager activeSchoolYear={activeSchoolYear} onNavigateToStudents={() => setLocalTab('students')} />;
       case 'subjects': return <SubjectsManager activeSchoolYear={activeSchoolYear} />;
       case 'years':    return <SchoolYearsTab activeSchoolYear={activeSchoolYear} />;
       case 'teachers': return <TeacherManager activeSchoolYear={activeSchoolYear} />;
-      case 'schedule': return <ScheduleManager activeSchoolYear={activeSchoolYear} />;
+      case 'examens':  return <EvaluationsExamsManager />;
       case 'grades':   return <GradesManager activeSchoolYear={activeSchoolYear} />;
-      default:         return <StudentsManager activeSchoolYear={activeSchoolYear} />;
+      case 'schedule': return <ScheduleManager activeSchoolYear={activeSchoolYear} />;
+      default:         return <StudentsManager activeSchoolYear={activeSchoolYear} registrationRequest={registrationRequest} />;
     }
   };
 

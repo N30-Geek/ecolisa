@@ -117,19 +117,42 @@ export const GradesManager: React.FC<GradesManagerProps> = ({ activeSchoolYear }
   const loadData = async () => {
     setLoading(true);
     try {
-      const [cls, subs, allSt, cots] = await Promise.all([
+      const [cls, subs, allSt, cots, userAssigned] = await Promise.all([
         LocalDatabaseService.getClasses(),
         LocalDatabaseService.getSubjects(),
         LocalDatabaseService.getEleves(),
         LocalDatabaseService.getCotes(),
+        LocalDatabaseService.getCurrentUserAssignedClasses(),
       ]);
-      setClasses(cls);
-      setSubjects(subs);
-      setStudents(allSt);
-      setAllCotes(cots);
 
-      if (cls.length > 0 && !selectedClassId) {
-        setSelectedClassId(cls[0].id);
+      let filteredCls = cls || [];
+      let filteredSt = allSt || [];
+
+      if (userAssigned !== null) {
+        // Enseignant / Titulaire : Filtrage strict par classes assignées
+        filteredCls = (cls || []).filter(c =>
+          userAssigned.some(ac =>
+            ac.toLowerCase().trim() === c.nom.toLowerCase().trim() ||
+            c.nom.toLowerCase().includes(ac.toLowerCase().trim()) ||
+            ac.toLowerCase().includes(c.nom.toLowerCase().trim())
+          )
+        );
+        filteredSt = (allSt || []).filter(s => {
+          const sc = (s.nomClasse || (s as any).classe || (s as any).salle || '').toLowerCase().trim();
+          return userAssigned.some(ac => {
+            const acLower = ac.toLowerCase().trim();
+            return sc === acLower || sc.includes(acLower) || acLower.includes(sc);
+          });
+        });
+      }
+
+      setClasses(filteredCls);
+      setSubjects(subs || []);
+      setStudents(filteredSt);
+      setAllCotes(cots || []);
+
+      if (filteredCls.length > 0) {
+        setSelectedClassId(prev => (prev && filteredCls.some(c => c.id === prev) ? prev : filteredCls[0].id));
       }
     } catch (e) {
       console.error("Erreur chargement cotes:", e);

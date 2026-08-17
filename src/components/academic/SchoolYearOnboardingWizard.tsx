@@ -6,83 +6,25 @@ import {
   FileCheck, Loader2,
 } from 'lucide-react';
 import { LocalDatabaseService } from '../../services/localDatabase';
-import { AnneeScolaireConfig, ClasseScolaire, TypeFraisScolaire, CategorieFrais, StatutAnnéeScolaire } from '../../types';
+import { useSchoolConfig } from '../../hooks/useSchoolConfig';
+import { AnneeScolaireConfig, ClasseScolaire, TypeFraisScolaire, CategorieFrais, StatutAnnéeScolaire, ModePaiementFrais } from '../../types';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
 import { NumberInput } from '../common/NumberInput';
-
-const uuid = () => {
-  if (typeof window !== 'undefined' && (window as any).crypto?.randomUUID) {
-    return (window as any).crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-};
-
-// ─── Référentiel des Cycles & Niveaux EPST ────────────────────────────────
-type CodeCycleWizard = 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES';
-
-const CYCLES_REF: { code: CodeCycleWizard; nom: string; couleur: string }[] = [
-  { code: 'MATERNELLE', nom: 'Cycle Maternelle & Éveil (3–5 ans)', couleur: 'amber' },
-  { code: 'PRIMAIRE', nom: 'Cycle Primaire (1ère – 6ème)', couleur: 'emerald' },
-  { code: 'SECONDAIRE_CTEB', nom: 'Cycle Terminal d\'Éducation de Base (7ème – 8ème CTEB)', couleur: 'sky' },
-  { code: 'HUMANITES', nom: 'Humanités Générales, Scientifiques & Techniques (1ère – 4ème)', couleur: 'indigo' },
-];
-
-const NIVEAUX_PAR_CYCLE: Record<CodeCycleWizard, string[]> = {
-  MATERNELLE: ['1ère Maternelle', '2ème Maternelle', '3ème Maternelle'],
-  PRIMAIRE: ['1ère Primaire', '2ème Primaire', '3ème Primaire', '4ème Primaire', '5ème Primaire', '6ème Primaire'],
-  SECONDAIRE_CTEB: ['7ème CTEB', '8ème CTEB'],
-  HUMANITES: ['1ère Humanités', '2ème Humanités', '3ème Humanités', '4ème Humanités'],
-};
-
-const CATEGORIES_FRAIS: { value: CategorieFrais; label: string }[] = [
-  { value: 'FRAIS_INSCRIPTION', label: 'Frais d\'Inscription' },
-  { value: 'FRAIS_REINSCRIPTION', label: 'Frais de Réinscription' },
-  { value: 'FRAIS_MINERVAL', label: 'Minerval Scolaire' },
-  { value: 'FRAIS_CONNEXES', label: 'Frais Connexes' },
-  { value: 'FRAIS_KITS_EQUIPEMENTS', label: 'Kits & Équipements' },
-  { value: 'FRAIS_BUS', label: 'Transport / Bus Scolaire' },
-  { value: 'FRAIS_UNIFORME', label: 'Uniforme Scolaire' },
-  { value: 'FRAIS_EXAMEN', label: 'Frais d\'Examen' },
-  { value: 'FRAIS_CARTE', label: 'Carte d\'Élève / Badge' },
-  { value: 'FRAIS_ACTIVITE', label: 'Activités Parascolaires' },
-  { value: 'AUTRE', label: 'Autre (Saisie Manuelle)' },
-];
-
-// ─── Structures de travail (brouillon avant persistance) ──────────────────
-interface DraftSection {
-  id: string;
-  cycleCode: CodeCycleWizard;
-  niveau: string;
-  label: string;
-  capacite: number;
-}
-
-interface DraftFee {
-  id: string;
-  cycleCode: CodeCycleWizard | 'TOUS';
-  cible: string; // niveau précis OU 'TRONC_COMMUN' pour tout le cycle
-  categorie: CategorieFrais;
-  nomPersonnalise?: string;
-  montant: number;
-  devise: 'USD' | 'CDF';
-  priorite: 'OBLIGATOIRE' | 'REPARTI';
-}
-
-interface ExistingYearSummary {
-  id: string;
-  nom: string;
-  statut: string;
-  debut: string;
-  fin: string;
-  nombreElevesTotal?: number;
-}
+import {
+  uuid, CodeCycleWizard, CYCLES_REF, NIVEAUX_PAR_CYCLE, CATEGORIES_FRAIS,
+  DraftSection, DraftFee, ExistingYearSummary, feeLabel, feeCibleLabel,
+  parseClassesToDraft, ClassPickerModal, SectionsModal,
+} from './SchoolYearWizardShared';
+import { genererTranches, tranchesDefautParMode, MODE_PAIEMENT_LABELS } from '../../utils/feeTranches';
 
 interface SchoolYearOnboardingWizardProps {
   isOpen: boolean;
   onClose: () => void;
   existingYears: ExistingYearSummary[];
   onCreated: (newYear: AnneeScolaireConfig) => void;
+  /** Si fourni, le wizard passe en mode modification d'année scolaire existante */
+  editingYear?: AnneeScolaireConfig | null;
 }
 
 // ─── Calcul des valeurs par défaut de la nouvelle année ───────────────────
@@ -107,9 +49,49 @@ function computeDefaults(existingYears: ExistingYearSummary[]) {
   };
 }
 
+// ─── Pré-remplissage depuis une année existante ───────────────────────────
+function parseFraisAnnexesToDraft(year: AnneeScolaireConfig): DraftFee[] {
+  return (year.fraisAnnexes || []).map(fa => {
+    const priorite = fa.obligatoire ? 'OBLIGATOIRE' : 'REPARTI';
+    const categorie = (fa.typeFrais || 'AUTRE') as DraftFee['categorie'];
+    let cycleCode: DraftFee['cycleCode'] = 'TOUS';
+    let cible = 'TRONC_COMMUN';
+
+    // Essaie d'extraire le cycle et la cible depuis la portée
+    if (fa.portee) {
+      if (fa.portee.includes('TOUS')) {
+        cycleCode = 'TOUS';
+      } else {
+        const cycleRef = CYCLES_REF.find(c => fa.portee!.includes(c.nom.split('(')[0].trim()));
+        if (cycleRef) cycleCode = cycleRef.code;
+      }
+      const cibleMatch = fa.portee.match(/·\s*(.+)/);
+      if (cibleMatch && cibleMatch[1] !== 'Tronc Commun') {
+        cible = cibleMatch[1].trim();
+      }
+    }
+
+    return {
+      id: fa.id || uuid(),
+      cycleCode,
+      cible,
+      categorie,
+      nomPersonnalise: categorie === 'AUTRE' ? fa.intitule : undefined,
+      montant: fa.montant,
+      devise: (fa.devise as string) || 'USD',
+      priorite,
+      modePaiement: (fa.modePaiement as any) || 'UNIQUE',
+      nombreTranches: (fa.nombreTranches as any) || 1,
+    };
+  });
+}
+
 export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProps> = ({
-  isOpen, onClose, existingYears, onCreated,
+  isOpen, onClose, existingYears, onCreated, editingYear,
 }) => {
+  const { config, currencies, format } = useSchoolConfig();
+  const fmt = (n: number, source?: string) => format(n, source);
+  const isEditMode = !!editingYear;
   const [step, setStep] = useState<number>(1);
   const [saving, setSaving] = useState(false);
 
@@ -122,17 +104,66 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
   const [statut, setStatut] = useState<StatutAnnéeScolaire>(existingYears.length === 0 ? 'EN_COURS' : 'PLANIFIEE');
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+
+    if (editingYear) {
+      // Pré-remplissage mode édition
+      setNom(editingYear.nom);
+      setDebut(editingYear.debut);
+      setFin(editingYear.fin);
+      setObjectifEleves(editingYear.nombreElevesTotal || 0);
+      setStatut(editingYear.statut);
+      setStep(1);
+
+      // Active les cycles présents dans l'année, sinon tous par défaut
+      const yearCycles = (editingYear.cycles || []).map(c => c.code as CodeCycleWizard).filter(Boolean);
+      setActiveCycles({
+        MATERNELLE: yearCycles.includes('MATERNELLE'),
+        PRIMAIRE: yearCycles.includes('PRIMAIRE'),
+        SECONDAIRE_CTEB: yearCycles.includes('SECONDAIRE_CTEB'),
+        HUMANITES: yearCycles.includes('HUMANITES'),
+      });
+
+      // Charge et parse les classes existantes
+      LocalDatabaseService.getClasses(editingYear.id).then(classes => {
+        const { selected, sections } = parseClassesToDraft(classes);
+        setSelectedNiveaux(selected);
+        setSections(sections);
+      });
+
+      // Parse les frais annexes
+      setFees(parseFraisAnnexesToDraft(editingYear));
+    } else {
       const d = computeDefaults(existingYears);
       setNom(d.nom);
       setDebut(d.debut);
       setFin(d.fin);
+      setObjectifEleves(0);
+      setStatut(existingYears.length === 0 ? 'EN_COURS' : 'PLANIFIEE');
+      const cfgCycles = config?.selectedCycles;
+      if (cfgCycles && cfgCycles.length > 0) {
+        setActiveCycles({
+          MATERNELLE: cfgCycles.includes('MATERNELLE'),
+          PRIMAIRE: cfgCycles.includes('PRIMAIRE'),
+          SECONDAIRE_CTEB: cfgCycles.includes('CTEB') || cfgCycles.includes('SECONDAIRE_CTEB'),
+          HUMANITES: cfgCycles.includes('HUMANITES'),
+        });
+      } else {
+        setActiveCycles({ MATERNELLE: true, PRIMAIRE: true, SECONDAIRE_CTEB: true, HUMANITES: true });
+      }
+      setSelectedNiveaux({});
+      setSections([]);
+      setFees([]);
       setStep(1);
     }
-  }, [isOpen]);
+  }, [isOpen, editingYear, existingYears, config?.selectedCycles]);
 
-  const nameConflict = existingYears.some(y => y.nom.trim().toLowerCase() === nom.trim().toLowerCase());
+  const nameConflict = existingYears.some(y => {
+    if (editingYear && y.id === editingYear.id) return false;
+    return y.nom.trim().toLowerCase() === nom.trim().toLowerCase();
+  });
   const dateConflict = existingYears.some(y => {
+    if (editingYear && y.id === editingYear.id) return false;
     if (!y.debut || !y.fin) return false;
     return debut <= y.fin && fin >= y.debut;
   });
@@ -171,8 +202,15 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
   const [feeCategorie, setFeeCategorie] = useState<CategorieFrais>('FRAIS_MINERVAL');
   const [feeNomPerso, setFeeNomPerso] = useState('');
   const [feeMontant, setFeeMontant] = useState<number>(50);
-  const [feeDevise, setFeeDevise] = useState<'USD' | 'CDF'>('USD');
+  const [feeDevise, setFeeDevise] = useState<string>('USD');
   const [feePriorite, setFeePriorite] = useState<'OBLIGATOIRE' | 'REPARTI'>('OBLIGATOIRE');
+  const [feeModePaiement, setFeeModePaiement] = useState<ModePaiementFrais>('UNIQUE');
+  const [feeNombreTranches, setFeeNombreTranches] = useState<number>(1);
+
+  // Synchronise le nombre de tranches par défaut quand le mode change
+  useEffect(() => {
+    setFeeNombreTranches(tranchesDefautParMode[feeModePaiement]);
+  }, [feeModePaiement]);
 
   const cyclesActifsCodes = (Object.keys(activeCycles) as CodeCycleWizard[]).filter(c => activeCycles[c]);
 
@@ -184,6 +222,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
   const handleAddFee = () => {
     if (feeCategorie === 'AUTRE' && !feeNomPerso.trim()) return;
     if (feeMontant <= 0) return;
+    const count = feeModePaiement === 'PERSONNALISE' ? Math.max(1, feeNombreTranches) : tranchesDefautParMode[feeModePaiement];
     setFees(prev => [...prev, {
       id: uuid(),
       cycleCode: feeCycle,
@@ -193,28 +232,139 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
       montant: feeMontant,
       devise: feeDevise,
       priorite: feePriorite,
+      modePaiement: feeModePaiement,
+      nombreTranches: count,
     }]);
     setFeeNomPerso('');
   };
 
   const removeFee = (id: string) => setFees(prev => prev.filter(f => f.id !== id));
 
-  const feeLabel = (f: DraftFee) => f.nomPersonnalise || CATEGORIES_FRAIS.find(c => c.value === f.categorie)?.label || f.categorie;
-  const feeCibleLabel = (f: DraftFee) => {
-    if (f.cycleCode === 'TOUS') return 'Toute l\'école';
-    const cycleNom = CYCLES_REF.find(c => c.code === f.cycleCode)?.nom || f.cycleCode;
-    return f.cible === 'TRONC_COMMUN' ? `${cycleNom} (Tronc Commun)` : `${cycleNom} · ${f.cible}`;
-  };
-
   // ── Étape 4 : Récapitulatif & Persistance ──
   const canGoNextFromStep2 = sections.length > 0;
+
+  const buildYearPayload = (): Partial<AnneeScolaireConfig> => {
+    const cyclesConfig = cyclesActifsCodes.map(code => ({
+      id: uuid(),
+      code,
+      nom: CYCLES_REF.find(c => c.code === code)?.nom || code,
+      actif: true,
+      classesCount: sections.filter(s => s.cycleCode === code).length,
+      sallesCount: sections.filter(s => s.cycleCode === code).length,
+    }));
+
+    const fraisAnnexes = fees.map(f => ({
+      id: f.id || uuid(),
+      intitule: `${feeLabel(f)} — ${feeCibleLabel(f)}`,
+      montant: f.montant,
+      devise: f.devise,
+      obligatoire: f.priorite === 'OBLIGATOIRE',
+      typeFrais: f.categorie,
+      priorite: f.priorite,
+      portee: feeCibleLabel(f),
+      modePaiement: f.modePaiement,
+      nombreTranches: f.nombreTranches,
+    }));
+
+    return {
+      nom,
+      statut,
+      debut,
+      fin,
+      nombreElevesTotal: objectifEleves,
+      fraisInscription: fees.find(f => f.categorie === 'FRAIS_INSCRIPTION')?.montant || 0,
+      fraisConnexion: 0,
+      fraisReinscription: fees.find(f => f.categorie === 'FRAIS_REINSCRIPTION')?.montant || 0,
+      fraisCarte: fees.find(f => f.categorie === 'FRAIS_CARTE')?.montant || 0,
+      fraisAnnexes,
+      cycles: cyclesConfig as any,
+      options: [],
+      salles: [],
+    };
+  };
 
   const handleFinalize = async () => {
     setSaving(true);
     try {
+      if (editingYear) {
+        // Mode édition : on ne supprime pas les classes/frais existants,
+        // on met à jour l'année et on ajoute les nouvelles classes/frais.
+
+        if (statut === 'EN_COURS') {
+          for (const y of existingYears) {
+            if (y.id !== editingYear.id && y.statut === 'EN_COURS') {
+              await LocalDatabaseService.updateSchoolYear(y.id, { statut: 'CLOTUREE' });
+            }
+          }
+        }
+
+        await LocalDatabaseService.updateSchoolYear(editingYear.id, buildYearPayload());
+
+        // Charger les classes existantes pour éviter les doublons
+        const existingClasses = await LocalDatabaseService.getClasses(editingYear.id);
+        const existingNames = new Set(existingClasses.map(c => c.nom));
+
+        for (const sec of sections) {
+          const className = `${sec.niveau} ${sec.label}`;
+          if (existingNames.has(className)) continue;
+          const classe: ClasseScolaire = {
+            id: uuid(),
+            schoolYearId: editingYear.id,
+            cycleId: sec.cycleCode,
+            cycleCode: sec.cycleCode,
+            nom: className,
+            salle: className,
+            optionCode: 'TRONC_COMMUN',
+            nombreEleves: 0,
+            capacite: sec.capacite,
+            professeurTitulaire: 'Non Attribué',
+          };
+          await LocalDatabaseService.addClass(classe);
+        }
+
+        // Ajoute ou met à jour les types de frais
+        const existingFeeTypes = await LocalDatabaseService.getFeeTypes(editingYear.id);
+        const feeTypeKey = (ft: any) => `${ft.categorie}|${ft.portee || ''}`;
+        const existingFeeKeys = new Set(existingFeeTypes.map(feeTypeKey));
+
+        for (const f of fees) {
+          const key = `${f.categorie}|${feeCibleLabel(f)}`;
+          const count = f.modePaiement === 'PERSONNALISE' ? Math.max(1, f.nombreTranches) : tranchesDefautParMode[f.modePaiement || 'UNIQUE'];
+          const ft: TypeFraisScolaire = {
+            id: f.id || uuid(),
+            code: f.categorie.slice(0, 8),
+            nom: feeLabel(f),
+            categorie: f.categorie,
+            montant: f.montant,
+            devise: f.devise,
+            obligatoire: f.priorite === 'OBLIGATOIRE',
+            portee: feeCibleLabel(f),
+            schoolYearId: editingYear.id,
+            anneeScolaireId: editingYear.id,
+            cycleId: f.cycleCode === 'TOUS' ? 'TOUS' : f.cycleCode,
+            optionCode: f.cible === 'TRONC_COMMUN' ? 'TOUS' : f.cible,
+            regime: 'TOUS',
+            actif: true,
+            modePaiement: f.modePaiement || 'UNIQUE',
+            nombreTranches: count,
+            tranches: genererTranches(f.modePaiement || 'UNIQUE', count, f.montant, f.devise, debut, fin, feeCibleLabel(f)),
+          };
+          if (existingFeeKeys.has(key)) {
+            const existing = existingFeeTypes.find(ef => feeTypeKey(ef) === key);
+            if (existing) await LocalDatabaseService.updateFeeType(existing.id, { ...ft, id: existing.id });
+          } else {
+            await LocalDatabaseService.addFeeType(ft);
+          }
+        }
+
+        onCreated({ ...editingYear, ...buildYearPayload() } as AnneeScolaireConfig);
+        onClose();
+        return;
+      }
+
+      // Mode création
       const newYearId = uuid();
 
-      // Bascule l'année précédemment active en clôturée si la nouvelle est active
       if (statut === 'EN_COURS') {
         for (const y of existingYears) {
           if (y.statut === 'EN_COURS') {
@@ -223,41 +373,9 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
         }
       }
 
-      const cyclesConfig = cyclesActifsCodes.map(code => ({
-        id: uuid(),
-        code,
-        nom: CYCLES_REF.find(c => c.code === code)?.nom || code,
-        actif: true,
-        classesCount: sections.filter(s => s.cycleCode === code).length,
-        sallesCount: sections.filter(s => s.cycleCode === code).length,
-      }));
-
-      const fraisAnnexes = fees.map(f => ({
-        id: uuid(),
-        intitule: `${feeLabel(f)} — ${feeCibleLabel(f)}`,
-        montant: f.montant,
-        devise: f.devise,
-        obligatoire: f.priorite === 'OBLIGATOIRE',
-        typeFrais: f.categorie,
-        priorite: f.priorite,
-        portee: feeCibleLabel(f),
-      }));
-
       const newYear: AnneeScolaireConfig = {
         id: newYearId,
-        nom,
-        statut,
-        debut,
-        fin,
-        nombreElevesTotal: objectifEleves,
-        fraisInscription: fees.find(f => f.categorie === 'FRAIS_INSCRIPTION')?.montant || 0,
-        fraisConnexion: 0,
-        fraisReinscription: fees.find(f => f.categorie === 'FRAIS_REINSCRIPTION')?.montant || 0,
-        fraisCarte: fees.find(f => f.categorie === 'FRAIS_CARTE')?.montant || 0,
-        fraisAnnexes,
-        cycles: cyclesConfig as any,
-        options: [],
-        salles: [],
+        ...buildYearPayload(),
         semestres: [
           { id: uuid(), nom: '1er Semestre (S1)', statut: 'PLANIFIE', fin: `Février ${parseInt(debut.slice(0, 4)) + 1}` },
           { id: uuid(), nom: '2ème Semestre (S2)', statut: 'PLANIFIE', fin: fin },
@@ -268,11 +386,10 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
           { id: uuid(), nom: '3ème Période', debut: '', fin: '', type: 'PERIOD' },
           { id: uuid(), nom: '4ème Période & Examens Finaux', debut: '', fin, type: 'EXAM' },
         ],
-      };
+      } as AnneeScolaireConfig;
 
       await LocalDatabaseService.addSchoolYear(newYear);
 
-      // Persistance des classes/sections (appliquées dans toute l'application)
       for (const sec of sections) {
         const classe: ClasseScolaire = {
           id: uuid(),
@@ -289,8 +406,8 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
         await LocalDatabaseService.addClass(classe);
       }
 
-      // Persistance des types de frais (appliqués dans le module Finance)
       for (const f of fees) {
+        const count = f.modePaiement === 'PERSONNALISE' ? Math.max(1, f.nombreTranches) : tranchesDefautParMode[f.modePaiement || 'UNIQUE'];
         const ft: TypeFraisScolaire = {
           id: uuid(),
           code: f.categorie.slice(0, 8),
@@ -306,6 +423,9 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
           optionCode: f.cible === 'TRONC_COMMUN' ? 'TOUS' : f.cible,
           regime: 'TOUS',
           actif: true,
+          modePaiement: f.modePaiement || 'UNIQUE',
+          nombreTranches: count,
+          tranches: genererTranches(f.modePaiement || 'UNIQUE', count, f.montant, f.devise, debut, fin, feeCibleLabel(f)),
         };
         await LocalDatabaseService.addFeeType(ft);
       }
@@ -313,8 +433,8 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
       onCreated(newYear);
       onClose();
     } catch (err) {
-      console.error('[SchoolYearOnboardingWizard] Erreur création année scolaire :', err);
-      alert("Une erreur est survenue lors de la création de l'année scolaire.");
+      console.error('[SchoolYearOnboardingWizard] Erreur année scolaire :', err);
+      alert("Une erreur est survenue lors de l'enregistrement de l'année scolaire.");
     } finally {
       setSaving(false);
     }
@@ -349,7 +469,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-extrabold text-base">Onboarding — Nouvelle Année Scolaire</h3>
+                <h3 className="font-extrabold text-base">{isEditMode ? 'Modifier — Année Scolaire' : 'Onboarding — Nouvelle Année Scolaire'}</h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
                   Étape {step} sur 4
                 </span>
@@ -375,9 +495,9 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                 <React.Fragment key={s.step}>
                   <button
                     type="button"
-                    onClick={() => { if (isDone) setStep(s.step); }}
+                    onClick={() => { if (isEditMode || isDone) setStep(s.step); }}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${
-                      isActive ? 'bg-indigo-600 text-white shadow-xs' : isDone ? 'text-indigo-600 dark:text-indigo-400 cursor-pointer hover:bg-indigo-500/10' : 'text-slate-400'
+                      isActive ? 'bg-indigo-600 text-white shadow-xs' : (isDone || isEditMode) ? 'text-indigo-600 dark:text-indigo-400 cursor-pointer hover:bg-indigo-500/10' : 'text-slate-400'
                     }`}
                   >
                     {isDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : <SIcon className="w-3.5 h-3.5" />}
@@ -603,7 +723,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   <div>
                     <label className="text-[11px] font-bold text-slate-500 block mb-1">Montant *</label>
                     <NumberInput
@@ -617,7 +737,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                   </div>
                   <div>
                     <label className="text-[11px] font-bold text-slate-500 block mb-1">Devise</label>
-                    <CustomSelect value={feeDevise} onChange={v => setFeeDevise(v as any)} options={[{ value: 'USD', label: 'USD ($)' }, { value: 'CDF', label: 'CDF (Fc)' }]} />
+                    <CustomSelect value={feeDevise} onChange={v => setFeeDevise(v as any)} options={currencies.map(c => ({ value: c.code, label: `${c.code} (${c.symbol})` }))} />
                   </div>
                   <div>
                     <label className="text-[11px] font-bold text-slate-500 block mb-1">Priorité</label>
@@ -627,6 +747,33 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                       options={[{ value: 'OBLIGATOIRE', label: 'Obligatoire' }, { value: 'REPARTI', label: 'Réparti (Optionnel / Échelonné)' }]}
                     />
                   </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Mode de paiement</label>
+                    <CustomSelect
+                      value={feeModePaiement}
+                      onChange={v => setFeeModePaiement(v as ModePaiementFrais)}
+                      options={[
+                        { value: 'UNIQUE', label: 'Unique' },
+                        { value: 'MENSUEL', label: 'Mensuel (RDC)' },
+                        { value: 'TRIMESTRIEL', label: 'Trimestriel' },
+                        { value: 'SEMESTRIEL', label: 'Semestriel' },
+                        { value: 'PERSONNALISE', label: 'Personnalisé' },
+                      ]}
+                    />
+                  </div>
+                  {feeModePaiement === 'PERSONNALISE' && (
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-500 block mb-1">Nb. tranches</label>
+                      <NumberInput
+                        value={feeNombreTranches}
+                        onChange={setFeeNombreTranches}
+                        min={1}
+                        placeholder="Tranches"
+                        className="w-full px-3 py-2 rounded-xl border text-xs font-bold"
+                        style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <button
@@ -653,6 +800,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                           <th className="p-2.5">Frais</th>
                           <th className="p-2.5">Portée</th>
                           <th className="p-2.5">Montant</th>
+                          <th className="p-2.5">Paiement</th>
                           <th className="p-2.5">Priorité</th>
                           <th className="p-2.5"></th>
                         </tr>
@@ -662,7 +810,8 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                           <tr key={f.id}>
                             <td className="p-2.5 font-bold" style={{ color: 'var(--text-primary)' }}>{feeLabel(f)}</td>
                             <td className="p-2.5 text-slate-400">{feeCibleLabel(f)}</td>
-                            <td className="p-2.5 font-black text-indigo-600 dark:text-indigo-400">{f.montant} {f.devise}</td>
+                            <td className="p-2.5 font-black text-indigo-600 dark:text-indigo-400">{fmt(f.montant, f.devise)}</td>
+                            <td className="p-2.5 text-[10px] text-slate-500">{MODE_PAIEMENT_LABELS[f.modePaiement]} ({f.nombreTranches}x)</td>
                             <td className="p-2.5">
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${f.priorite === 'OBLIGATOIRE' ? 'bg-rose-500/10 text-rose-600 border-rose-500/30' : 'bg-amber-500/10 text-amber-600 border-amber-500/30'}`}>
                                 {f.priorite === 'OBLIGATOIRE' ? 'Obligatoire' : 'Réparti'}
@@ -720,7 +869,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                   {fees.map(f => (
                     <div key={f.id} className="flex items-center justify-between text-xs p-2 rounded-lg" style={{ background: 'var(--bg-sunken)' }}>
                       <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{feeLabel(f)} · {feeCibleLabel(f)}</span>
-                      <span className="text-indigo-600 dark:text-indigo-400 font-black">{f.montant} {f.devise}</span>
+                      <span className="text-indigo-600 dark:text-indigo-400 font-black">{fmt(f.montant, f.devise)} — {MODE_PAIEMENT_LABELS[f.modePaiement]} ({f.nombreTranches}x)</span>
                     </div>
                   ))}
                   {fees.length === 0 && <p className="text-xs text-amber-500 font-semibold">Aucun frais configuré.</p>}
@@ -753,7 +902,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
             <button
               type="button"
               onClick={() => setStep(prev => prev + 1)}
-              disabled={(step === 1 && (!nom.trim() || nameConflict)) || (step === 2 && !canGoNextFromStep2)}
+              disabled={!isEditMode && ((step === 1 && (!nom.trim() || nameConflict)) || (step === 2 && !canGoNextFromStep2))}
               className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer"
             >
               <span>Suivant</span>
@@ -767,7 +916,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
               className="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-black text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-amber-300" />}
-              <span>{saving ? 'Création en cours…' : "Créer l'Année Scolaire"}</span>
+              <span>{saving ? (isEditMode ? 'Enregistrement…' : 'Création en cours…') : (isEditMode ? 'Appliquer les modifications' : "Créer l'Année Scolaire")}</span>
             </button>
           )}
         </div>
@@ -778,7 +927,10 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
           activeCycles={cyclesActifsCodes}
           selectedNiveaux={selectedNiveaux}
           onToggle={(key) => setSelectedNiveaux(prev => ({ ...prev, [key]: !prev[key] }))}
-          onConfirm={() => setShowClassPicker(false)}
+          onConfirm={() => {
+            setSections(prev => prev.filter(s => selectedNiveaux[`${s.cycleCode}|${s.niveau}`]));
+            setShowClassPicker(false);
+          }}
           onClose={() => setShowClassPicker(false)}
         />
       )}
@@ -792,275 +944,6 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
           onClose={() => setSectionsModalNiveau(null)}
         />
       )}
-    </div>,
-    document.body
-  );
-};
-
-// ─── Modal : Sélection des Classes RDC (façon capture d'écran) ────────────
-const ClassPickerModal: React.FC<{
-  activeCycles: CodeCycleWizard[];
-  selectedNiveaux: Record<string, boolean>;
-  onToggle: (key: string) => void;
-  onConfirm: () => void;
-  onClose: () => void;
-}> = ({ activeCycles, selectedNiveaux, onToggle, onConfirm, onClose }) => {
-  const [search, setSearch] = useState('');
-
-  const totalSelected = Object.values(selectedNiveaux).filter(Boolean).length;
-
-  const setAll = (value: boolean, cycleCode?: CodeCycleWizard) => {
-    const cycles = cycleCode ? [cycleCode] : activeCycles;
-    cycles.forEach(c => {
-      NIVEAUX_PAR_CYCLE[c].forEach(niveau => {
-        const key = `${c}|${niveau}`;
-        if (selectedNiveaux[key] !== value) onToggle(key);
-      });
-    });
-  };
-
-  return createPortal(
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm" onClick={onClose}>
-      <div
-        className="w-full max-w-2xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
-        style={{ background: 'var(--sidebar-popover-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="p-4 border-b flex items-center justify-between shrink-0" style={{ borderColor: 'var(--border)' }}>
-          <h3 className="text-sm font-black flex items-center gap-2">
-            <Layers className="w-4 h-4 text-indigo-500" /> Sélectionner les Classes RDC à Ajouter
-          </h3>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="p-4 border-b shrink-0" style={{ borderColor: 'var(--border)' }}>
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Rechercher une classe, section ou option..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
-            />
-          </div>
-          <div className="flex items-center justify-between mt-2.5 text-[11px] font-bold">
-            <div className="flex items-center gap-3">
-              <button type="button" onClick={() => setAll(true)} className="text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1">
-                <Check className="w-3 h-3" /> Tout sélectionner
-              </button>
-              <button type="button" onClick={() => setAll(false)} className="text-slate-400 hover:underline cursor-pointer">Tout désélectionner</button>
-            </div>
-            <span className="text-slate-400">{totalSelected} classe(s) sélectionnée(s)</span>
-          </div>
-        </div>
-
-        <div className="p-4 overflow-y-auto flex-1 sidebar-scroll space-y-5">
-          {activeCycles.length === 0 && (
-            <p className="text-xs text-amber-500 font-semibold text-center py-6">Aucun cycle actif. Retournez à l'étape précédente.</p>
-          )}
-          {activeCycles.map(cycleCode => {
-            const niveaux = NIVEAUX_PAR_CYCLE[cycleCode].filter(n => n.toLowerCase().includes(search.toLowerCase()));
-            if (niveaux.length === 0) return null;
-            const cycleInfo = CYCLES_REF.find(c => c.code === cycleCode)!;
-            const countSelected = NIVEAUX_PAR_CYCLE[cycleCode].filter(n => selectedNiveaux[`${cycleCode}|${n}`]).length;
-            return (
-              <div key={cycleCode}>
-                <div className="flex items-center gap-2 mb-2 pb-1.5 border-b" style={{ borderColor: 'var(--border)' }}>
-                  <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">{cycleInfo.nom.split('(')[0].trim()}</span>
-                  <span className="px-1.5 py-0.5 rounded-full bg-indigo-600 text-white text-[10px] font-black">{countSelected}</span>
-                  <button type="button" onClick={() => setAll(true, cycleCode)} className="ml-auto text-[10.5px] font-bold text-indigo-500 hover:underline cursor-pointer flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Sélectionner
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {niveaux.map(niveau => {
-                    const key = `${cycleCode}|${niveau}`;
-                    const checked = !!selectedNiveaux[key];
-                    return (
-                      <label
-                        key={key}
-                        className={`px-3 py-2 rounded-lg border flex items-center gap-2 cursor-pointer text-xs font-semibold transition-all ${
-                          checked ? 'border-indigo-500 bg-indigo-500/10' : 'hover:border-indigo-500/40'
-                        }`}
-                        style={{ borderColor: checked ? '#6366f1' : 'var(--border)' }}
-                      >
-                        <input type="checkbox" checked={checked} onChange={() => onToggle(key)} className="w-3.5 h-3.5 rounded accent-indigo-600" />
-                        <span style={{ color: 'var(--text-primary)' }}>{niveau}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="p-4 border-t flex items-center gap-2 shrink-0" style={{ borderColor: 'var(--border)' }}>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
-          >
-            <Check className="w-4 h-4" /> Ajouter les Classes Sélectionnées
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2.5 rounded-xl border text-xs font-bold hover:bg-slate-500/10 transition-all cursor-pointer"
-            style={{ borderColor: 'var(--border)' }}
-          >
-            Annuler
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-};
-
-// ─── Modal : Ajout des Sections / Salles pour un Niveau ───────────────────
-const SectionsModal: React.FC<{
-  cycleCode: CodeCycleWizard;
-  niveau: string;
-  existingLabels: string[];
-  onConfirm: (rows: { label: string; capacite: number }[]) => void;
-  onClose: () => void;
-}> = ({ niveau, existingLabels, onConfirm, onClose }) => {
-  const defaultLabels = ['A', 'B', 'C'].filter(l => !existingLabels.includes(l));
-  const [labelStyle, setLabelStyle] = useState<'ALPHA' | 'NUM'>('ALPHA');
-  const [rows, setRows] = useState<{ id: string; label: string; capacite: number; checked: boolean }[]>(
-    (defaultLabels.length > 0 ? defaultLabels : ['A', 'B', 'C']).map(l => ({ id: uuid(), label: l, capacite: 45, checked: true }))
-  );
-
-  const applyLabelStyle = (style: 'ALPHA' | 'NUM') => {
-    setLabelStyle(style);
-    const alpha = ['A', 'B', 'C', 'D', 'E', 'F'];
-    setRows(prev => prev.map((r, i) => ({ ...r, label: style === 'ALPHA' ? (alpha[i] || `${i + 1}`) : `${i + 1}` })));
-  };
-
-  const addRow = () => {
-    setRows(prev => [...prev, { id: uuid(), label: labelStyle === 'ALPHA' ? (['A','B','C','D','E','F'][prev.length] || `${prev.length + 1}`) : `${prev.length + 1}`, capacite: 45, checked: true }]);
-  };
-
-  const removeRow = (id: string) => setRows(prev => prev.filter(r => r.id !== id));
-
-  const updateRow = (id: string, patch: Partial<{ label: string; capacite: number; checked: boolean }>) => {
-    setRows(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
-  };
-
-  const handleConfirm = () => {
-    const selected = rows.filter(r => r.checked && r.label.trim());
-    if (selected.length === 0) return;
-    onConfirm(selected.map(r => ({ label: r.label.trim(), capacite: r.capacite || 45 })));
-  };
-
-  return createPortal(
-    <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm" onClick={onClose}>
-      <div
-        className="w-full max-w-lg rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
-        style={{ background: 'var(--sidebar-popover-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="p-4 border-b flex items-center justify-between shrink-0" style={{ borderColor: 'var(--border)' }}>
-          <div>
-            <h3 className="text-sm font-black flex items-center gap-2"><Users className="w-4 h-4 text-indigo-500" /> Sections / Salles Physiques</h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">Niveau : <strong style={{ color: 'var(--text-primary)' }}>{niveau}</strong></p>
-          </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="p-4 overflow-y-auto flex-1 sidebar-scroll space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-slate-500">Étiquetage :</span>
-            <button
-              type="button"
-              onClick={() => applyLabelStyle('ALPHA')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${labelStyle === 'ALPHA' ? 'bg-indigo-600 text-white border-indigo-600' : 'text-slate-500'}`}
-              style={{ borderColor: labelStyle === 'ALPHA' ? undefined : 'var(--border)' }}
-            >
-              A, B, C
-            </button>
-            <button
-              type="button"
-              onClick={() => applyLabelStyle('NUM')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${labelStyle === 'NUM' ? 'bg-indigo-600 text-white border-indigo-600' : 'text-slate-500'}`}
-              style={{ borderColor: labelStyle === 'NUM' ? undefined : 'var(--border)' }}
-            >
-              1, 2, 3
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            {rows.map(row => (
-              <div key={row.id} className="flex items-center gap-2 p-2.5 rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}>
-                <input
-                  type="checkbox"
-                  checked={row.checked}
-                  onChange={e => updateRow(row.id, { checked: e.target.checked })}
-                  className="w-4 h-4 rounded accent-indigo-600 shrink-0"
-                />
-                <input
-                  type="text"
-                  value={row.label}
-                  onChange={e => updateRow(row.id, { label: e.target.value })}
-                  className="w-16 px-2 py-1.5 rounded-lg border text-xs font-black text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
-                />
-                <span className="text-[11px] text-slate-400 shrink-0">{niveau}</span>
-                <div className="flex items-center gap-1.5 ml-auto shrink-0">
-                  <NumberInput
-                    value={row.capacite}
-                    onChange={v => updateRow(row.id, { capacite: v || 45 })}
-                    min={5}
-                    max={120}
-                    integer
-                    placeholder="45"
-                    className="w-16 px-2 py-1.5 rounded-lg border text-xs font-bold text-center"
-                    style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
-                  />
-                  <span className="text-[10px] text-slate-400">élèves</span>
-                </div>
-                <button type="button" onClick={() => removeRow(row.id)} className="p-1 rounded text-slate-400 hover:text-rose-500 cursor-pointer shrink-0">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={addRow}
-            className="w-full py-2 rounded-xl border border-dashed text-xs font-bold text-slate-500 hover:border-indigo-500 hover:text-indigo-500 transition-all cursor-pointer flex items-center justify-center gap-1.5"
-            style={{ borderColor: 'var(--border)' }}
-          >
-            <Plus className="w-3.5 h-3.5" /> Ajouter une Autre Section
-          </button>
-        </div>
-
-        <div className="p-4 border-t flex items-center gap-2 shrink-0" style={{ borderColor: 'var(--border)' }}>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
-          >
-            <Check className="w-4 h-4" /> Ajouter les Sections Sélectionnées
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2.5 rounded-xl border text-xs font-bold hover:bg-slate-500/10 transition-all cursor-pointer"
-            style={{ borderColor: 'var(--border)' }}
-          >
-            Annuler
-          </button>
-        </div>
-      </div>
     </div>,
     document.body
   );

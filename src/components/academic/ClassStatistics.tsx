@@ -2,7 +2,8 @@ import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 import { Users, School, Layers, Percent } from 'lucide-react';
 import { ClasseScolaire, Eleve } from '../../types';
-import { formatCurrency } from '../../utils/currency';
+import { formatCurrency, convertCurrency } from '../../utils/currency';
+import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 
 interface ClassStatisticsProps {
   classes: ClasseScolaire[];
@@ -42,6 +43,7 @@ const KpiCard: React.FC<{ icon: React.ElementType; label: string; value: string;
 );
 
 export const ClassStatistics: React.FC<ClassStatisticsProps> = ({ classes, students }) => {
+  const { currency } = useSchoolConfig();
   const countsByClass = useMemo(() => {
     const map = new Map<string, number>();
     for (const s of students) {
@@ -78,8 +80,11 @@ export const ClassStatistics: React.FC<ClassStatisticsProps> = ({ classes, stude
   const avg = totalClasses > 0 ? Math.round((totalStudents / totalClasses) * 10) / 10 : 0;
 
   const totalFrais = useMemo(() => {
-    return classes.reduce((sum, c) => sum + (c.fraisInscription || 0) + (c.fraisMinerval || 0) + (c.fraisAnnexe || 0), 0);
-  }, [classes]);
+    return classes.reduce((sum, c) => {
+      const totalClasse = (c.fraisInscription || 0) + (c.fraisMinerval || 0) + (c.fraisAnnexe || 0);
+      return sum + convertCurrency(totalClasse, c.devise || 'USD', currency);
+    }, 0);
+  }, [classes, currency]);
 
   return (
     <div className="space-y-4">
@@ -87,7 +92,7 @@ export const ClassStatistics: React.FC<ClassStatisticsProps> = ({ classes, stude
         <KpiCard icon={School} label="Classes" value={totalClasses.toLocaleString()} sub="Promotions configurées" color="#6366f1" />
         <KpiCard icon={Users} label="Effectif Actif" value={totalStudents.toLocaleString()} sub="Élèves actifs" color="#10b981" />
         <KpiCard icon={Layers} label="Moyenne / Classe" value={avg.toFixed(1)} sub="élèves par promotion" color="#f59e0b" />
-        <KpiCard icon={Percent} label="Tarification moy." value={formatCurrency(totalFrais / (totalClasses || 1), 'USD')} sub="par classe" color="#ec4899" />
+        <KpiCard icon={Percent} label="Tarification moy." value={formatCurrency(totalFrais / (totalClasses || 1), currency)} sub="par classe" color="#ec4899" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

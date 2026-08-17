@@ -9,7 +9,7 @@
     "build": "tsc && vite build",
     "lint": "tsc --noEmit",
     "preview": "vite preview",
-    "electron:dev": "concurrently -k \"vite\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:dev": "powershell -NoProfile -Command \"Remove-Item -ErrorAction SilentlyContinue Env:\\ELECTRON_RUN_AS_NODE; & concurrently -k 'vite' 'wait-on http://localhost:3000 && electron .'\"",
     "electron:build": "tsc && vite build && electron-builder"
   },
   "dependencies": {
@@ -19,6 +19,7 @@
     "core-js": "^3.50.0",
     "drizzle-orm": "^0.45.2",
     "html2pdf.js": "^0.14.0",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.469.0",
     "node-machine-id": "^1.1.12",
     "react": "^18.3.1",

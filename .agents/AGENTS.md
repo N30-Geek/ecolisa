@@ -16,3 +16,8 @@
   - Sous-cartes, modales et menus déroulants : `rounded-xl` (12px)
   - Contrôles interactifs (boutons, inputs, déclencheurs de select) : `rounded-lg` (8px)
   - Micro-puces / Badges : `rounded-md` (6px) ou `rounded-full`
+
+## 4. Vérification & Build
+- Vérification TypeScript : `npm run lint` (alias `tsc --noEmit`).
+- Build production : `npm run build` (`tsc && vite build`).
+- Toujours passer `npm run lint` avant de considérer une tâche terminée.

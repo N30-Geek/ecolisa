@@ -1,5 +1,12 @@
 import { LocalDatabaseService, DepenseCaisse } from './localDatabase';
-import { convertCurrency, formatCurrency } from '../utils/currency';
+import {
+  convertCurrencyFromList,
+  formatCurrencyFromList,
+  Currency,
+  DEFAULT_CURRENCIES,
+  getReferenceCurrency,
+} from '../utils/currency';
+import { getInvoiceTotal, getInvoicePaid, getPaymentAmount } from '../utils/financeCalculations';
 import {
   Eleve,
   ClasseScolaire,
@@ -86,7 +93,7 @@ const MONTH_LABELS = ['Sept', 'Oct', 'Nov', 'Déc', 'Jan', 'Fév', 'Mar', 'Avr',
  * Normalise intelligemment les cycles en RDC :
  * Maternelle, Primaire, CTEB (7e-8e), Humanités (1e-4e)
  */
-const normalizeCycle = (cycleStr?: string, classNameStr?: string): string => {
+export const normalizeCycle = (cycleStr?: string, classNameStr?: string): string => {
   const target = `${cycleStr || ''} ${classNameStr || ''}`.toUpperCase();
   if (target.includes('MATERNELLE') || target.includes('PRESCHOOL') || target.includes('MAT')) return 'MATERNELLE';
   if (target.includes('PRIMAIRE') || target.includes('PRI')) return 'PRIMAIRE';
@@ -218,13 +225,17 @@ export const fetchDashboardData = async (targetSchoolYearId?: string): Promise<D
 
 export const computeDashboardStats = (
   data: DashboardData,
-  displayCurrency: 'USD' | 'CDF' = 'USD',
-  exchangeRate: number = 2850
+  displayCurrency: string = 'USD',
+  currencies: Currency[] = DEFAULT_CURRENCIES
 ): DashboardStats => {
   const { students, classes, staff, subjects, invoices, payments, expenses, cotes, presences, schoolEvents, selectedYear } = data;
 
-  const toDisplay = (amount: number, source: 'USD' | 'CDF' | string = 'USD') =>
-    convertCurrency(amount, source, displayCurrency, exchangeRate);
+  const referenceCurrency = getReferenceCurrency(currencies).code;
+
+  // Les totaux sont calculés dans la devise de référence pour éviter les doubles conversions
+  // lors de l'affichage (useSchoolConfig().format convertit automatiquement vers displayCurrency).
+  const toRef = (amount: number, source: string = referenceCurrency) =>
+    convertCurrencyFromList(amount, source, referenceCurrency, currencies);
 
   const activeStudentList = students.filter((s) => s.statut === 'ACTIF' || !s.statut);
   const totalStudents = students.length;
@@ -232,11 +243,11 @@ export const computeDashboardStats = (
   const girlsCount = activeStudentList.filter((s) => s.sexe === 'F').length;
   const boysCount = activeStudentList.filter((s) => s.sexe === 'M' || !s.sexe).length;
 
-  const totalRevenue = payments.reduce((sum, p) => sum + toDisplay((p.montantPaye || p.montantPaye === 0 ? p.montantPaye : (p as any).montant) || 0, ((p as any).devise || (p as any).currency || 'USD')), 0);
-  const totalInvoiced = invoices.reduce((sum, inv) => sum + toDisplay(inv.montantTotal || 0, ((inv as any).devise || (inv as any).currency || 'USD')), 0);
-  const totalPaid = invoices.reduce((sum, inv) => sum + toDisplay(inv.montantPaye || 0, ((inv as any).devise || (inv as any).currency || 'USD')), 0);
+  const totalRevenue = payments.reduce((sum, p) => sum + getPaymentAmount(p, referenceCurrency), 0);
+  const totalInvoiced = invoices.reduce((sum, inv) => sum + getInvoiceTotal(inv, referenceCurrency), 0);
+  const totalPaid = invoices.reduce((sum, inv) => sum + getInvoicePaid(inv, payments, referenceCurrency), 0);
   const totalUnpaid = Math.max(0, totalInvoiced - totalPaid);
-  const totalExpenses = expenses.reduce((sum, e) => sum + toDisplay(e.montant || 0, (e.devise || 'USD')), 0);
+  const totalExpenses = expenses.reduce((sum, e) => sum + toRef(e.montant || 0, (e.devise || referenceCurrency)), 0);
   const cashBalance = totalRevenue - totalExpenses;
   const recoveryRate = totalInvoiced > 0 ? Math.round((totalPaid / totalInvoiced) * 1000) / 10 : 0;
 
@@ -288,14 +299,14 @@ export const computeDashboardStats = (
     const q = periodFromMonth(parseMonth((p as any).dateCreation || (p as any).datePaiement || p.dateCreation));
     const name = quarterName(q, yearStr);
     const cur = financeByQuarter.get(name) || { encaisse: 0, objectif: 0 };
-    cur.encaisse += toDisplay((p.montantPaye || p.montantPaye === 0 ? p.montantPaye : (p as any).montant) || 0, ((p as any).devise || (p as any).currency || 'USD'));
+    cur.encaisse += getPaymentAmount(p, referenceCurrency);
     financeByQuarter.set(name, cur);
   }
   for (const inv of invoices) {
     const q = periodFromMonth(parseMonth(inv.dateEcheance));
     const name = quarterName(q, yearStr);
     const cur = financeByQuarter.get(name) || { encaisse: 0, objectif: 0 };
-    cur.objectif += toDisplay(inv.montantTotal || 0, ((inv as any).devise || (inv as any).currency || 'USD'));
+    cur.objectif += getInvoiceTotal(inv, referenceCurrency);
     financeByQuarter.set(name, cur);
   }
 
@@ -303,7 +314,7 @@ export const computeDashboardStats = (
   const quarterlyFinance = quarterOrder.map((q) => {
     const name = quarterName(q, yearStr);
     const v = financeByQuarter.get(name) || { encaisse: 0, objectif: 0 };
-    return { trimestre: name, encaisse: Math.round(v.encaisse), objectif: Math.round(v.objectif) };
+    return { trimestre: name, encaisse: v.encaisse, objectif: v.objectif };
   });
 
   // Activités réelles dynamiques (issue uniquement des données enregistrées dans l'année en cours)
@@ -320,7 +331,7 @@ export const computeDashboardStats = (
     recentActivity.push({
       id: `pay-${p.id}`,
       nomAuteur: p.nomCaissier || 'Service Caisse',
-      titre: `a perçu un versement de ${formatCurrency((p.montantPaye || 0), displayCurrency, ((p as any).devise || (p as any).currency || 'USD'), exchangeRate)}`,
+      titre: `a perçu un versement de ${formatCurrencyFromList(getPaymentAmount(p, referenceCurrency), displayCurrency, referenceCurrency, currencies)}`,
       ilYA: p.dateCreation ? new Date(p.dateCreation).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : 'Récemment',
       necessiteApprobation: false,
       avatarUrl: `https://ui-avatars.com/api/?name=Caisse&background=10b981&color=fff&size=64`,
@@ -362,18 +373,15 @@ export const computeDashboardStats = (
   for (const p of payments) {
     const raw = (p as any).moyenPaiement || (p as any).methode || 'CASH';
     const method = methodLabels[raw] || raw;
-    const amount = toDisplay(
-      (p as any).montantPaye ?? (p as any).montant ?? 0,
-      ((p as any).devise || (p as any).currency || 'USD')
-    );
+    const amount = getPaymentAmount(p, referenceCurrency);
     paymentTotals.set(method, (paymentTotals.get(method) || 0) + amount);
   }
   const totalForPct = Math.max(1, totalRevenue);
   const paymentMethods = Array.from(paymentTotals.entries())
     .map(([method, amount]) => ({
       method,
-      amount: Math.round(amount),
-      pct: Math.round((amount / totalForPct) * 1000) / 10,
+      amount,
+      pct: totalForPct > 0 ? Math.round((amount / totalForPct) * 1000) / 10 : 0,
     }))
     .sort((a, b) => b.amount - a.amount);
 
@@ -384,7 +392,7 @@ export const computeDashboardStats = (
   const topUnpaidInvoices = invoices
     .map((inv) => ({
       nomEleve: (inv as any).nomEleve || inv.studentId || 'Élève Enregistré',
-      montant: Math.round(toDisplay((inv.montantTotal || 0) - (inv.montantPaye || 0), ((inv as any).devise || (inv as any).currency || 'USD'))),
+      montant: Math.max(0, getInvoiceTotal(inv, referenceCurrency) - getInvoicePaid(inv, payments, referenceCurrency)),
     }))
     .filter((inv) => inv.montant > 0)
     .sort((a, b) => b.montant - a.montant)
@@ -462,4 +470,96 @@ export const computeDashboardStats = (
     topUnpaidInvoices,
     attendanceByCycle,
   };
+};
+
+/**
+ * Détermine le sous-groupe d'une classe (section / niveau / option)
+ * selon le cycle sélectionné, pour alimenter les filtres adaptatifs du dashboard.
+ */
+export const getClassSubCode = (cls: ClasseScolaire, cycleFilter: string): string => {
+  const cycle = normalizeCycle(cls.cycleId, cls.nom);
+
+  // Cycle Maternelle -> Petite / Moyenne / Grande Section
+  if (cycle === 'MATERNELLE') {
+    const name = cls.nom.toLowerCase();
+    if (name.includes('petite') || name.includes(' ps') || /^\s*ps\b/.test(name) || /maternelle\s*1/.test(name)) return 'PS';
+    if (name.includes('moyenne') || name.includes(' ms') || /^\s*ms\b/.test(name) || /maternelle\s*2/.test(name)) return 'MS';
+    if (name.includes('grande') || name.includes(' gs') || /^\s*gs\b/.test(name) || /maternelle\s*3/.test(name)) return 'GS';
+    return 'PS';
+  }
+
+  // Cycle Primaire -> Niveau 1ère à 6ème
+  if (cycle === 'PRIMAIRE') {
+    const m = cls.nom.match(/(1[èe]re?|2[èe]me?|3[èe]me?|4[èe]me?|5[èe]me?|6[èe]me?)/i);
+    if (m) return m[1].toUpperCase().replace('È', 'E');
+    return 'TRONC_COMMUN';
+  }
+
+  // Secondaire / Humanités / CTEB -> optionCode de la classe
+  return cls.optionCode || 'TRONC_COMMUN';
+};
+
+/**
+ * Filtre un jeu de données dashboard selon le cycle et la section/option choisis.
+ * Les effectifs, classes, factures, paiements, cotes et présences sont réduits
+ * au sous-ensemble correspondant aux filtres, tandis que les années scolaires,
+ * le personnel et les matières restent globaux pour ne pas fausser les KPIs
+ * transversaux.
+ */
+export const filterDashboardData = (
+  data: DashboardData,
+  cycleFilter: string,
+  optionFilter: string
+): DashboardData => {
+  if ((cycleFilter === 'ALL' || !cycleFilter) && (optionFilter === 'ALL' || !optionFilter)) return data;
+
+  const matchClass = (cls?: ClasseScolaire): boolean => {
+    if (!cls) return false;
+    const cycle = normalizeCycle(cls.cycleId, cls.nom);
+
+    if (cycleFilter && cycleFilter !== 'ALL') {
+      if (cycleFilter === 'SECONDAIRE') {
+        if (cycle !== 'CTEB' && cycle !== 'HUMANITES') return false;
+      } else if (cycle !== cycleFilter) {
+        return false;
+      }
+    }
+
+    if (optionFilter && optionFilter !== 'ALL') {
+      const sub = getClassSubCode(cls, cycleFilter);
+      if (sub !== optionFilter) return false;
+    }
+
+    return true;
+  };
+
+  const matchStudent = (s: Eleve): boolean => {
+    const cls = data.classes.find((c) => c.id === s.classId);
+    if (cls) return matchClass(cls);
+    if (s.nomClasse) {
+      const fallback = data.classes.find((c) => c.nom === s.nomClasse);
+      if (fallback) return matchClass(fallback);
+    }
+    return false;
+  };
+
+  const students = data.students.filter(matchStudent);
+  const studentIds = new Set(students.map((s) => s.id));
+  const classes = data.classes.filter((c) => matchClass(c));
+  const activeClassIds = new Set(classes.map((c) => c.id));
+
+  const invoices = data.invoices.filter(
+    (inv) => studentIds.has(inv.studentId) || activeClassIds.has(inv.classeId || '')
+  );
+  const invoiceIds = new Set(invoices.map((inv) => inv.id));
+
+  const payments = data.payments.filter((p) => invoiceIds.has(p.invoiceId));
+  const cotes = data.cotes.filter(
+    (c) => studentIds.has(c.eleveId) || activeClassIds.has(c.classeId || '')
+  );
+  const presences = data.presences.filter(
+    (p) => studentIds.has(p.eleveId) || activeClassIds.has(p.classeId || '')
+  );
+
+  return { ...data, students, classes, invoices, payments, cotes, presences };
 };

@@ -138,7 +138,7 @@ export const StudentDocumentsModal: React.FC<StudentDocumentsModalProps> = ({
     const q = query.trim().toLowerCase();
     if (!q) return documents;
     return documents.filter(d =>
-      d.originalName.toLowerCase().includes(q) ||
+      (d.originalName ?? d.nomFichier ?? '').toLowerCase().includes(q) ||
       (d.category || '').toLowerCase().includes(q) ||
       (d.mimeType || '').toLowerCase().includes(q)
     );
@@ -171,33 +171,76 @@ export const StudentDocumentsModal: React.FC<StudentDocumentsModalProps> = ({
     }
   };
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
   const handleImportFiles = async () => {
-    setAction('importing');
     setShowAddMenu(false);
-    try {
-      const added = await docApi.importDocuments(owner.id);
-      if (added && added.length) setDocuments(prev => [...added, ...prev]);
-    } catch (err) {
-      console.error('[Documents] Erreur import fichiers :', err);
-    } finally {
-      setAction('idle');
+    if ((window as any).electronAPI?.isElectron) {
+      setAction('importing');
+      try {
+        const added = await docApi.importDocuments(owner.id);
+        if (added && added.length) {
+          setDocuments(prev => [...added, ...prev]);
+          return;
+        }
+      } catch (err) {
+        console.error('[Documents] Erreur import native IPC :', err);
+      } finally {
+        setAction('idle');
+      }
     }
+    fileInputRef.current?.click();
   };
 
   const handleImportFolder = async () => {
     setShowAddMenu(false);
+    if ((window as any).electronAPI?.isElectron) {
+      setAction('importing');
+      try {
+        const added = await docApi.importFolder(owner.id);
+        if (Array.isArray(added) && added.length > 0) {
+          setDocuments(prev => [...added, ...prev]);
+          return;
+        } else if (added && !Array.isArray(added)) {
+          setDocuments(prev => [added, ...prev]);
+          return;
+        }
+      } catch (err) {
+        console.error('[Documents] Erreur import dossier native IPC :', err);
+      } finally {
+        setAction('idle');
+      }
+    }
+    folderInputRef.current?.click();
+  };
+
+  const handleWebFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     setAction('importing');
     try {
-      const added = await docApi.importFolder(owner.id);
-      if (Array.isArray(added)) {
-        setDocuments(prev => [...added, ...prev]);
-      } else if (added) {
-        setDocuments(prev => [added, ...prev]);
+      const newDocs: DocumentScolaire[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        const added = await docApi.importImage(owner.id, file.name, dataUrl);
+        if (added) newDocs.push(added);
+      }
+      if (newDocs.length > 0) {
+        setDocuments(prev => [...newDocs, ...prev]);
       }
     } catch (err) {
-      console.error('[Documents] Erreur import dossier :', err);
+      console.error('[Documents] Erreur upload fichier web :', err);
     } finally {
       setAction('idle');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (folderInputRef.current) folderInputRef.current.value = '';
     }
   };
 
@@ -266,9 +309,17 @@ export const StudentDocumentsModal: React.FC<StudentDocumentsModalProps> = ({
     try {
       const res = await docApi.readDocument(doc.id);
       if (!res) throw new Error('Fichier introuvable');
-      const blob = await fetch(`data:${res.mimeType};base64,${res.data}`).then(r => r.blob());
-      const url = URL.createObjectURL(blob);
-      setViewerUrl(url);
+      const raw = res.dataUrl || res.data || res.url || '';
+      if (typeof raw === 'string' && (raw.startsWith('data:') || raw.startsWith('blob:') || raw.startsWith('http'))) {
+        setViewerUrl(raw);
+      } else if (raw) {
+        const mime = res.mimeType || doc.mimeType || 'image/jpeg';
+        const blob = await fetch(`data:${mime};base64,${raw}`).then(r => r.blob());
+        const url = URL.createObjectURL(blob);
+        setViewerUrl(url);
+      } else {
+        throw new Error('Contenu de fichier vide');
+      }
     } catch (err) {
       console.error('[Documents] Visualiseur :', err);
       setViewerError('Impossible de charger ce document.');
@@ -289,7 +340,7 @@ export const StudentDocumentsModal: React.FC<StudentDocumentsModalProps> = ({
     if (!viewerDoc || !viewerUrl) return;
     const a = document.createElement('a');
     a.href = viewerUrl;
-    a.download = viewerDoc.originalName;
+    a.download = viewerDoc.originalName ?? viewerDoc.nomFichier ?? 'document';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -301,7 +352,7 @@ export const StudentDocumentsModal: React.FC<StudentDocumentsModalProps> = ({
 
   const startRename = (doc: DocumentScolaire) => {
     setRenamingId(doc.id);
-    setRenameValue(doc.originalName);
+    setRenameValue(doc.originalName ?? doc.nomFichier ?? '');
   };
 
   const saveRename = async (id: string) => {
@@ -478,7 +529,7 @@ export const StudentDocumentsModal: React.FC<StudentDocumentsModalProps> = ({
 
   const modal = (
     <div
-      className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 w-full h-full z-[9999] bg-slate-950/65 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-fade-in"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
@@ -489,6 +540,24 @@ export const StudentDocumentsModal: React.FC<StudentDocumentsModalProps> = ({
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
         }}
       >
+        {/* HIDDEN INPUT FOR FILE UPLOAD */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          className="hidden"
+          multiple
+          onChange={handleWebFileUpload}
+        />
+        {/* HIDDEN INPUT FOR FOLDER UPLOAD */}
+        <input
+          type="file"
+          ref={folderInputRef}
+          className="hidden"
+          multiple
+          {...({ webkitdirectory: '', directory: '' } as any)}
+          onChange={handleWebFileUpload}
+        />
+
         {/* HEADER */}
         <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--border)' }}>
           <div>
@@ -695,11 +764,11 @@ export const StudentDocumentsModal: React.FC<StudentDocumentsModalProps> = ({
                     </div>
 
                     <div className="w-20 text-right text-[10px] font-bold hidden sm:block" style={{ color: 'var(--text-muted)' }}>
-                      {formatBytes(doc.sizeBytes)}
+                      {formatBytes(doc.sizeBytes || doc.size)}
                     </div>
 
                     <div className="w-28 text-right text-[10px] font-bold hidden md:block" style={{ color: 'var(--text-muted)' }}>
-                      {formatDate(doc.createdAt)}
+                      {formatDate(doc.createdAt || doc.dateAjout)}
                     </div>
 
                     <div className="w-24 flex items-center justify-end gap-1">

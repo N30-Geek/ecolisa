@@ -110,7 +110,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
           ref={menuRef}
           role="menu"
           onClick={e => e.stopPropagation()}
-          className="fixed rounded-xl border shadow-2xl p-1.5 space-y-0.5 animate-scale-in"
+          className="fixed rounded-xl border shadow-sm p-1.5 space-y-0.5 animate-scale-in"
           style={{
             top: position.top,
             left: position.left,
@@ -118,7 +118,7 @@ export const ActionMenu: React.FC<ActionMenuProps> = ({
             zIndex: 99999,
             background: 'var(--sidebar-popover-bg, var(--bg-surface))',
             borderColor: 'var(--sidebar-popover-border, var(--border))',
-            boxShadow: '0 20px 30px -10px rgba(0, 0, 0, 0.4)',
+            boxShadow: 'var(--shadow-sm)',
           }}
         >
           {header && (

@@ -162,17 +162,30 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({ activeSchoolYe
   const loadData = async () => {
     setLoading(true);
     try {
-      const [cls, subs, stf] = await Promise.all([
+      const [cls, subs, stf, userAssigned] = await Promise.all([
         LocalDatabaseService.getClasses(),
         LocalDatabaseService.getSubjects(),
         LocalDatabaseService.getStaff(),
+        LocalDatabaseService.getCurrentUserAssignedClasses(),
       ]);
-      setClasses(cls);
-      setSubjects(subs);
-      setTeachers(stf);
 
-      if (cls.length > 0 && !selectedClassId) {
-        setSelectedClassId(cls[0].id);
+      let filteredCls = cls || [];
+      if (userAssigned !== null) {
+        filteredCls = (cls || []).filter(c =>
+          userAssigned.some(ac =>
+            ac.toLowerCase().trim() === c.nom.toLowerCase().trim() ||
+            c.nom.toLowerCase().includes(ac.toLowerCase().trim()) ||
+            ac.toLowerCase().includes(c.nom.toLowerCase().trim())
+          )
+        );
+      }
+
+      setClasses(filteredCls);
+      setSubjects(subs || []);
+      setTeachers(stf || []);
+
+      if (filteredCls.length > 0) {
+        setSelectedClassId(prev => (prev && filteredCls.some(c => c.id === prev) ? prev : filteredCls[0].id));
       }
     } catch (e) {
       console.error(e);

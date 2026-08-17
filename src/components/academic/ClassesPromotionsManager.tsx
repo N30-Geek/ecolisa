@@ -29,7 +29,8 @@ import {
   ShieldCheck,
   Award,
   Check,
-  FileSpreadsheet
+  FileSpreadsheet,
+  MoreVertical
 } from 'lucide-react';
 import { ClasseScolaire, SalleConfig, MembrePersonnel, AnneeScolaireConfig, Eleve } from '../../types';
 import { LocalDatabaseService } from '../../services/localDatabase';
@@ -38,6 +39,7 @@ import { Pagination } from '../common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
 import { ClassFormModal } from './ClassFormModal';
 import { RoomFormModal } from './RoomFormModal';
+import { BulkAddClassesModal } from './BulkAddClassesModal';
 
 interface ClassesPromotionsManagerProps {
   onNavigateToStudents?: (classId?: string) => void;
@@ -64,7 +66,83 @@ const optionFilterOptions: SelectOption[] = [
   { value: 'Mecanique', label: 'Mécanique Générale' },
 ];
 
-export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> = ({ onNavigateToStudents }) => {
+interface ClassActionsMenuProps {
+  classData: ClasseScolaire;
+  onView: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  isOpen: boolean;
+  onToggle: () => void;
+}
+
+const ClassActionsMenu: React.FC<ClassActionsMenuProps> = ({
+  classData, onView, onEdit, onDelete, isOpen, onToggle,
+}) => {
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onToggle();
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [isOpen, onToggle]);
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={onToggle}
+        className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-500/10 transition-all cursor-pointer"
+        title="Options"
+      >
+        <MoreVertical className="w-4 h-4" />
+      </button>
+      {isOpen && (
+        <div
+          className="absolute right-0 top-full mt-2 w-52 p-2 rounded-2xl border shadow-2xl shadow-slate-950/20 z-50 animate-scale-in overflow-hidden"
+          style={{ background: 'var(--sidebar-popover-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+        >
+          <div className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b mb-1" style={{ borderColor: 'var(--border)' }}>
+            Actions
+          </div>
+          <button
+            onClick={() => { onView(); onToggle(); }}
+            className="w-full px-3 py-2 text-left text-xs font-bold rounded-xl hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 flex items-center gap-2.5 transition-all cursor-pointer"
+          >
+            <div className="w-7 h-7 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+              <Eye className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            Voir les élèves
+          </button>
+          <button
+            onClick={() => { onEdit(); onToggle(); }}
+            className="w-full px-3 py-2 text-left text-xs font-bold rounded-xl hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 flex items-center gap-2.5 transition-all cursor-pointer"
+          >
+            <div className="w-7 h-7 rounded-lg bg-slate-500/10 flex items-center justify-center">
+              <Edit3 className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+            </div>
+            Modifier
+          </button>
+          <div className="h-px my-1.5" style={{ background: 'var(--border)' }} />
+          <button
+            onClick={() => { onDelete(); onToggle(); }}
+            className="w-full px-3 py-2 text-left text-xs font-bold rounded-xl hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center gap-2.5 transition-all cursor-pointer"
+          >
+            <div className="w-7 h-7 rounded-lg bg-rose-500/10 flex items-center justify-center">
+              <Trash2 className="w-4 h-4 text-rose-600" />
+            </div>
+            Supprimer
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> = ({ onNavigateToStudents, activeSchoolYear }) => {
   // State principal
   const [classes, setClasses] = useState<ClasseScolaire[]>([]);
   const [salles, setSalles] = useState<SalleConfig[]>([]);
@@ -82,7 +160,9 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
 
   // Modales & Sélection
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
+  const [isBulkAddModalOpen, setIsBulkAddModalOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ClasseScolaire | null>(null);
+  const [openClassMenuId, setOpenClassMenuId] = useState<string | null>(null);
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<SalleConfig | null>(null);
   const [selectedClassDetail, setSelectedClassDetail] = useState<ClasseScolaire | null>(null);
@@ -96,21 +176,39 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
   const [isPromoting, setIsPromoting] = useState(false);
 
   // Chargement des données
+  const [assignedClasses, setAssignedClasses] = useState<string[] | null>(null);
+
   const loadData = async () => {
     setLoading(true);
     try {
-      const [cls, sal, elv, stf, yrs] = await Promise.all([
+      const [cls, sal, elv, stf, yrs, userAssigned] = await Promise.all([
         LocalDatabaseService.getClasses(),
         LocalDatabaseService.getSalles(),
         LocalDatabaseService.getEleves(),
         LocalDatabaseService.getStaff(),
         LocalDatabaseService.getSchoolYears(),
+        LocalDatabaseService.getCurrentUserAssignedClasses(),
       ]);
-      setClasses(cls);
-      setSalles(sal);
-      setEleves(elv);
-      setTeachers(stf);
-      setSchoolYears(yrs);
+      setAssignedClasses(userAssigned);
+
+      if (userAssigned !== null) {
+        // Enseignant / Titulaire : Ne garder que les classes assignées
+        const filteredCls = (cls || []).filter(c =>
+          userAssigned.some(ac =>
+            ac.toLowerCase().trim() === c.nom.toLowerCase().trim() ||
+            c.nom.toLowerCase().includes(ac.toLowerCase().trim()) ||
+            ac.toLowerCase().includes(c.nom.toLowerCase().trim())
+          )
+        );
+        setClasses(filteredCls);
+      } else {
+        setClasses(cls || []);
+      }
+
+      setSalles(sal || []);
+      setEleves(elv || []);
+      setTeachers(stf || []);
+      setSchoolYears(yrs || []);
     } catch (err) {
       console.error('[ClassesPromotionsManager] Erreur chargement :', err);
     } finally {
@@ -138,6 +236,15 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
     });
     return map;
   }, [eleves, classes]);
+
+  // Année active / rattachée
+  const activeYearId = useMemo(() => {
+    if (!activeSchoolYear) return schoolYears[0]?.id || '';
+    const byId = schoolYears.find(y => y.id === activeSchoolYear);
+    if (byId) return byId.id;
+    const byName = schoolYears.find(y => y.nom === activeSchoolYear);
+    return byName?.id || schoolYears[0]?.id || '';
+  }, [activeSchoolYear, schoolYears]);
 
   // Classes filtrées
   const filteredClasses = useMemo(() => {
@@ -197,6 +304,11 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
     await loadData();
     setIsClassModalOpen(false);
     setEditingClass(null);
+  };
+
+  const handleBulkCreated = async () => {
+    await loadData();
+    setIsBulkAddModalOpen(false);
   };
 
   const handleDeleteClass = async (id: string) => {
@@ -317,7 +429,7 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
             <button
               onClick={() => {
                 setEditingClass(null);
-                setIsClassModalOpen(true);
+                setIsBulkAddModalOpen(true);
               }}
               className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white text-xs font-bold shadow-md shadow-indigo-500/25 hover:shadow-lg hover:shadow-indigo-500/35 flex items-center gap-2 transition-all duration-200 cursor-pointer"
             >
@@ -398,7 +510,7 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Sous-onglets de navigation */}
-          <div className="flex items-center gap-1.5 p-1 rounded-xl border overflow-x-auto sidebar-scroll" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-1.5 p-1.5 rounded-2xl border shadow-sm overflow-x-auto sidebar-scroll" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
             {[
               { id: 'promotions', label: 'Classes & Promotions', icon: School },
               { id: 'cycles', label: 'Structure des Cycles & Options', icon: Layers },
@@ -411,8 +523,10 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
                 <button
                   key={t.id}
                   onClick={() => setActiveTab(t.id as any)}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                    isActive ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                    isActive
+                      ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-500/10'
                   }`}
                 >
                   <TIcon className="w-3.5 h-3.5" />
@@ -509,7 +623,7 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
               <button
                 onClick={() => {
                   setEditingClass(null);
-                  setIsClassModalOpen(true);
+                  setIsBulkAddModalOpen(true);
                 }}
                 className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-xs"
               >
@@ -552,7 +666,17 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
                         <div className="flex items-center gap-2 mt-1.5">
                           <UserCheck className="w-4 h-4 text-indigo-500 shrink-0 icon-animated" />
                           <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate">
-                            {c.professeurTitulaire || 'Non Attribué'}
+                            {(() => {
+                              const clsNomLower = (c.nom || '').trim().toLowerCase();
+                              const found = teachers.find(t => {
+                                const tituls = (t.classesTitularisees || []).map(x => x.toLowerCase().trim());
+                                if (tituls.includes(clsNomLower)) return true;
+                                if (t.classeTitulaireId && t.classeTitulaireId.toLowerCase().trim() === clsNomLower) return true;
+                                if (t.salleUniqueId && t.salleUniqueId.toLowerCase().trim() === clsNomLower) return true;
+                                return false;
+                              });
+                              return found ? `${found.prenom} ${found.nom}`.trim() : (c.professeurTitulaire || 'Non Attribué');
+                            })()}
                           </span>
                         </div>
                       </div>
@@ -581,33 +705,18 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
 
                     {/* Actions de Carte */}
                     <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800/40 flex items-center justify-between gap-2">
-                      <button
-                        onClick={() => setSelectedClassDetail(c)}
-                        className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white font-bold text-xs shadow-md shadow-indigo-500/20 hover:shadow-lg hover:shadow-indigo-500/30 flex items-center gap-1.5 transition-all duration-200 cursor-pointer"
-                      >
-                        <Eye className="w-4 h-4" />
-                        <span>Voir Élèves ({countEnrolled})</span>
-                      </button>
-
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => {
-                            setEditingClass(c);
-                            setIsClassModalOpen(true);
-                          }}
-                          className="p-2 rounded-xl text-slate-600 dark:text-slate-300 shadow-xs hover:shadow-md hover:bg-slate-500/10 active:scale-[0.95] transition-all duration-200 cursor-pointer"
-                          title="Modifier la classe"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteClassId(c.id)}
-                          className="p-2 rounded-xl text-rose-600 dark:text-rose-400 shadow-xs hover:shadow-md hover:bg-rose-500/10 active:scale-[0.95] transition-all duration-200 cursor-pointer"
-                          title="Supprimer la classe"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-indigo-500" />
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">{countEnrolled} élève{countEnrolled > 1 ? 's' : ''}</span>
                       </div>
+                      <ClassActionsMenu
+                        classData={c}
+                        onView={() => setSelectedClassDetail(c)}
+                        onEdit={() => { setEditingClass(c); setIsClassModalOpen(true); }}
+                        onDelete={() => setDeleteClassId(c.id)}
+                        isOpen={openClassMenuId === c.id}
+                        onToggle={() => setOpenClassMenuId(prev => prev === c.id ? null : c.id)}
+                      />
                     </div>
                   </div>
                 );
@@ -662,29 +771,14 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
                             </span>
                           </td>
                           <td className="p-3.5 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                onClick={() => setSelectedClassDetail(c)}
-                                className="px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] cursor-pointer"
-                              >
-                                Édélves
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingClass(c);
-                                  setIsClassModalOpen(true);
-                                }}
-                                className="p-1 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-500/10 cursor-pointer"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => setDeleteClassId(c.id)}
-                                className="p-1 rounded-md border border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                            <ClassActionsMenu
+                              classData={c}
+                              onView={() => setSelectedClassDetail(c)}
+                              onEdit={() => { setEditingClass(c); setIsClassModalOpen(true); }}
+                              onDelete={() => setDeleteClassId(c.id)}
+                              isOpen={openClassMenuId === c.id}
+                              onToggle={() => setOpenClassMenuId(prev => prev === c.id ? null : c.id)}
+                            />
                           </td>
                         </tr>
                       );
@@ -1090,6 +1184,16 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
         salles={salles}
         teachers={teachers}
         schoolYears={schoolYears}
+      />
+
+      {/* ── MODALE CRÉATION EN BLOC DE CLASSES RDC ── */}
+      <BulkAddClassesModal
+        isOpen={isBulkAddModalOpen}
+        onClose={() => setIsBulkAddModalOpen(false)}
+        onCreated={handleBulkCreated}
+        schoolYears={schoolYears}
+        activeSchoolYearId={activeYearId}
+        existingClasses={classes}
       />
 
       {/* ── MODALE SALLE PHYSIQUE ── */}

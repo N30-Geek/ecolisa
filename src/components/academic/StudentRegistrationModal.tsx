@@ -48,9 +48,12 @@ import { CustomDatePicker } from '../common/CustomDatePicker';
 import { WebcamCaptureModal } from '../common/WebcamCaptureModal';
 import { ReceiptModal } from '../finance/ReceiptModal';
 import { LocalDatabaseService } from '../../services/localDatabase';
+import { showToast } from '../common/ToastNotification';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { formatCurrency, convertCurrency } from '../../utils/currency';
+import { isFraisAnnexeApplicable, isFeeTypeApplicable } from '../../utils/feeFilters';
 import { NumberInput } from '../common/NumberInput';
+import { PhoneInput } from '../common/PhoneInput';
 import { PROVINCES_RDC } from '../../data/referentielEPST';
 
 const PROVINCES_RDC_OPTIONS: SelectOption[] = PROVINCES_RDC.map(p => ({ value: p, label: p }));
@@ -159,6 +162,9 @@ const LANGUE_MATERNELLE_OPTIONS: SelectOption[] = [
 
 // Helper de priorité des frais scolaires
 const getFeePriorityInfo = (ft: Partial<TypeFraisScolaire> & { nom?: string; categorie?: string }) => {
+  if (typeof ft.priorite === 'number' && ft.priorite > 0) {
+    return { priority: ft.priorite, code: `P${ft.priorite}`, label: `P${ft.priorite} - ${ft.nom || 'Frais'}`, color: '#10b981', badgeBg: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' };
+  }
   const cat = String(ft.categorie || '');
   if (ft.obligatoire || cat === 'FRAIS_INSCRIPTION' || cat === 'FRAIS_REINSCRIPTION') {
     return { priority: 1, code: 'P1', label: 'P1 - Inscription (Obligatoire)', color: '#10b981', badgeBg: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' };
@@ -194,7 +200,8 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
   initialStudent,
 }) => {
   const isEdit = !!initialStudent;
-  const { currency: systemCurrency, exchangeRate } = useSchoolConfig();
+  const { currency: systemCurrency, exchangeRate, format } = useSchoolConfig();
+  const fmt = (n: number, source?: string) => format(n, source);
 
   // Navigation du Wizard (3 étapes optimisées)
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -213,6 +220,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
 
   // État de confirmation / prompt post-inscription (Inscrire un autre élève ?)
   const [showSuccessPrompt, setShowSuccessPrompt] = useState<boolean>(false);
+  const [showPrintPrompt, setShowPrintPrompt] = useState<boolean>(false);
   const [justRegisteredStudent, setJustRegisteredStudent] = useState<Eleve | null>(null);
   const [lastSavedInvoice, setLastSavedInvoice] = useState<FactureEleve | null>(null);
   const [lastSavedPayment, setLastSavedPayment] = useState<TransactionPaiement | null>(null);
@@ -256,6 +264,8 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
     nomClasse: '',
     regime: 'EXTERNE' as 'EXTERNE' | 'INTERNE' | 'SEMI_INTERNE',
     langue: 'Français',
+    salleId: '',
+    salle: '',
 
     // Étape 3 : Tuteurs & Parents
     nomPere: '',
@@ -274,8 +284,10 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
     numeroActeNaissance: '',
     ecoleOrigine: '',
     religion: '',
+    religionAutre: '',
     langueMaternelle: 'Français',
     handicap: '',
+    aptitudes: '',
     vaccinations: '',
     medecinTraitant: '',
     assuranceSante: '',
@@ -300,7 +312,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
     // Étape 3 : Frais d'inscription & Paiement
     payerMaintenant: true,
     montantInscription: 0,
-    devise: systemCurrency as 'USD' | 'CDF',
+    devise: systemCurrency as string,
     moyenPaiement: 'CASH' as TransactionPaiement['moyenPaiement'],
     referencePaiement: '',
     datePaiement: new Date().toISOString().split('T')[0],
@@ -343,9 +355,11 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
         anneeScolaire: activeYear?.nom || '',
         classId: firstClass?.id || '',
         nomClasse: firstClass?.nom || '',
+        salleId: '',
+        salle: firstClass?.salle || '',
         cycleId: (firstClass?.cycleId as any) || 'HUMANITES',
         montantInscription: firstClass?.fraisInscription ?? activeYear?.fraisInscription ?? 0,
-        devise: firstClass?.devise || systemCurrency
+        devise: (firstClass?.devise || systemCurrency) as string
       }));
       setIsLoading(false);
     };
@@ -432,8 +446,20 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
       });
     }
 
+    const selectedOption = CYCLES_AVEC_OPTIONS.includes(formData.cycleId) ? formData.optionEPST : 'TRONC_COMMUN';
+    const feeContext = {
+      schoolYearId: formData.schoolYearId,
+      classId: formData.classId,
+      className: formData.nomClasse,
+      cycleId: formData.cycleId,
+      option: selectedOption,
+      salleId: formData.salleId,
+      regime: formData.regime,
+    };
+
     if (targetYear?.fraisAnnexes && targetYear.fraisAnnexes.length > 0) {
       targetYear.fraisAnnexes.forEach(fa => {
+        if (!isFraisAnnexeApplicable(fa, feeContext, CYCLE_LABELS)) return;
         list.push({
           id: `fee_annexe_${fa.id}`,
           nom: fa.intitule,
@@ -446,17 +472,10 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
       });
     }
 
-    // 6. DB feeTypes personnalisés
+    // 6. DB feeTypes personnalisés - filtrés strictement par classe/option/cycle
     if (feeTypes && feeTypes.length > 0) {
-      const option = CYCLES_AVEC_OPTIONS.includes(formData.cycleId) ? formData.optionEPST : 'TRONC_COMMUN';
       feeTypes.forEach(ft => {
-        if (ft.actif === false) return;
-        if (ft.schoolYearId && ft.schoolYearId !== formData.schoolYearId && ft.anneeScolaireId !== formData.schoolYearId) return;
-        if (ft.cycleId && ft.cycleId !== 'TOUS' && ft.cycleId !== formData.cycleId) return;
-        if (ft.optionCode && ft.optionCode !== 'TOUS' && ft.optionCode !== option) return;
-        if (ft.regime && ft.regime !== 'TOUS' && ft.regime !== formData.regime) return;
-        if (ft.portee && ft.portee !== 'TOUS' && ft.portee !== formData.nomClasse) return;
-        
+        if (!isFeeTypeApplicable(ft, feeContext, CYCLE_LABELS)) return;
         if (!list.some(existing => existing.id === ft.id || existing.nom.toLowerCase() === ft.nom.toLowerCase())) {
           list.push(ft);
         }
@@ -464,7 +483,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
     }
 
     return list;
-  }, [classesList, schoolYears, feeTypes, formData.classId, formData.schoolYearId, formData.cycleId, formData.optionEPST, formData.regime, formData.nomClasse, systemCurrency]);
+  }, [classesList, schoolYears, feeTypes, formData.classId, formData.schoolYearId, formData.cycleId, formData.optionEPST, formData.regime, formData.nomClasse, formData.salleId, systemCurrency]);
 
   // Initialisation par défaut des montants versés pour les frais lorsqu'ils sont chargés
   useEffect(() => {
@@ -623,14 +642,16 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
       schoolYearId: studentYear?.id || initialStudent.schoolYearId || '',
       anneeScolaire: studentYear?.nom || '',
       cycleId,
-      optionEPST,
       classId: studentClass?.id || initialStudent.classId || '',
       nomClasse: studentClass?.nom || initialStudent.nomClasse || '',
-      regime: 'EXTERNE',
-      langue: 'Français',
+      salleId: initialStudent.salleId || '',
+      salle: initialStudent.salle || studentClass?.salle || '',
+      regime: initialStudent.regime || 'EXTERNE',
+      langue: initialStudent.langue || 'Français',
+      optionEPST: (studentClass?.optionCode as any) || initialStudent.optionEPST || optionEPST,
       payerMaintenant: false,
       montantInscription: fee,
-      devise: studentClass?.devise || systemCurrency,
+      devise: (studentClass?.devise || systemCurrency) as string,
       nomPere: initialStudent.nomPere || '',
       professionPere: initialStudent.professionPere || '',
       telephonePere: initialStudent.telephonePere || '',
@@ -644,9 +665,11 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
       numeroRecu: `RECU-${Date.now()}`,
       numeroActeNaissance: initialStudent.numeroActeNaissance || '',
       ecoleOrigine: initialStudent.ecoleOrigine || '',
-      religion: initialStudent.religion || '',
+      religion: (RELIGION_OPTIONS.some(o => o.value === initialStudent.religion) ? (initialStudent.religion || '') : (initialStudent.religion ? 'AUTRE' : '')),
+      religionAutre: (RELIGION_OPTIONS.some(o => o.value === initialStudent.religion) ? '' : (initialStudent.religion || '')),
       langueMaternelle: initialStudent.langueMaternelle || 'Français',
       handicap: initialStudent.handicap || '',
+      aptitudes: initialStudent.aptitudes || '',
       vaccinations: initialStudent.vaccinations || '',
       medecinTraitant: initialStudent.medecinTraitant || '',
       assuranceSante: initialStudent.assuranceSante || '',
@@ -691,6 +714,22 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
     () => schoolYears.map(y => ({ value: y.id, label: `${y.nom} — ${y.statut}` })),
     [schoolYears]
   );
+
+  const salleOptions: SelectOption[] = useMemo(() => {
+    const targetClass = classesList.find(c => c.id === formData.classId);
+    const targetYear = schoolYears.find(y => y.id === (targetClass?.schoolYearId || formData.schoolYearId));
+    let salles: string[] = [];
+    if (targetClass?.salles?.length) {
+      salles = targetClass.salles;
+    } else if (targetYear?.salles?.length) {
+      salles = targetYear.salles.map(s => s.nomSalle);
+    }
+    // Ajoute la salle par défaut de la classe si absente
+    if (targetClass?.salle && !salles.includes(targetClass.salle)) {
+      salles.unshift(targetClass.salle);
+    }
+    return salles.map(s => ({ value: s, label: s }));
+  }, [classesList, schoolYears, formData.classId, formData.schoolYearId]);
 
   // Taux de complétude du dossier (%)
   const completionPercentage = useMemo(() => {
@@ -799,6 +838,8 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
         schoolYearId: formData.schoolYearId,
         classId: formData.classId,
         nomClasse: targetClass?.nom || formData.nomClasse,
+        salleId: formData.salleId,
+        salle: formData.salle,
         statut: (formData.derogationActive || !mandatoryFeesCovered) ? 'ACTIF' : 'ACTIF',
         nomPere: formData.nomPere,
         professionPere: formData.professionPere,
@@ -815,9 +856,15 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
         // Dossier complet
         numeroActeNaissance: formData.numeroActeNaissance,
         ecoleOrigine: formData.ecoleOrigine,
-        religion: formData.religion,
+        religion: formData.religion === 'AUTRE' ? formData.religionAutre : formData.religion,
+        religionAutre: formData.religion === 'AUTRE' ? formData.religionAutre : '',
         langueMaternelle: formData.langueMaternelle,
+        regime: formData.regime,
+        langue: formData.langue,
+        langueInstruction: formData.langue,
+        optionEPST: formData.optionEPST,
         handicap: formData.handicap,
+        aptitudes: formData.aptitudes,
         vaccinations: formData.vaccinations,
         medecinTraitant: formData.medecinTraitant,
         assuranceSante: formData.assuranceSante,
@@ -850,6 +897,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
       }
 
       // Génération automatique de la facture & du reçu de caisse si coché à l'étape 4
+      let generatedPayment: TransactionPaiement | null = null;
       if (saved && invoiceLignes.length > 0) {
         const invoiceId = `inv_${Date.now()}`;
         const paidAmount = formData.payerMaintenant
@@ -894,6 +942,8 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
             id: `pay_${Date.now()}`,
             anneeScolaireId: formData.schoolYearId,
             invoiceId,
+            eleveId: saved.id,
+            studentId: saved.registrationNumber,
             nomEleve: `${saved.prenom} ${saved.nom}`,
             registrationNumber: saved.registrationNumber,
             montantPaye: paidAmount,
@@ -906,6 +956,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
             jetonQrCode: `qr-${saved.registrationNumber}`,
             allocations,
           };
+          generatedPayment = payment;
           await LocalDatabaseService.addPayment(payment);
           setLastSavedInvoice(newInvoice);
           setLastSavedPayment(payment);
@@ -916,10 +967,16 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
       }
 
       if (isEdit) {
-        onBack();
+        showToast('Profil élève mis à jour !', `Informations de ${formData.prenom} ${formData.nom} enregistrées.`, 'success');
+        if (!onUpdate) onBack();
       } else if (saved) {
+        showToast('Élève inscrit avec succès !', `${saved.prenom} ${saved.nom} a été inscrit sous le matricule ${saved.registrationNumber}.`, 'success');
         setJustRegisteredStudent(saved);
-        setShowSuccessPrompt(true);
+        if (generatedPayment) {
+          setShowPrintPrompt(true);
+        } else {
+          setShowSuccessPrompt(true);
+        }
       } else {
         onBack();
       }
@@ -977,7 +1034,9 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
       numeroActeNaissance: '',
       ecoleOrigine: '',
       religion: '',
+      religionAutre: '',
       handicap: '',
+      aptitudes: '',
       vaccinations: '',
       medecinTraitant: '',
       assuranceSante: '',
@@ -1002,8 +1061,25 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
   // Terminer et retourner au répertoire des élèves
   const handleFinishRegistration = () => {
     setShowSuccessPrompt(false);
+    setShowPrintPrompt(false);
     setJustRegisteredStudent(null);
     onBack();
+  };
+
+  // Popup de demande d'impression du reçu
+  const handleConfirmPrintReceipt = () => {
+    setShowPrintPrompt(false);
+    setShowReceiptModal(true);
+  };
+
+  const handleSkipPrintReceipt = () => {
+    setShowPrintPrompt(false);
+    setShowSuccessPrompt(true);
+  };
+
+  const handleCloseReceiptModal = () => {
+    setShowReceiptModal(false);
+    setShowSuccessPrompt(true);
   };
 
   const cycleIcon = formData.cycleId === 'MATERNELLE' ? Baby : formData.cycleId === 'HUMANITES' ? GraduationCap : BookOpenCheck;
@@ -1024,9 +1100,20 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
         </button>
 
         <div className="flex items-center gap-3">
+          {isEdit && (
+            <button
+              type="button"
+              onClick={handleSaveStudent}
+              disabled={isSubmitting}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs shadow-md shadow-emerald-500/25 flex items-center gap-2 transition-all cursor-pointer border border-emerald-500/30"
+            >
+              <CheckCircle2 className="w-4 h-4 text-white" />
+              <span>{isSubmitting ? 'Enregistrement...' : 'Enregistrer les modifications'}</span>
+            </button>
+          )}
           <div className="px-3.5 py-1.5 rounded-full text-xs font-black bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center gap-2">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Fiche Officielle d'Inscription Élève EPST RDC (4 Étapes)</span>
+            <span>{isEdit ? "Édition Directe du Dossier Élève" : "Fiche Officielle d'Inscription Élève EPST RDC"}</span>
           </div>
         </div>
       </div>
@@ -1283,6 +1370,64 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                       style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                     />
                   </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Territoire / Commune
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.territoireCommune}
+                        onChange={(e) => setFormData({ ...formData, territoireCommune: e.target.value })}
+                        placeholder="Ex: Lukunga"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Chefferie / Secteur
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.chefferieSecteur}
+                        onChange={(e) => setFormData({ ...formData, chefferieSecteur: e.target.value })}
+                        placeholder="Ex: Kintambo"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Groupement
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.groupement}
+                        onChange={(e) => setFormData({ ...formData, groupement: e.target.value })}
+                        placeholder="Ex: Kintambo"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Village
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.village}
+                        onChange={(e) => setFormData({ ...formData, village: e.target.value })}
+                        placeholder="Ex: Kintambo"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Section Intégrée : Parents, Tuteurs Légaux & Contacts Urgence */}
@@ -1352,13 +1497,10 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Téléphone du Père
                       </label>
-                      <input
-                        type="tel"
+                      <PhoneInput
                         value={formData.telephonePere}
-                        onChange={(e) => setFormData({ ...formData, telephonePere: e.target.value })}
-                        placeholder="+243 ..."
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        onChange={(val) => setFormData({ ...formData, telephonePere: val })}
+                        className="w-full"
                       />
                     </div>
 
@@ -1397,13 +1539,10 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Téléphone de la Mère
                       </label>
-                      <input
-                        type="tel"
+                      <PhoneInput
                         value={formData.telephoneMere}
-                        onChange={(e) => setFormData({ ...formData, telephoneMere: e.target.value })}
-                        placeholder="+243 ..."
-                        className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        onChange={(val) => setFormData({ ...formData, telephoneMere: val })}
+                        className="w-full"
                       />
                     </div>
 
@@ -1424,7 +1563,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
 
                   {/* Fiche Tuteur Responsable & Urgence */}
                   <div className="pt-3 border-t space-y-4" style={{ borderColor: 'var(--border)' }}>
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div>
                         <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                           Nom du Tuteur Principal
@@ -1443,13 +1582,10 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                         <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                           Téléphone Tuteur
                         </label>
-                        <input
-                          type="tel"
+                        <PhoneInput
                           value={formData.telephoneTuteur}
-                          onChange={(e) => setFormData({ ...formData, telephoneTuteur: e.target.value })}
-                          placeholder="+243 ..."
-                          className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                          onChange={(val) => setFormData({ ...formData, telephoneTuteur: val })}
+                          className="w-full"
                         />
                       </div>
 
@@ -1466,15 +1602,69 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
 
                       <div>
                         <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                          Contact Urgence Infirmerie
+                          Profession du Tuteur
                         </label>
                         <input
-                          type="tel"
-                          value={formData.telephoneReferentUrgence}
-                          onChange={(e) => setFormData({ ...formData, telephoneReferentUrgence: e.target.value, contactUrgence: e.target.value })}
-                          placeholder="+243 (Urgence)"
-                          className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border transition-all focus:outline-none focus:ring-2 focus:ring-rose-500"
+                          type="text"
+                          value={formData.professionTuteur}
+                          onChange={(e) => setFormData({ ...formData, professionTuteur: e.target.value })}
+                          placeholder="Ex: Commerçant"
+                          className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Adresse du Tuteur
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.adresseTuteur}
+                        onChange={(e) => setFormData({ ...formData, adresseTuteur: e.target.value })}
+                        placeholder="Avenue, N°, Quartier, Commune"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                          Nom Contact Urgence
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.nomReferentUrgence}
+                          onChange={(e) => setFormData({ ...formData, nomReferentUrgence: e.target.value })}
+                          placeholder="Nom de la personne à contacter"
+                          className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                          Téléphone Urgence
+                        </label>
+                        <PhoneInput
+                          value={formData.telephoneReferentUrgence}
+                          onChange={(val) => setFormData({ ...formData, telephoneReferentUrgence: val, contactUrgence: val })}
+                          placeholder="81 000 0000 (Urgence)"
+                          focusRingClass="focus:ring-rose-500"
+                          className="w-full"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                          Lien avec l'Urgence
+                        </label>
+                        <CustomSelect
+                          options={RELATION_URGENCE_OPTIONS}
+                          value={formData.relationReferentUrgence}
+                          onChange={(val) => setFormData({ ...formData, relationReferentUrgence: val })}
                         />
                       </div>
                     </div>
@@ -1510,8 +1700,8 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                         <input
                           type="text"
                           required
-                          value={(formData as any).religionAutre || ''}
-                          onChange={(e) => setFormData({ ...formData, religionAutre: e.target.value } as any)}
+                          value={formData.religionAutre || ''}
+                          onChange={(e) => setFormData({ ...formData, religionAutre: e.target.value })}
                           placeholder="Entrez la confession religieuse..."
                           className="w-full px-3.5 py-2 rounded-lg text-xs font-bold border border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
@@ -1542,7 +1732,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Allergies Connues
@@ -1559,6 +1749,50 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
 
                     <div>
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Handicap / Aptitudes
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.handicap}
+                        onChange={(e) => setFormData({ ...formData, handicap: e.target.value })}
+                        placeholder="Ex: Aucun / Dyslexie / Sportif"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Aptitudes / Particularités
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.aptitudes}
+                        onChange={(e) => setFormData({ ...formData, aptitudes: e.target.value })}
+                        placeholder="Ex: Musique, dessin, informatique..."
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Vaccinations
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.vaccinations}
+                        onChange={(e) => setFormData({ ...formData, vaccinations: e.target.value })}
+                        placeholder="Ex: BCG, Polio, Rougeole..."
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         N° Acte de Naissance
                       </label>
                       <input
@@ -1573,17 +1807,59 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
 
                     <div>
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Antécédents Médicaux / Notes
+                        Médecin Traitant
                       </label>
                       <input
                         type="text"
-                        value={formData.informationsMedicales}
-                        onChange={(e) => setFormData({ ...formData, informationsMedicales: e.target.value })}
-                        placeholder="Précisez si affection particulière"
+                        value={formData.medecinTraitant}
+                        onChange={(e) => setFormData({ ...formData, medecinTraitant: e.target.value })}
+                        placeholder="Nom du médecin / infirmerie"
                         className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                       />
                     </div>
+
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Assurance Santé
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.assuranceSante}
+                        onChange={(e) => setFormData({ ...formData, assuranceSante: e.target.value })}
+                        placeholder="Ex: CNSS / Mutuelle"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        N° Carte Santé
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.numeroCarteSante}
+                        onChange={(e) => setFormData({ ...formData, numeroCarteSante: e.target.value })}
+                        placeholder="Ex: 123456789"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                      Antécédents Médicaux / Notes
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.informationsMedicales}
+                      onChange={(e) => setFormData({ ...formData, informationsMedicales: e.target.value })}
+                      placeholder="Précisez si affection particulière"
+                      className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                    />
                   </div>
                 </div>
 
@@ -1672,12 +1948,28 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                             ...formData,
                             classId: val,
                             nomClasse: targetClass?.nom || '',
+                            salleId: targetClass?.salle ? '' : (targetClass?.salles?.[0] ? '' : ''),
+                            salle: targetClass?.salle || targetClass?.salles?.[0] || '',
                             montantInscription: targetClass?.fraisInscription ?? formData.montantInscription,
                           });
                         }}
                       />
                     </div>
 
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Salle de Classe Physique
+                      </label>
+                      <CustomSelect
+                        options={salleOptions}
+                        value={formData.salle || ''}
+                        onChange={(val) => setFormData({ ...formData, salle: val, salleId: val })}
+                        placeholder="Sélectionner une salle"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Régime de Présence
@@ -1688,17 +1980,17 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                         onChange={(val) => setFormData({ ...formData, regime: val as any })}
                       />
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                      Langue d'Enseignement
-                    </label>
-                    <CustomSelect
-                      options={LANGUE_MATERNELLE_OPTIONS}
-                      value={formData.langue}
-                      onChange={(val) => setFormData({ ...formData, langue: val })}
-                    />
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Langue d'Enseignement
+                      </label>
+                      <CustomSelect
+                        options={LANGUE_MATERNELLE_OPTIONS}
+                        value={formData.langue}
+                        onChange={(val) => setFormData({ ...formData, langue: val })}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1709,7 +2001,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                     <span>Parcours, Transport & Internat</span>
                   </h3>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Transport Scolaire
@@ -1744,6 +2036,23 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                         value={formData.ecoleOrigine}
                         onChange={(e) => setFormData({ ...formData, ecoleOrigine: e.target.value })}
                         placeholder="Nom école précédente"
+                        className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Moyenne Année Précédente
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="100"
+                        value={formData.moyenneAnneePrecedente}
+                        onChange={(e) => setFormData({ ...formData, moyenneAnneePrecedente: Number(e.target.value) })}
+                        placeholder="Ex: 72.50"
                         className="w-full px-3.5 py-2 rounded-lg text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                       />
@@ -1907,7 +2216,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                                 </div>
                               </div>
                               <span className="text-xs font-black shrink-0 ml-2 text-emerald-700 dark:text-emerald-300">
-                                {ft.montant} {ft.devise || systemCurrency}
+                                {formatCurrency(ft.montant, formData.devise, ft.devise || systemCurrency, exchangeRate)}
                               </span>
                             </div>
                           );
@@ -2409,7 +2718,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                     <div>
                       <span className="text-slate-400 block">Acompte / Payé:</span>
                       <span className="font-black text-emerald-600 dark:text-emerald-400">
-                        {formData.payerMaintenant ? `${formData.montantInscription} ${formData.devise}` : '0 USD'}
+                        {formData.payerMaintenant ? formatCurrency(Number(formData.montantInscription) || 0, systemCurrency, formData.devise, exchangeRate) : formatCurrency(0, systemCurrency)}
                       </span>
                     </div>
                     <div>
@@ -2522,6 +2831,54 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
         }}
       />
 
+      {/* MODALE DE DEMANDE D'IMPRESSION DU REÇU */}
+      {showPrintPrompt && lastSavedPayment && createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200 select-none">
+          <div
+            className="w-full max-w-sm p-6 sm:p-8 rounded-2xl border shadow-2xl space-y-6 text-center animate-in zoom-in-95 duration-200"
+            style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+          >
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center shadow-lg shadow-emerald-500/10">
+              <Printer className="w-9 h-9 text-emerald-500" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                Paiement Enregistré !
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Les frais d'inscription de <strong>{fmt(lastSavedPayment.montantPaye, lastSavedPayment.devise)}</strong> ont été encaissés.
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold pt-1">
+                Souhaitez-vous imprimer le reçu de caisse maintenant ?
+              </p>
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <button
+                type="button"
+                onClick={handleConfirmPrintReceipt}
+                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-black text-xs shadow-md shadow-emerald-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer border border-emerald-500/40"
+              >
+                <Printer className="w-4 h-4 text-white" />
+                <span>Oui, imprimer le reçu</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSkipPrintReceipt}
+                className="w-full py-3 px-4 rounded-xl border font-bold text-xs hover:bg-slate-500/10 active:scale-[0.98] flex items-center justify-center gap-2 transition-all cursor-pointer"
+                style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+              >
+                <FileText className="w-4 h-4 text-slate-500" />
+                <span>Non, plus tard</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* MODALE DE CONFIRMATION SUCCÈS & CHOIX SUITE D'INSCRIPTION */}
       {showSuccessPrompt && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200 select-none">
@@ -2529,21 +2886,19 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
             className="w-full max-w-md p-6 sm:p-8 rounded-2xl border shadow-2xl space-y-6 text-center animate-in zoom-in-95 duration-200"
             style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
           >
-            {/* Icone Succès & Badge */}
             <div className="mx-auto w-16 h-16 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center shadow-lg shadow-emerald-500/10">
               <CheckCircle2 className="w-9 h-9 text-emerald-500" />
             </div>
 
             <div className="space-y-1.5">
               <h3 className="text-xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                Élève Inscrit avec Succès !
+                Inscription Réussie !
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                 Le dossier élève a été enregistré dans le registre national certifié et SQLite.
               </p>
             </div>
 
-            {/* Récapitulatif rapide de l'élève inscrit */}
             {justRegisteredStudent && (
               <div
                 className="p-4 rounded-xl border text-left space-y-1.5 text-xs"
@@ -2566,26 +2921,14 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
               </div>
             )}
 
-            {/* Prompt & Boutons d'Action */}
             <div className="space-y-3 pt-2">
-              {lastSavedPayment && (
-                <button
-                  type="button"
-                  onClick={() => setShowReceiptModal(true)}
-                  className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-black text-xs shadow-md shadow-emerald-500/25 flex items-center justify-center gap-2.5 transition-all cursor-pointer border border-emerald-500/40"
-                >
-                  <Printer className="w-4.5 h-4.5 text-white" />
-                  <span>Imprimer le Reçu de Caisse / Facture</span>
-                </button>
-              )}
-
               <button
                 type="button"
                 onClick={handleContinueNewRegistration}
                 className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-black text-xs shadow-md shadow-indigo-500/25 flex items-center justify-center gap-2.5 transition-all cursor-pointer border border-indigo-500/40"
               >
                 <UserPlus className="w-4.5 h-4.5 text-white" />
-                <span>Inscrire un autre élève</span>
+                <span>Poursuivre l'inscription</span>
               </button>
 
               <button
@@ -2595,7 +2938,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                 style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
               >
                 <ArrowLeft className="w-4 h-4 text-indigo-500" />
-                <span>Terminer & Retourner à la liste</span>
+                <span>Revenir à la liste des élèves</span>
               </button>
             </div>
           </div>
@@ -2607,7 +2950,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
       {showReceiptModal && lastSavedPayment && (
         <ReceiptModal
           isOpen={showReceiptModal}
-          onClose={() => setShowReceiptModal(false)}
+          onClose={handleCloseReceiptModal}
           payment={lastSavedPayment}
           invoice={lastSavedInvoice || undefined}
           feeTypes={feeTypes}

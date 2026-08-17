@@ -179,13 +179,20 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
 
   const handleSaveFormPage = async (staffMember: MembrePersonnel) => {
     const exists = teachers.some((t) => t.id === staffMember.id);
+    let saved: MembrePersonnel | null = null;
     if (exists) {
-      await LocalDatabaseService.updateStaff(staffMember.id, staffMember);
+      saved = await LocalDatabaseService.updateStaff(staffMember.id, staffMember);
     } else {
-      await LocalDatabaseService.addStaff(staffMember);
+      saved = await LocalDatabaseService.addStaff(staffMember);
     }
     await loadTeachers();
-    setView('LIST');
+    const updatedStaff = saved || staffMember;
+    if (selectedTeacher && selectedTeacher.id === staffMember.id) {
+      setSelectedTeacher(updatedStaff);
+      setView('DETAIL');
+    } else {
+      setView('LIST');
+    }
   };
 
   if (view === 'FORM') {
@@ -193,7 +200,7 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
       <StaffFormPage
         staffToEdit={editingTeacher}
         targetCategory={targetCategory}
-        onBack={() => setView('LIST')}
+        onBack={() => setView(selectedTeacher ? 'DETAIL' : 'LIST')}
         onSave={handleSaveFormPage}
       />
     );
@@ -203,7 +210,15 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
     return (
       <TeacherDetailPage
         teacher={selectedTeacher}
-        onBack={() => setView('LIST')}
+        onBack={async () => {
+          await loadTeachers();
+          setSelectedTeacher(null);
+          setView('LIST');
+        }}
+        onUpdate={(updated) => {
+          setSelectedTeacher(updated);
+          setTeachers(prev => prev.map(t => t.id === updated.id ? updated : t));
+        }}
         onEdit={t => {
           setEditingTeacher(t);
           setView('FORM');

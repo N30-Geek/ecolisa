@@ -37,6 +37,7 @@ import {
 import { Eleve, ClasseScolaire } from '../../types';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
+import { SortableTh } from '../common/SortableTh';
 import { StudentRegistrationModal } from './StudentRegistrationModal';
 import { StudentIdCardModal } from './StudentIdCardModal';
 import { StudentFullFileModal } from './StudentFullFileModal';
@@ -50,6 +51,7 @@ import { usePagination } from '../../hooks/usePagination';
 interface StudentsManagerProps {
   initialClassFilter?: string;
   activeSchoolYear?: string;
+  registrationRequest?: number;
 }
 
 
@@ -208,7 +210,7 @@ const StudentActionMenu: React.FC<StudentActionMenuProps> = ({
 };
 
 // ── COMPOSANT PRINCIPAL STUDENTS MANAGER ──
-export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFilter = '', activeSchoolYear }) => {
+export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFilter = '', activeSchoolYear, registrationRequest }) => {
   const [students, setStudents] = useState<Eleve[]>([]);
   const [classes, setClasses] = useState<ClasseScolaire[]>([]);
   const [loading, setLoading] = useState(true);
@@ -220,7 +222,18 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
   const [selectedStatut, setSelectedStatut] = useState('ALL');
   const [selectedSexe, setSelectedSexe] = useState('ALL');
   const [sortBy, setSortBy] = useState<'NAME_ASC' | 'NAME_DESC' | 'DATE_DESC' | 'CLASS'>('NAME_ASC');
+  const [tableSortField, setTableSortField] = useState<string>('name');
+  const [tableSortOrder, setTableSortOrder] = useState<'asc' | 'desc'>('asc');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
+
+  const handleTableSort = (field: string) => {
+    if (tableSortField === field) {
+      setTableSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setTableSortField(field);
+      setTableSortOrder('asc');
+    }
+  };
 
   // Modales & Vues Dédiées
   const [selectedStudent, setSelectedStudent] = useState<Eleve | null>(null);
@@ -232,16 +245,53 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
   const [deleteStudentId, setDeleteStudentId] = useState<string | null>(null);
   const [zoomStudent, setZoomStudent] = useState<Eleve | null>(null);
 
+  const lastRegistrationRequest = useRef(0);
+
+  // Ouvre le formulaire d'inscription lors d'une demande en provenance du dashboard
+  useEffect(() => {
+    if (registrationRequest && registrationRequest !== lastRegistrationRequest.current) {
+      lastRegistrationRequest.current = registrationRequest;
+      setSelectedStudent(null);
+      setEditingStudent(null);
+      setShowRegisterModal(true);
+    }
+  }, [registrationRequest]);
+
+  const [assignedClasses, setAssignedClasses] = useState<string[] | null>(null);
+
   // Chargement des données SQLite
   const loadData = async () => {
     setLoading(true);
     try {
-      const [elvList, clsList] = await Promise.all([
+      const [elvList, clsList, userAssigned] = await Promise.all([
         LocalDatabaseService.getEleves({ schoolYearId: activeSchoolYear }),
         LocalDatabaseService.getClasses(),
+        LocalDatabaseService.getCurrentUserAssignedClasses(),
       ]);
-      setStudents(elvList || []);
-      setClasses(clsList || []);
+      setAssignedClasses(userAssigned);
+
+      if (userAssigned !== null) {
+        // Mode Enseignant / Titulaire : Filtrage strict par classes assignées
+        const filteredCls = (clsList || []).filter(c =>
+          userAssigned.some(ac =>
+            ac.toLowerCase().trim() === c.nom.toLowerCase().trim() ||
+            c.nom.toLowerCase().includes(ac.toLowerCase().trim()) ||
+            ac.toLowerCase().includes(c.nom.toLowerCase().trim())
+          )
+        );
+        const filteredElv = (elvList || []).filter(s => {
+          const sc = (s.nomClasse || (s as any).classe || (s as any).salle || '').toLowerCase().trim();
+          return userAssigned.some(ac => {
+            const acLower = ac.toLowerCase().trim();
+            return sc === acLower || sc.includes(acLower) || acLower.includes(sc);
+          });
+        });
+        setStudents(filteredElv);
+        setClasses(filteredCls);
+      } else {
+        setStudents(elvList || []);
+        setClasses(clsList || []);
+      }
     } catch (err) {
       console.error('[StudentsManager] Erreur chargement :', err);
       setStudents([]);
@@ -315,15 +365,33 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
 
     // Tri
     result = [...result].sort((a, b) => {
-      if (sortBy === 'NAME_ASC') return `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`);
-      if (sortBy === 'NAME_DESC') return `${b.nom} ${b.prenom}`.localeCompare(`${a.nom} ${a.prenom}`);
-      if (sortBy === 'CLASS') return (a.nomClasse || '').localeCompare(b.nomClasse || '');
-      if (sortBy === 'DATE_DESC') return (b.dateInscription || '').localeCompare(a.dateInscription || '');
-      return 0;
+      let res = 0;
+      switch (tableSortField) {
+        case 'matricule':
+          res = (a.registrationNumber || '').localeCompare(b.registrationNumber || '');
+          break;
+        case 'classe':
+          res = (a.nomClasse || '').localeCompare(b.nomClasse || '');
+          break;
+        case 'sexe':
+          res = (a.sexe || '').localeCompare(b.sexe || '');
+          break;
+        case 'statut':
+          res = (a.statut || '').localeCompare(b.statut || '');
+          break;
+        case 'parent':
+          res = (a.nomTuteur || a.telephoneParent || '').localeCompare(b.nomTuteur || b.telephoneParent || '');
+          break;
+        case 'name':
+        default:
+          res = `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`);
+          break;
+      }
+      return tableSortOrder === 'asc' ? res : -res;
     });
 
     return result;
-  }, [students, search, selectedClass, selectedStatut, selectedSexe, sortBy, classes]);
+  }, [students, search, selectedClass, selectedStatut, selectedSexe, tableSortField, tableSortOrder, classes]);
 
   const { paginated: paginatedStudents, ...studentsPagination } = usePagination(filteredStudents, { defaultPageSize: 10 });
 
@@ -349,8 +417,15 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
           setShowRegisterModal(false);
           setEditingStudent(null);
         }}
-        onRegister={async () => {
+        onRegister={async (newStudent) => {
           await loadData();
+          setShowRegisterModal(false);
+        }}
+        onUpdate={async (updatedStudent) => {
+          // Rafraîchit la liste ET redirige vers la fiche mise à jour
+          await loadData();
+          setEditingStudent(null);
+          setSelectedStudent(updatedStudent);
         }}
       />
     );
@@ -369,6 +444,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
       />
     );
   }
+
 
   return (
     <div className="space-y-6 animate-fade-in select-none">
@@ -393,6 +469,20 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
               </div>
             </div>
           </div>
+
+          {assignedClasses !== null && (
+            <div className="w-full mt-3 p-3.5 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 font-bold text-xs flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-indigo-500 shrink-0" />
+                <span>
+                  {assignedClasses.length > 0
+                    ? `Mode Enseignant / Titulaire : Affichage limité à vos classes et élèves assignés (${assignedClasses.join(', ')})`
+                    : "Mode Enseignant / Titulaire : Aucune classe ou salle ne vous est attribuée pour le moment."}
+                </span>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-indigo-500/20 uppercase tracking-wider">Accès Réduit</span>
+            </div>
+          )}
 
           <div className="flex items-center gap-3 flex-wrap">
             <button
@@ -671,64 +761,78 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
               ))}
             </div>
           ) : (
-            /* VUE TABLEAU FLUIDE DANS LE CADRE MASTER */
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            /* VUE TABLEAU MODERNE FLUIDE (Material Design 3) */
+            <div className="modern-table-container border-t" style={{ borderColor: 'var(--border)' }}>
+              <table className="modern-table w-full">
                 <thead>
-                  <tr className="border-b uppercase tracking-wider text-[10px] font-bold text-slate-500 dark:text-slate-400" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <th className="p-3.5">Élève & Photo</th>
-                    <th className="p-3.5">Matricule EPST</th>
-                    <th className="p-3.5">Classe</th>
-                    <th className="p-3.5">Sexe</th>
-                    <th className="p-3.5">Statut</th>
-                    <th className="p-3.5">Parent / Contact</th>
-                    <th className="p-3.5 text-right">Actions</th>
+                  <tr className="table-sticky-header">
+                    <SortableTh label="Élève & Identité" field="name" currentSortField={tableSortField} currentSortOrder={tableSortOrder} onSort={handleTableSort} className="w-1/4" />
+                    <SortableTh label="Matricule EPST" field="matricule" currentSortField={tableSortField} currentSortOrder={tableSortOrder} onSort={handleTableSort} />
+                    <SortableTh label="Classe & Promotion" field="classe" currentSortField={tableSortField} currentSortOrder={tableSortOrder} onSort={handleTableSort} />
+                    <SortableTh label="Sexe" field="sexe" currentSortField={tableSortField} currentSortOrder={tableSortOrder} onSort={handleTableSort} />
+                    <SortableTh label="Statut Scolaire" field="statut" currentSortField={tableSortField} currentSortOrder={tableSortOrder} onSort={handleTableSort} />
+                    <SortableTh label="Parent / Tuteur" field="parent" currentSortField={tableSortField} currentSortOrder={tableSortOrder} onSort={handleTableSort} />
+                    <th className="text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                <tbody>
                   {paginatedStudents.map(s => (
-                    <tr key={s.id} className="hover:bg-slate-500/5 transition-colors">
-                      <td className="p-3.5">
+                    <tr key={s.id} className="group">
+                      <td>
                         <div className="flex items-center gap-3">
                           {s.photoUrl ? (
                             <img
                               src={s.photoUrl}
                               alt={s.prenom}
                               onClick={() => setZoomStudent(s)}
-                              className="w-9 h-9 rounded-xl object-cover shadow-xs shrink-0 cursor-pointer hover:scale-110 hover:border-2 hover:border-indigo-500 transition-all"
+                              className="w-9 h-9 rounded-xl object-cover shadow-xs shrink-0 cursor-pointer hover:scale-110 border border-slate-500/20 hover:border-indigo-500 transition-all"
                               title="Cliquer pour voir la photo en grand"
                             />
                           ) : (
                             <div
                               onClick={() => setZoomStudent(s)}
-                              className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-black shrink-0 shadow-xs cursor-pointer hover:scale-110 transition-all"
-                              style={{ background: 'linear-gradient(135deg, #4f46e5, #6366f1)' }}
+                              className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-black shrink-0 shadow-xs cursor-pointer hover:scale-110 transition-all bg-gradient-to-tr from-indigo-600 to-indigo-500"
                               title="Cliquer pour voir la photo"
                             >
                               {s.prenom[0]}{s.nom[0]}
                             </div>
                           )}
                           <div>
-                            <p className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>{s.prenom} {s.nom}</p>
-                            <p className="text-[10.5px] font-medium text-slate-400">{s.postnom || '—'}</p>
+                            <p className="font-bold text-xs group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" style={{ color: 'var(--text-primary)' }}>
+                              {s.prenom} {s.nom}
+                            </p>
+                            <p className="text-[10.5px] font-semibold text-slate-400">{s.postnom || '—'}</p>
                           </div>
                         </div>
                       </td>
 
-                      <td className="p-3.5 font-mono text-[11px] font-bold text-indigo-500">{s.registrationNumber}</td>
-                      <td className="p-3.5 font-bold" style={{ color: 'var(--text-primary)' }}>{s.nomClasse}</td>
-                      <td className="p-3.5 font-bold">{s.sexe === 'M' ? 'Masculin' : 'Féminin'}</td>
-                      <td className="p-3.5">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-emerald-500/15 text-emerald-600">
+                      <td>
+                        <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
+                          {s.registrationNumber}
+                        </span>
+                      </td>
+                      <td className="font-bold" style={{ color: 'var(--text-primary)' }}>{s.nomClasse}</td>
+                      <td>
+                        <span className={`chip-tonal ${s.sexe === 'M' ? 'chip-tonal-indigo' : 'chip-tonal-rose'}`}>
+                          {s.sexe === 'M' ? 'Masculin' : 'Féminin'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="chip-tonal chip-tonal-emerald">
                           {s.statut}
                         </span>
                       </td>
-                      <td className="p-3.5 font-medium">{s.nomParent || s.nomPere || '—'} ({s.telephoneParent || s.telephonePere || '—'})</td>
-                      <td className="p-3.5 text-right">
+                      <td className="font-medium text-slate-600 dark:text-slate-300">
+                        <div>
+                          <p className="font-semibold text-xs truncate max-w-[160px]">{s.nomParent || s.nomPere || '—'}</p>
+                          <p className="text-[10.5px] font-mono text-slate-400 truncate">{s.telephoneParent || s.telephonePere || '—'}</p>
+                        </div>
+                      </td>
+                      <td className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => setSelectedStudent(s)}
-                            className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-bold text-xs active:scale-[0.97] shadow-xs cursor-pointer"
+                            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs active:scale-[0.97] shadow-xs cursor-pointer transition-all"
                           >
                             Fiche
                           </button>

@@ -107,7 +107,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     (
       <div
         ref={menuRef}
-        className="fixed rounded-2xl border shadow-2xl z-[99999] p-1.5 space-y-1.5 animate-scale-in"
+        className="fixed rounded-2xl border shadow-sm z-[99999] p-1.5 space-y-1.5 animate-scale-in"
         style={{
           top: menuPos.openUp ? undefined : menuPos.top,
           bottom: menuPos.openUp ? window.innerHeight - menuPos.top : undefined,
@@ -115,7 +115,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
           width: Math.max(menuPos.width, 260),
           background: 'var(--bg-surface)',
           borderColor: 'var(--border)',
-          boxShadow: '0 20px 30px -10px rgba(0, 0, 0, 0.4)',
+          boxShadow: 'var(--shadow-sm)',
         }}
       >
           {isSearchable && (

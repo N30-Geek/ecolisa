@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { MembrePersonnel } from '../../types';
 import { CustomSelect } from '../common/CustomSelect';
+import { SortableTh } from '../common/SortableTh';
 
 interface TeacherDirectoryProps {
   teachers: MembrePersonnel[];
@@ -241,8 +242,17 @@ export const TeacherDirectory: React.FC<TeacherDirectoryProps> = ({
   const [filterStatut, setFilterStatut] = useState('');
   const [filterGenre, setFilterGenre] = useState('');
   const [filterRole, setFilterRole] = useState('');
-  const [sortBy, setSortBy] = useState<'nom' | 'prenom'>('nom');
+  const [sortBy, setSortBy] = useState<string>('nom');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -277,10 +287,32 @@ export const TeacherDirectory: React.FC<TeacherDirectoryProps> = ({
 
     // Tri
     list.sort((a, b) => {
-      const valA = (sortBy === 'nom' ? a.nom : a.prenom) || '';
-      const valB = (sortBy === 'nom' ? b.nom : b.prenom) || '';
-      const cmp = valA.localeCompare(valB);
-      return sortOrder === 'asc' ? cmp : -cmp;
+      let res = 0;
+      switch (sortBy) {
+        case 'matricule':
+          res = (a.numeroMatriculeEPST || '').localeCompare(b.numeroMatriculeEPST || '');
+          break;
+        case 'role':
+          res = (a.role || '').localeCompare(b.role || '');
+          break;
+        case 'genre':
+          res = (a.genre || '').localeCompare(b.genre || '');
+          break;
+        case 'statut':
+          res = (a.statut || '').localeCompare(b.statut || '');
+          break;
+        case 'disciplines':
+          res = (a.disciplines?.join(', ') || a.telephone || '').localeCompare(b.disciplines?.join(', ') || b.telephone || '');
+          break;
+        case 'prenom':
+          res = (a.prenom || '').localeCompare(b.prenom || '');
+          break;
+        case 'nom':
+        default:
+          res = `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`);
+          break;
+      }
+      return sortOrder === 'asc' ? res : -res;
     });
 
     return list;
@@ -436,24 +468,12 @@ export const TeacherDirectory: React.FC<TeacherDirectoryProps> = ({
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sunken)' }}>
-                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      {isEnseignant ? 'ENSEIGNANT & PHOTO' : 'MEMBRE DU PERSONNEL'}
-                    </th>
-                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      MATRICULE EPST
-                    </th>
-                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      FONCTION / RÔLE
-                    </th>
-                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      SEXE
-                    </th>
-                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      STATUT
-                    </th>
-                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      {isEnseignant ? 'MATIÈRES ASSIGNÉES' : 'TÉLÉPHONE / CONTACT'}
-                    </th>
+                    <SortableTh label={isEnseignant ? 'ENSEIGNANT & PHOTO' : 'MEMBRE DU PERSONNEL'} field="nom" currentSortField={sortBy} currentSortOrder={sortOrder} onSort={handleSort} />
+                    <SortableTh label="MATRICULE EPST" field="matricule" currentSortField={sortBy} currentSortOrder={sortOrder} onSort={handleSort} />
+                    <SortableTh label="FONCTION / RÔLE" field="role" currentSortField={sortBy} currentSortOrder={sortOrder} onSort={handleSort} />
+                    <SortableTh label="SEXE" field="genre" currentSortField={sortBy} currentSortOrder={sortOrder} onSort={handleSort} />
+                    <SortableTh label="STATUT" field="statut" currentSortField={sortBy} currentSortOrder={sortOrder} onSort={handleSort} />
+                    <SortableTh label={isEnseignant ? 'MATIÈRES ASSIGNÉES' : 'TÉLÉPHONE / CONTACT'} field="disciplines" currentSortField={sortBy} currentSortOrder={sortOrder} onSort={handleSort} />
                     <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-400 text-right">
                       ACTIONS
                     </th>

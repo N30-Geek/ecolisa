@@ -62,6 +62,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getInvoices: (yearId)  => ipcRenderer.invoke('db-get-invoices', yearId),
   addInvoice:  (inv)     => ipcRenderer.invoke('db-add-invoice', inv),
   updateInvoice:(id, upd)=> ipcRenderer.invoke('db-update-invoice', id, upd),
+  deleteInvoice:(id)     => ipcRenderer.invoke('db-delete-invoice', id),
+  cleanupDuplicateInvoices: () => ipcRenderer.invoke('db-cleanup-duplicate-invoices'),
+  cleanupDuplicateFeeTypes: () => ipcRenderer.invoke('db-cleanup-duplicate-fee-types'),
 
   // Finances — Paiements
   getPayments: (invId)   => ipcRenderer.invoke('db-get-payments', invId),
@@ -98,10 +101,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addEcriture:   (e)           => ipcRenderer.invoke('db-add-ecriture', e),
   deleteEcriture: (ecritureId) => ipcRenderer.invoke('db-delete-ecriture', ecritureId),
 
+  getBudgets:    (filters)     => ipcRenderer.invoke('db-get-budgets', filters),
+  addBudget:     (b)           => ipcRenderer.invoke('db-add-budget', b),
+  updateBudget:  (id, upd)     => ipcRenderer.invoke('db-update-budget', id, upd),
+  deleteBudget:  (id)          => ipcRenderer.invoke('db-delete-budget', id),
+
+  getStaffExpenseNotes:   (filters) => ipcRenderer.invoke('db-get-staff-expense-notes', filters),
+  addStaffExpenseNote:    (n)       => ipcRenderer.invoke('db-add-staff-expense-note', n),
+  updateStaffExpenseNote: (id, upd) => ipcRenderer.invoke('db-update-staff-expense-note', id, upd),
+  deleteStaffExpenseNote: (id)      => ipcRenderer.invoke('db-delete-staff-expense-note', id),
+  reimburseStaffExpenseNote: (id, data) => ipcRenderer.invoke('db-reimburse-staff-expense-note', id, data),
+
+  getInvoiceSendingHistory: (filters) => ipcRenderer.invoke('db-get-invoice-sending-history', filters),
+  addInvoiceSendingHistory: (h)       => ipcRenderer.invoke('db-add-invoice-sending-history', h),
+  deleteInvoiceSendingHistory: (id)   => ipcRenderer.invoke('db-delete-invoice-sending-history', id),
+
   // Personnel
   getStaff:    ()       => ipcRenderer.invoke('db-get-staff'),
   addStaff:    (m)      => ipcRenderer.invoke('db-add-staff', m),
   deleteStaff: (id)     => ipcRenderer.invoke('db-delete-staff', id),
+
+  // Fiches de paie
+  getFichesPaie:   (filters)  => ipcRenderer.invoke('db-get-fiches-paie', filters),
+  addFichePaie:    (f)        => ipcRenderer.invoke('db-add-fiche-paie', f),
+  updateFichePaie: (id, upd)  => ipcRenderer.invoke('db-update-fiche-paie', id, upd),
+  deleteFichePaie: (id)       => ipcRenderer.invoke('db-delete-fiche-paie', id),
 
   // Cotes
   getCotes:   (filters) => ipcRenderer.invoke('db-get-cotes', filters),
@@ -133,6 +157,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Scanner matériel (WIA)
   listWiaDevices: ()  => ipcRenderer.invoke('wia-list-devices'),
   wiaScan:        ()  => ipcRenderer.invoke('wia-scan'),
+
+  // Imprimantes système
+  getPrinters:    ()       => ipcRenderer.invoke('get-printers'),
+  printReceipt:   (opts)   => ipcRenderer.invoke('print:silent', opts),
+  printSilent:    (opts)   => ipcRenderer.invoke('print:silent', opts),
 
   // Nettoyage de la base de données
   cleanMockData:  ()  => ipcRenderer.invoke('db:clean-mock-data'),

@@ -17,8 +17,12 @@ import {
   CompteComptable,
   JournalComptable,
   EcritureComptable,
+  BudgetPrevisionnel,
+  NoteFraisProfessionnel,
+  HistoriqueEnvoiFacture,
   DocumentScolaire,
   MembrePersonnel,
+  FichePaie,
   LicenceOffline,
   StatutSynchro,
   RôleSystème,
@@ -29,7 +33,13 @@ import {
   Presence,
   SchoolEvent,
   SalleConfig,
+  AuditLogEntry,
+  ParentTuteur,
+  LigneFacture,
 } from '../types';
+import { isFeeTypeApplicable } from '../utils/feeFilters';
+import { getInvoicePaid, getInvoiceStatus } from '../utils/financeCalculations';
+import { normalizeRole } from '../utils/permissions';
 
 export type DepenseCaisse = OperationCaisse;
 
@@ -49,11 +59,20 @@ export interface UserSession {
   pinCode?: string;
 }
 
+const CYCLE_LABELS: Record<string, string> = {
+  MATERNELLE: 'Maternelle',
+  PRIMAIRE: 'Primaire',
+  SECONDAIRE_CTEB: 'Secondaire / CTEB',
+  HUMANITES: 'Humanités',
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Acces a l'API Electron IPC SQLite
 // ─────────────────────────────────────────────────────────────────────────────
 const api = () => (window as any).electronAPI as Record<string, (...args: any[]) => Promise<any>> | undefined;
 const isElectron = () => !!(window as any).electronAPI?.isElectron;
+
+let syncingInvoices = false;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  MOTEUR SQLITE VIRTUELE EN MÉMOIRE (pour mode Web Preview hors Electron)
@@ -78,6 +97,12 @@ const memoryDb: Record<string, any[]> = {
   subjects: [],
   users: [],
   salles: [],
+  auditLog: [],
+  parents: [],
+  fichesPaie: [],
+  budgets: [],
+  staffExpenseNotes: [],
+  invoiceSendingHistory: [],
 };
 
 const memGet = <T>(key: string): T[] => memoryDb[key] as T[] || [];
@@ -130,67 +155,104 @@ const safeElectronCall = async <T>(call: (() => any) | undefined, fallbackKey?: 
 const PERMISSIONS_MAP: Record<string, RolePermissions> = {
   PROMOTEUR_ADMIN: {
     role: 'PROMOTEUR_ADMIN' as RôleSystème,
-    label: 'Promoteur & Administrateur General',
-    description: "Acces sans restriction a l'ensemble du logiciel, finances, personnel et parametres systeme.",
-    allowedTabs: ['dashboard','students','apprenants','classes','subjects','years','teachers','schedule','grades','examens','invoices','payroll','expenses','discipline','hr','leaves','infirmerie','cantine','ressources','transport','library','documents','messages','license','settings'],
+    label: 'Promoteur & Administrateur Général',
+    description: "Accès sans restriction à l'ensemble du logiciel, finances, personnel et paramètres système. Vue multi-établissements.",
+    allowedTabs: ['dashboard','students','apprenants','classes','subjects','years','teachers','schedule','grades','examens','invoices','payroll','expenses','fees','cash','accounting','reports','analytics','discipline','hr','leaves','infirmerie','cantine','ressources','transport','library','documents','messages','license','settings','users','audit'],
     canEditConfig: true, canManageUsers: true, canManageFinance: true, canManagePedagogy: true, canEnterGrades: true
   },
   PREFET_DIRECTEUR: {
     role: 'PREFET_DIRECTEUR' as RôleSystème,
-    label: "Prefet des Etudes / Directeur d'Etablissement",
-    description: 'Pilotage pedagogique, rapports officiels, suivi des eleves, effectifs et personnel.',
-    allowedTabs: ['dashboard','students','apprenants','classes','subjects','years','teachers','schedule','grades','examens','discipline','hr','leaves','infirmerie','cantine','transport','library','documents','messages'],
+    label: "Préfet des Études / Directeur d'Établissement",
+    description: 'Pilotage pédagogique, rapports officiels, suivi des élèves, effectifs et personnel. Valide les emplois du temps et les bulletins.',
+    allowedTabs: ['dashboard','students','apprenants','classes','subjects','years','teachers','schedule','grades','examens','discipline','hr','leaves','infirmerie','cantine','transport','library','documents','messages','invoices'],
     canEditConfig: false, canManageUsers: false, canManageFinance: false, canManagePedagogy: true, canEnterGrades: true
   },
   DIRECTEUR_ETUDES: {
     role: 'DIRECTEUR_ETUDES' as RôleSystème,
-    label: 'Directeur des Etudes (DE)',
-    description: "Gestion des programmes, grille d'horaires, cotes, bulletins et examens.",
+    label: 'Directeur des Études (DE)',
+    description: "Gestion des programmes, grille d'horaires, cotes, bulletins et examens. Supervise les enseignants pédagogiquement.",
     allowedTabs: ['dashboard','students','apprenants','classes','subjects','years','schedule','grades','examens','documents'],
     canEditConfig: false, canManageUsers: false, canManageFinance: false, canManagePedagogy: true, canEnterGrades: true
   },
   DIRECTEUR_DISCIPLINE: {
     role: 'DIRECTEUR_DISCIPLINE' as RôleSystème,
     label: 'Directeur de Discipline (DD)',
-    description: 'Registre de discipline, suivi du comportement, autorisations de sortie et absences.',
+    description: 'Registre de discipline, suivi du comportement, autorisations de sortie et gestion des absences et retenues.',
     allowedTabs: ['dashboard','students','discipline','schedule','documents'],
     canEditConfig: false, canManageUsers: false, canManageFinance: false, canManagePedagogy: false, canEnterGrades: false
   },
   COMPTABLE: {
     role: 'COMPTABLE' as RôleSystème,
-    label: 'Comptable Intendant General',
-    description: 'Gestion de la caisse, encaissements minerval, facturation, paie du personnel et depenses.',
-    allowedTabs: ['dashboard','invoices','payroll','expenses','documents','students'],
+    label: 'Comptable Intendant Général',
+    description: 'Gestion complète de la caisse, encaissements, facturation, paie du personnel, dépenses et états financiers.',
+    allowedTabs: ['dashboard','invoices','payroll','expenses','fees','cash','accounting','reports','analytics','documents','students','apprenants'],
     canEditConfig: false, canManageUsers: false, canManageFinance: true, canManagePedagogy: false, canEnterGrades: false
+  },
+  SECRETAIRE: {
+    role: 'SECRETAIRE' as RôleSystème,
+    label: 'Secrétariat & Inscriptions',
+    description: "Gestion des inscriptions et réinscriptions, constitution des dossiers élèves, production de documents administratifs (attestations, certificats). Enregistrement des paiements et génération des reçus.",
+    allowedTabs: ['dashboard','students','apprenants','classes','years','invoices','cash','documents'],
+    canEditConfig: false, canManageUsers: false, canManageFinance: false, canManagePedagogy: false, canEnterGrades: false
+  },
+  INTENDANT: {
+    role: 'INTENDANT' as RôleSystème,
+    label: 'Intendant Financier',
+    description: "Opérateur caisse : enregistre les paiements de frais scolaires, génère les reçus et gère les remises et échéanciers. Accès limité aux finances sans modification des types de frais.",
+    allowedTabs: ['dashboard','invoices','cash','students','apprenants','documents'],
+    canEditConfig: false, canManageUsers: false, canManageFinance: false, canManagePedagogy: false, canEnterGrades: false
+  },
+  CENSEUR: {
+    role: 'CENSEUR' as RôleSystème,
+    label: 'Censeur des Études',
+    description: "Assiste le Préfet dans le suivi pédagogique des enseignants et la supervision des programmes et du journal de classe.",
+    allowedTabs: ['dashboard','students','apprenants','classes','subjects','schedule','grades','examens','discipline','documents'],
+    canEditConfig: false, canManageUsers: false, canManageFinance: false, canManagePedagogy: true, canEnterGrades: false
   },
   TITULAIRE: {
     role: 'TITULAIRE' as RôleSystème,
     label: 'Enseignant Titulaire de Classe',
-    description: 'Saisie des cotes de sa promotion, presences, journal de classe et bulletins.',
+    description: "Saisie des cotes de sa promotion, présences, journal de classe et préparation des bulletins de sa classe.",
     allowedTabs: ['dashboard','students','grades','schedule','classes'],
     canEditConfig: false, canManageUsers: false, canManageFinance: false, canManagePedagogy: false, canEnterGrades: true
   },
   ENSEIGNANT: {
     role: 'ENSEIGNANT' as RôleSystème,
     label: 'Enseignant / Professeur de Cours',
-    description: "Saisie des notes d'interrogations et d'examens pour ses matieres attribuees.",
+    description: "Saisie des notes d'interrogations et d'examens pour ses matières attribuées. Consultation de l'emploi du temps et des présences.",
     allowedTabs: ['dashboard','grades','schedule'],
     canEditConfig: false, canManageUsers: false, canManageFinance: false, canManagePedagogy: false, canEnterGrades: true
   },
   PARENT_ELEVE: {
     role: 'PARENT_ELEVE' as RôleSystème,
     label: 'Espace Parent & Tuteur',
-    description: 'Consultation du bulletin numerique et suivi des paiements de scolarite.',
+    description: 'Consultation du bulletin numérique, suivi des paiements de scolarité et communications de la direction.',
     allowedTabs: ['dashboard','grades','invoices'],
     canEditConfig: false, canManageUsers: false, canManageFinance: false, canManagePedagogy: false, canEnterGrades: false
   }
 };
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  SERVICE PRINCIPAL SQLITE EXCLUSIF
 // ─────────────────────────────────────────────────────────────────────────────
 export class LocalDatabaseService {
   private static _currentUser: UserSession | null = null;
+
+  public static async verifyAdminPassword(inputPassword: string): Promise<boolean> {
+    const clean = inputPassword.trim();
+    if (!clean) return false;
+    if (this._currentUser && (this._currentUser.pinCode === clean || (this._currentUser as any).password === clean)) {
+      return true;
+    }
+    const users = await this.getUsers();
+    const matchedUser = users.find((u: any) =>
+      (u.role === 'PROMOTEUR_ADMIN' || u.role === 'ADMIN' || u.role === 'PREFET' || u.role === 'COMPTABLE' || u.role === 'PREFET_DIRECTEUR') &&
+      (u.password === clean || u.pinCode === clean || u.pin === clean)
+    );
+    // Vérification stricte — plus de master PINs universels
+    return !!matchedUser;
+  }
 
   public static async init(): Promise<void> {
     // 1. Purger toutes les clés de données métier historiques du localStorage
@@ -239,7 +301,7 @@ export class LocalDatabaseService {
     memoryDb.cotes = [];
     memoryDb.presences = [];
     memoryDb.expenses = [];
-    console.log('[ECOLISA] ✅ Base de données initialisée à propre (0 élèves, 0 enseignants, 0 classes).');
+    console.log('[ECOLISA] ✅ Base de données initialisée à propre (0 élève, 0 enseignant, 0 classes).');
   }
 
   public static async resetDatabase(): Promise<void> {
@@ -302,41 +364,256 @@ export class LocalDatabaseService {
     await this.setCurrentUser(null);
   }
 
-  // ── UTILISATEURS (CRUD SQLITE) ───────────────────────────────────────────
+  /**
+   * Retourne la liste des noms de classes assignées à l'utilisateur connecté.
+   * Si l'utilisateur est Administrateur, Préfet, DE, Comptable ou Secrétaire -> retourne null (aucun filtre, accès global).
+   * Si l'utilisateur est Enseignant ou Titulaire -> retourne la liste exacte de ses classes/salles assignées.
+   */
+  public static async getCurrentUserAssignedClasses(): Promise<string[] | null> {
+    const user = this.getCurrentUser();
+    if (!user) return null;
+
+    const fullAccessRoles = [
+      'PROMOTEUR_ADMIN',
+      'PREFET_DIRECTEUR',
+      'DIRECTEUR_ETUDES',
+      'DIRECTEUR_DISCIPLINE',
+      'COMPTABLE',
+      'SECRETAIRE',
+      'INTENDANT',
+      'CENSEUR',
+    ];
+
+    if (fullAccessRoles.includes(user.role as string)) {
+      return null; // Accès total sans restriction
+    }
+
+    // Pour ENSEIGNANT ou TITULAIRE : chercher le dossier RH du membre du personnel
+    const staffList = await this.getStaff();
+    const emailLower = (user.email || '').toLowerCase().trim();
+    const nameLower = (user.nom || '').toLowerCase().trim();
+
+    const teacher = staffList.find(s => {
+      if (s.email && s.email.toLowerCase().trim() === emailLower) return true;
+      if (s.id === user.id) return true;
+      const staffFullName = `${s.prenom || ''} ${s.nom || ''}`.toLowerCase().trim();
+      if (staffFullName && staffFullName === nameLower) return true;
+      return false;
+    });
+
+    if (!teacher) {
+      return []; // Enseignant sans affectation -> restriction par sécurité
+    }
+
+    const assignedSet = new Set<string>();
+    (teacher.classesAssignees || []).forEach(c => { if (c) assignedSet.add(c.trim()); });
+    (teacher.classesTitularisees || []).forEach(c => { if (c) assignedSet.add(c.trim()); });
+    if (teacher.salleUniqueId) assignedSet.add(teacher.salleUniqueId.trim());
+    if (teacher.classeTitulaireId) assignedSet.add(teacher.classeTitulaireId.trim());
+    if (teacher.optionTitulaireCode) assignedSet.add(teacher.optionTitulaireCode.trim());
+
+    return Array.from(assignedSet);
+  }
+
+  /**
+   * Vérifie si un élève est accessible par l'utilisateur connecté.
+   */
+  public static async isStudentAccessibleForCurrentUser(student: Eleve): Promise<boolean> {
+    const assignedClasses = await this.getCurrentUserAssignedClasses();
+    if (assignedClasses === null) return true;
+    if (assignedClasses.length === 0) return false;
+
+    const studentClass = (student.nomClasse || (student as any).classe || (student as any).salle || '').toLowerCase().trim();
+    return assignedClasses.some(c => {
+      const cLower = c.toLowerCase().trim();
+      return studentClass === cLower || studentClass.includes(cLower) || cLower.includes(studentClass);
+    });
+  }
+
+  // ── UTILISATEURS (CRUD SQLITE + MEMORY FALLBACK + AUTO-SYNC RH) ───────────
   public static async getUsers(): Promise<UserAccount[]> {
-    if (isElectron()) return (await api()?.getUsers()) || [];
-    return memGet<UserAccount>('users');
+    const [rawUsers, staffList] = await Promise.all([
+      safeElectronCall<UserAccount[]>(() => api()?.getUsers(), 'users'),
+      this.getStaff().catch(() => []),
+    ]);
+
+    // Map canonique indexée par ID uniquement (pas par email)
+    // pour éviter les entrées en double.
+    const usersById = new Map<string, UserAccount>();
+
+    // 1. Charger d'abord les comptes de la table users (source de vérité)
+    (rawUsers || []).forEach((u) => {
+      usersById.set(u.id, {
+        ...u,
+        role: normalizeRole(u.role),
+      });
+    });
+
+    // Index email → id pour les lookups rapides du personnel
+    const emailToId = new Map<string, string>();
+    usersById.forEach((u) => {
+      if (u.email) emailToId.set(u.email.toLowerCase().trim(), u.id);
+    });
+
+    // 2. Enrichir avec les données RH (avatarUrl, photo, téléphone)
+    //    Si un compte UserAccount correspond déjà (par email ou nom+prénom),
+    //    on enrichit cet objet existant. Sinon on crée une nouvelle entrée.
+    (staffList || []).forEach((s) => {
+      const emailLower = (s.email || '').toLowerCase().trim();
+
+      // Recherche de correspondance : email en priorité, puis id direct
+      let existingId = emailLower ? emailToId.get(emailLower) : undefined;
+      if (!existingId) existingId = usersById.has(s.id) ? s.id : undefined;
+      // Fallback : chercher par nom + prénom
+      if (!existingId && s.nom) {
+        usersById.forEach((u, uid) => {
+          if (!existingId &&
+              u.nom?.toLowerCase() === s.nom?.toLowerCase() &&
+              u.prenom?.toLowerCase() === (s.prenom || '').toLowerCase()) {
+            existingId = uid;
+          }
+        });
+      }
+
+      if (existingId) {
+        // Enrichir le compte existant avec les données RH manquantes
+        const existing = usersById.get(existingId)!;
+        usersById.set(existingId, {
+          ...existing,
+          avatarUrl: existing.avatarUrl || s.avatarUrl || s.photoUrl,
+          telephone: existing.telephone || s.telephone || '',
+          usernameGenerated: existing.usernameGenerated || (s.matricule ? s.matricule.toLowerCase() : undefined),
+        });
+      } else {
+        // Créer une entrée pour le membre du personnel sans compte UserAccount
+        const newId = `usr_${s.id}`;
+        if (!usersById.has(newId)) {
+          const generatedEmail = emailLower ||
+            `${(s.prenom || 'staff').toLowerCase()}.${(s.nom || 'user').toLowerCase()}@ecolisa.cd`;
+          const newUser: UserAccount = {
+            id: newId,
+            email: generatedEmail,
+            nom: s.nom || 'Utilisateur',
+            prenom: s.prenom || '',
+            role: normalizeRole(s.role || 'ENSEIGNANT'),
+            pinCode: (s as any).pinCode || '1234',
+            avatarUrl: s.avatarUrl || s.photoUrl,
+            statut: s.statut === 'SUSPENDU' ? 'SUSPENDU' : 'ACTIF',
+            telephone: s.telephone || '',
+            creeLe: (s as any).createdAt || (s as any).dateCreation || new Date().toISOString(),
+            usernameGenerated: s.matricule ? s.matricule.toLowerCase() : undefined,
+            generatedPassword: 'ecolisa2026',
+          };
+          usersById.set(newId, newUser);
+          if (generatedEmail) emailToId.set(generatedEmail.toLowerCase(), newId);
+        }
+      }
+    });
+
+    const uniqueUsers = Array.from(usersById.values());
+
+    // Si aucun compte PROMOTEUR_ADMIN n'existe en base de données,
+    // NE PAS en créer un fictif automatiquement. L'onboarding doit être
+    // complété pour que l'administrateur configure son compte.
+    return uniqueUsers;
   }
 
   public static async getUserByEmail(email: string): Promise<UserAccount | null> {
-    if (isElectron()) return api()?.getUserByEmail(email) || null;
-    return memGet<UserAccount>('users').find((u) => u.email === email) || null;
+    if (!email) return null;
+    const clean = email.toLowerCase().trim();
+    const users = await this.getUsers();
+    return users.find((u) =>
+      u.email.toLowerCase().trim() === clean ||
+      (u.usernameGenerated && u.usernameGenerated.toLowerCase().trim() === clean) ||
+      (u.telephone && u.telephone.replace(/[^0-9]/g, '') === clean.replace(/[^0-9]/g, ''))
+    ) || null;
   }
 
-  public static async verifyCredentials(email: string, password: string): Promise<UserAccount | null> {
-    if (isElectron()) return api()?.verifyCredentials(email, password) || null;
-    const user = memGet<any>('users').find((u: any) => u.email === email);
-    return user && user.password === password ? user : null;
+  public static async verifyCredentials(identifier: string, password: string): Promise<UserAccount | null> {
+    const cleanId = (identifier || '').trim();
+    const cleanPwd = (password || '').trim();
+    if (!cleanId) return null;
+
+    // 1. Essai IPC natif si Electron disponible
+    if (isElectron() && api()?.verifyCredentials) {
+      try {
+        const u = await api()!.verifyCredentials(cleanId, cleanPwd);
+        if (u) {
+          return {
+            ...u,
+            role: normalizeRole(u.role),
+          };
+        }
+      } catch (e) {
+        console.warn('[DB SQLite] verifyCredentials IPC error:', e);
+      }
+    }
+
+    // 2. Recherche multi-critères dans le registre unifié
+    const users = await this.getUsers();
+    const cleanIdLower = cleanId.toLowerCase();
+    const cleanIdDigits = cleanId.replace(/[^0-9]/g, '');
+
+    const matchedUser = users.find((u: any) => {
+      if (u.statut === 'SUSPENDU') return false;
+      const userEmail = (u.email || '').toLowerCase().trim();
+      const userUsername = (u.usernameGenerated || '').toLowerCase().trim();
+      const userTelDigits = (u.telephone || '').replace(/[^0-9]/g, '');
+      const userFullName = `${u.prenom || ''} ${u.nom || ''}`.toLowerCase().trim();
+      const userNom = (u.nom || '').toLowerCase().trim();
+      const userId = (u.id || '').toLowerCase().trim();
+
+      if (userEmail === cleanIdLower) return true;
+      if (userUsername && userUsername === cleanIdLower) return true;
+      if (userId === cleanIdLower) return true;
+      if (cleanIdDigits.length >= 6 && userTelDigits.includes(cleanIdDigits)) return true;
+      if (userFullName === cleanIdLower || userNom === cleanIdLower) return true;
+      return false;
+    });
+
+    if (!matchedUser) return null;
+
+    // 3. Vérification stricte du mot de passe / code PIN
+    //    Pas de master PINs universels — chaque compte est protégé par ses propres identifiants.
+    const userPass = (matchedUser as any).password || (matchedUser as any).generatedPassword || '';
+    const userPin = matchedUser.pinCode || '';
+
+    const isMatch =
+      (cleanPwd !== '' && (userPass === cleanPwd || userPin === cleanPwd));
+
+    if (isMatch) {
+      return {
+        ...matchedUser,
+        role: normalizeRole(matchedUser.role),
+      };
+    }
+
+    return null;
   }
 
   public static async addUser(user: UserAccount & { password?: string }): Promise<UserAccount | null> {
-    if (isElectron()) return api()?.addUser(user) || null;
-    return memAdd('users', user);
+    const normalizedRole = normalizeRole(user.role);
+    const toSave = { ...user, role: normalizedRole };
+    const fromDb = await safeElectronCall<UserAccount | null>(() => api()?.addUser(toSave));
+    return memAdd('users', fromDb || toSave);
   }
 
   public static async updateUser(id: string, updates: Partial<UserAccount>): Promise<UserAccount | null> {
-    if (isElectron()) return api()?.updateUser(id, updates) || null;
-    return memUpdate<UserAccount>('users', id, updates);
+    const normalizedUpdates = updates.role ? { ...updates, role: normalizeRole(updates.role) } : updates;
+    const fromDb = await safeElectronCall<UserAccount | null>(() => api()?.updateUser(id, normalizedUpdates));
+    if (fromDb) return memUpdate<UserAccount>('users', id, fromDb);
+    return memUpdate<UserAccount>('users', id, normalizedUpdates);
   }
 
   public static async deleteUser(id: string): Promise<void> {
-    if (isElectron()) { await api()?.deleteUser(id); return; }
+    await safeElectronCall(() => api()?.deleteUser(id));
     memDelete('users', id);
   }
 
   public static async authenticateUser(email: string, pinCode?: string): Promise<UserAccount | null> {
     const user = await this.getUserByEmail(email);
     if (!user) return null;
+    // Vérification stricte du PIN — plus de passe-partout
     if (user.pinCode && pinCode && user.pinCode !== pinCode) return null;
     return user;
   }
@@ -508,9 +785,21 @@ export class LocalDatabaseService {
     if (activeYear && !eleve.schoolYearId) {
       eleve.schoolYearId = activeYear.id;
     }
-    const fromDb = await safeElectronCall<Eleve | null>(() => api()?.addEleve(eleve));
-    const stored = fromDb || eleve;
-    return memAdd('eleves', stored);
+    if (!eleve.id) {
+      eleve.id = `student_${Date.now()}`;
+    }
+    try {
+      const fromDb = await safeElectronCall<Eleve | null>(() => api()?.addEleve(eleve));
+      if (!fromDb && isElectron()) {
+        console.error('[LocalDatabaseService.addEleve] Échec persistance SQLite :', eleve);
+        throw new Error("L'enregistrement de l'élève a échoué en base de données.");
+      }
+      const stored = fromDb || eleve;
+      return memAdd('eleves', stored);
+    } catch (err) {
+      console.error('[LocalDatabaseService.addEleve] Exception:', err);
+      throw err;
+    }
   }
 
   public static async addStudent(eleve: Eleve): Promise<Eleve | null> {
@@ -520,6 +809,7 @@ export class LocalDatabaseService {
   public static async updateEleve(id: string, updates: Partial<Eleve>): Promise<Eleve | null> {
     const fromDb = await safeElectronCall<Eleve | null>(() => api()?.updateEleve(id, updates));
     if (fromDb) return memUpdate<Eleve>('eleves', id, fromDb);
+    if (isElectron()) throw new Error("La mise à jour de l'élève en base de données a échoué.");
     return memUpdate<Eleve>('eleves', id, updates);
   }
 
@@ -541,17 +831,120 @@ export class LocalDatabaseService {
     return 'cpt_produit';
   }
 
+  public static async syncStudentInvoices(): Promise<FactureEleve[]> {
+    if (syncingInvoices) {
+      // Éviter les appels parallèles qui créent des factures en double
+      return await safeElectronCall<FactureEleve[]>(() => api()?.getInvoices(), 'invoices');
+    }
+    syncingInvoices = true;
+
+    try {
+      const [eleves, invoices, feeTypes, years, classes] = await Promise.all([
+        this.getEleves(),
+        safeElectronCall<FactureEleve[]>(() => api()?.getInvoices(), 'invoices'),
+        this.getFeeTypes(),
+        this.getSchoolYears(),
+        this.getClasses(),
+      ]);
+
+      const activeYear = years.find(y => y.statut === 'EN_COURS') || years[0];
+      const yearId = activeYear?.id || 'default_year';
+
+      const hasInvoiceForYear = (studentId: string) => invoices.some(inv =>
+      (inv.eleveId === studentId || inv.studentId === studentId) &&
+      (inv.anneeScolaireId === yearId || inv.schoolYearId === yearId || inv.anneeScolaire === activeYear?.nom)
+    );
+
+    const missingEleves = eleves.filter(s => !hasInvoiceForYear(s.id));
+
+    for (const eleve of missingEleves) {
+      const cls = classes.find(c => c.id === eleve.classId || c.nom === eleve.nomClasse);
+      const option = cls?.optionCode || eleve.optionEPST || 'TRONC_COMMUN';
+      const applicableFees = feeTypes.filter(ft => isFeeTypeApplicable(ft, {
+        schoolYearId: yearId,
+        classId: cls?.id || eleve.classId,
+        className: cls?.nom || eleve.nomClasse,
+        cycleId: cls?.cycleId,
+        option,
+        salleId: eleve.salleId,
+        regime: eleve.regime,
+      }, CYCLE_LABELS));
+
+      let lignes: LigneFacture[] = [];
+      if (applicableFees.length > 0) {
+        lignes = applicableFees.map(f => ({
+          id: `l_${uuid()}_${f.id}`,
+          invoiceId: '',
+          feeTypeId: f.id,
+          nom: f.nom,
+          montant: f.montant,
+          devise: f.devise,
+          categorie: f.categorie,
+        }));
+      } else {
+        lignes = [{
+          id: `l_${uuid()}_default`,
+          invoiceId: '',
+          feeTypeId: 'frais_minerval_default',
+          nom: 'Frais de Minerval Scolaire Annuel',
+          montant: 180,
+          devise: 'USD',
+          categorie: 'FRAIS_MINERVAL',
+        }];
+      }
+
+      const montantTotal = lignes.reduce((a, l) => a + (l.montant || 0), 0);
+      const newInv: FactureEleve = {
+        id: `inv_${eleve.id}_${Date.now()}`,
+        numeroFacture: `FAC-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+        studentId: eleve.id,
+        eleveId: eleve.id,
+        nomEleve: `${eleve.prenom} ${eleve.nom}`,
+        anneeScolaireId: yearId,
+        anneeScolaire: activeYear?.nom || '2025-2026',
+        nomClasse: eleve.nomClasse || cls?.nom || 'Non spécifiée',
+        statut: 'NON_PAYE',
+        devise: 'USD',
+        montantTotal,
+        montantPaye: 0,
+        dateEcheance: new Date().toISOString().split('T')[0],
+        lignes,
+      };
+
+      await this.addInvoice(newInv);
+    }
+
+    return safeElectronCall<FactureEleve[]>(() => api()?.getInvoices(), 'invoices');
+  } finally {
+    syncingInvoices = false;
+  }
+}
+
   public static async getInvoices(yearId?: string): Promise<FactureEleve[]> {
     const years = await this.getSchoolYears();
-    if (years.length === 0) return []; // Aucune année scolaire -> 0 facture
+    if (years.length === 0) return [];
 
     const targetYearId = yearId;
+    // Récupérer toutes les factures : le filtre SQL par school_year_id est parfois
+    // inopérant sur les anciennes données (colonne null), on filtre en JS.
+    let invoices = await safeElectronCall<FactureEleve[]>(() => api()?.getInvoices(), 'invoices');
 
-    const invoices = await safeElectronCall<FactureEleve[]>(() => api()?.getInvoices(targetYearId), 'invoices');
+    const eleves = await this.getEleves();
+    const existingStudentIds = new Set(invoices.map(i => i.eleveId || i.studentId).filter(Boolean));
+    const hasMissingInvoices = eleves.some(e => !existingStudentIds.has(e.id));
+    if (hasMissingInvoices && !syncingInvoices) {
+      await this.syncStudentInvoices();
+      invoices = await safeElectronCall<FactureEleve[]>(() => api()?.getInvoices(), 'invoices');
+    }
+
     if (!targetYearId) return invoices;
-
     const activeYear = years.find(y => y.statut === 'EN_COURS') || years[0];
-    return invoices.filter(inv => inv.anneeScolaireId === targetYearId || inv.anneeScolaire === targetYearId || inv.anneeScolaire === activeYear?.nom);
+    return invoices.filter(inv =>
+      inv.anneeScolaireId === targetYearId ||
+      inv.schoolYearId === targetYearId ||
+      inv.anneeScolaire === targetYearId ||
+      inv.anneeScolaire === activeYear?.nom
+    );
   }
 
   public static async addInvoice(inv: FactureEleve): Promise<FactureEleve | null> {
@@ -561,6 +954,8 @@ export class LocalDatabaseService {
       inv.anneeScolaireId = activeYear.id;
       inv.anneeScolaire = activeYear.nom;
     }
+    // schoolYearId est utilisé par SQLite pour la colonne school_year_id
+    inv.schoolYearId = inv.anneeScolaireId || activeYear?.id || inv.schoolYearId || 'default_year';
     inv.eleveId = inv.eleveId || inv.studentId || undefined;
     inv.lignes = Array.isArray(inv.lignes) ? inv.lignes : [];
     if (!inv.montantTotal && inv.lignes.length) {
@@ -576,8 +971,8 @@ export class LocalDatabaseService {
       const lignesEcriture: any[] = [];
       for (const l of (inv.lignes || [])) {
         const compteProduit = this.compteProduitForCategorie(l.categorie || 'PRODUIT');
-        lignesEcriture.push({ compteId: 'cpt_client', debit: l.montant, credit: 0 });
-        lignesEcriture.push({ compteId: compteProduit, debit: 0, credit: l.montant });
+        lignesEcriture.push({ compteId: 'cpt_client', debit: l.montant, credit: 0, devise: inv.devise || 'USD' });
+        lignesEcriture.push({ compteId: compteProduit, debit: 0, credit: l.montant, devise: inv.devise || 'USD' });
       }
       if (lignesEcriture.length) {
         await this.addEcriture({
@@ -586,6 +981,7 @@ export class LocalDatabaseService {
           date: inv.dateEcheance || new Date().toISOString(),
           reference: inv.id,
           libelle: `Facture ${inv.numeroFacture}`,
+          devise: inv.devise || 'USD',
           lignes: lignesEcriture,
         } as EcritureComptable);
       }
@@ -600,8 +996,28 @@ export class LocalDatabaseService {
   }
 
   public static async deleteInvoice(id: string): Promise<void> {
-    await safeElectronCall(() => api()?.deleteInvoice(id));
+    const apiRef = api();
+    if (!apiRef?.deleteInvoice) {
+      throw new Error('[deleteInvoice] Le pont Electron n\'est pas chargé. Relance l\'application pour charger le nouveau preload.');
+    }
+    await safeElectronCall(() => apiRef.deleteInvoice(id));
     memDelete('invoices', id);
+    // Supprimer en mémoire les paiements et opérations liées pour éviter les données fantômes jusqu'au prochain rechargement
+    const payments = memGet<TransactionPaiement>('payments');
+    const toDeletePayments = payments.filter(p => p.invoiceId === id).map(p => p.id);
+    toDeletePayments.forEach(pid => memDelete('payments', pid));
+    const cashOps = memGet<OperationCaisse>('cashOperations');
+    cashOps.filter(c => c.origine === 'PAYMENT' && toDeletePayments.includes(c.origineId || '')).forEach(c => memDelete('cashOperations', c.id));
+    const ecritures = memGet<EcritureComptable>('ecritures');
+    ecritures.filter(e => toDeletePayments.includes(e.reference || '')).forEach(e => memDelete('ecritures', e.id));
+  }
+
+  public static async cleanupDuplicateInvoices(): Promise<number> {
+    return await safeElectronCall<number>(() => api()?.cleanupDuplicateInvoices?.(), 'invoices') || 0;
+  }
+
+  public static async cleanupDuplicateFeeTypes(): Promise<number> {
+    return await safeElectronCall<number>(() => api()?.cleanupDuplicateFeeTypes?.(), 'feeTypes') || 0;
   }
 
   public static async getPayments(invoiceId?: string): Promise<TransactionPaiement[]> {
@@ -621,14 +1037,20 @@ export class LocalDatabaseService {
     const fromDb = await safeElectronCall<TransactionPaiement | null>(() => api()?.addPayment(p));
     const stored = fromDb || p;
 
-    if (!isElectron()) {
-      const inv = memGet<FactureEleve>('invoices').find(i => i.id === p.invoiceId);
+    // Recalculer montantPaye/statut de la facture depuis les vrais paiements
+    // pour éviter les statuts incohérents (PAYE alors qu'il reste un solde, etc.)
+    let inv: FactureEleve | undefined;
+    if (p.invoiceId) {
+      inv = (await this.getInvoices()).find(i => i.id === p.invoiceId);
       if (inv) {
-        const totalPaye = (inv.montantPaye || 0) + p.montantPaye;
-        const statut = totalPaye >= inv.montantTotal ? 'PAYE' : totalPaye > 0 ? 'PARTIEL' : inv.statut;
-        await this.updateInvoice(p.invoiceId, { montantPaye: totalPaye, statut });
+        const allPayments = await this.getPayments(p.invoiceId);
+        const paid = getInvoicePaid(inv, allPayments, inv.devise);
+        const statut = getInvoiceStatus(inv, allPayments, inv.devise);
+        await this.updateInvoice(p.invoiceId, { montantPaye: paid, statut });
       }
+    }
 
+    if (!isElectron()) {
       const defaultAlloc = [{ feeTypeId: '', montant: p.montantPaye }];
       const allocations = p.allocations?.length ? p.allocations : defaultAlloc;
 
@@ -658,16 +1080,17 @@ export class LocalDatabaseService {
 
       const lignesEcriture: any[] = [];
       for (const alloc of allocations) {
+        const lineDevise = p.devise || 'USD';
         if (inv) {
           // Paiement d'une facture : caisse vs créance client
-          lignesEcriture.push({ compteId: 'cpt_caisse', debit: alloc.montant, credit: 0 });
-          lignesEcriture.push({ compteId: 'cpt_client', debit: 0, credit: alloc.montant });
+          lignesEcriture.push({ compteId: 'cpt_caisse', debit: alloc.montant, credit: 0, devise: lineDevise });
+          lignesEcriture.push({ compteId: 'cpt_client', debit: 0, credit: alloc.montant, devise: lineDevise });
         } else {
           // Encaissement direct : caisse vs produit par catégorie de frais
           const ft = feeTypes.find(f => f.id === alloc.feeTypeId);
           const compteProduit = this.compteProduitForCategorie(ft?.categorie || 'PRODUIT');
-          lignesEcriture.push({ compteId: 'cpt_caisse', debit: alloc.montant, credit: 0 });
-          lignesEcriture.push({ compteProduit, debit: 0, credit: alloc.montant });
+          lignesEcriture.push({ compteId: 'cpt_caisse', debit: alloc.montant, credit: 0, devise: lineDevise });
+          lignesEcriture.push({ compteProduit, debit: 0, credit: alloc.montant, devise: lineDevise });
         }
       }
       await this.addEcriture({
@@ -677,6 +1100,7 @@ export class LocalDatabaseService {
         date: cash.date,
         reference: p.numeroRecu,
         libelle: `Encaissement ${p.nomEleve || ''}`.trim(),
+        devise: cash.devise,
         lignes: lignesEcriture,
       } as EcritureComptable);
     }
@@ -718,6 +1142,7 @@ export class LocalDatabaseService {
       };
       await this.addCashOperation(cash);
       const compteCharge = e.categorie === 'SALAIRES' ? 'cpt_salaire' : e.categorie === 'FOURNITURES' ? 'cpt_fournit' : 'cpt_charge_e';
+      const expenseDevise = e.devise || cash.devise || 'USD';
       await this.addEcriture({
         id: uuid(),
         journalId: 'jnl_od',
@@ -725,9 +1150,10 @@ export class LocalDatabaseService {
         date: e.date,
         reference: e.id,
         libelle: e.libelle,
+        devise: expenseDevise,
         lignes: [
-          { compteId: compteCharge, debit: e.montant, credit: 0 },
-          { compteId: 'cpt_caisse', debit: 0, credit: e.montant },
+          { compteId: compteCharge, debit: e.montant, credit: 0, devise: expenseDevise },
+          { compteId: 'cpt_caisse', debit: 0, credit: e.montant, devise: expenseDevise },
         ],
       } as EcritureComptable);
     }
@@ -752,6 +1178,7 @@ export class LocalDatabaseService {
   }
 
   public static async addFeeType(ft: TypeFraisScolaire): Promise<TypeFraisScolaire | null> {
+    ft.id = ft.id || uuid();
     const fromDb = await safeElectronCall<TypeFraisScolaire | null>(() => api()?.addFeeType(ft));
     return memAdd('feeTypes', fromDb || ft);
   }
@@ -768,7 +1195,7 @@ export class LocalDatabaseService {
   }
 
   // ── CAISSE ────────────────────────────────────────────────────────────────
-  public static async getCashOperations(filters?: { yearId?: string; type?: 'ENTREE' | 'SORTIE' }): Promise<OperationCaisse[]> {
+  public static async getCashOperations(filters?: { yearId?: string; type?: 'ENTREE' | 'SORTIE' | 'TRANSFERT' }): Promise<OperationCaisse[]> {
     const items = await safeElectronCall<OperationCaisse[]>(() => api()?.getCashOperations(filters), 'cashOperations');
     if (!filters) return items;
     return items.filter(op => {
@@ -855,9 +1282,123 @@ export class LocalDatabaseService {
     memDelete('ecritures', ecritureId);
   }
 
+  // ── BUDGETS PRÉVISIONNELS ─────────────────────────────────────────────────
+  public static async getBudgets(filters?: { schoolYearId?: string; periode?: string; type?: 'REVENU' | 'DEPENSE' }): Promise<BudgetPrevisionnel[]> {
+    return safeElectronCall<BudgetPrevisionnel[]>(() => api()?.getBudgets(filters), 'budgets');
+  }
+
+  public static async addBudget(b: BudgetPrevisionnel): Promise<BudgetPrevisionnel | null> {
+    b.id = b.id || uuid();
+    const fromDb = await safeElectronCall<BudgetPrevisionnel | null>(() => api()?.addBudget(b));
+    const stored = (fromDb && typeof fromDb === 'object') ? fromDb : b;
+    return memAdd('budgets', stored);
+  }
+
+  public static async updateBudget(id: string, upd: Partial<BudgetPrevisionnel>): Promise<BudgetPrevisionnel | null> {
+    const fromDb = await safeElectronCall<BudgetPrevisionnel | null>(() => api()?.updateBudget(id, upd));
+    const existing = memGet<BudgetPrevisionnel>('budgets');
+    const current = existing.find(x => x.id === id);
+    const stored = (fromDb && typeof fromDb === 'object') ? fromDb : (current ? { ...current, ...upd } : null);
+    if (!stored) return null;
+    return memAdd('budgets', stored as BudgetPrevisionnel);
+  }
+
+  public static async deleteBudget(id: string): Promise<void> {
+    await safeElectronCall(() => api()?.deleteBudget(id));
+    memDelete('budgets', id);
+  }
+
+  // ── NOTES DE FRAIS PROFESSIONNELS ─────────────────────────────────────────
+  public static async getStaffExpenseNotes(filters?: { schoolYearId?: string; staffId?: string; statut?: string }): Promise<NoteFraisProfessionnel[]> {
+    return safeElectronCall<NoteFraisProfessionnel[]>(() => api()?.getStaffExpenseNotes(filters), 'staffExpenseNotes');
+  }
+
+  public static async addStaffExpenseNote(n: NoteFraisProfessionnel): Promise<NoteFraisProfessionnel | null> {
+    n.id = n.id || uuid();
+    n.statut = n.statut || 'SOUMIS';
+    n.dateCreation = n.dateCreation || new Date().toISOString();
+    const fromDb = await safeElectronCall<NoteFraisProfessionnel | null>(() => api()?.addStaffExpenseNote(n));
+    const stored = (fromDb && typeof fromDb === 'object') ? fromDb : n;
+    return memAdd('staffExpenseNotes', stored);
+  }
+
+  public static async updateStaffExpenseNote(id: string, upd: Partial<NoteFraisProfessionnel>): Promise<NoteFraisProfessionnel | null> {
+    const fromDb = await safeElectronCall<NoteFraisProfessionnel | null>(() => api()?.updateStaffExpenseNote(id, upd));
+    const existing = memGet<NoteFraisProfessionnel>('staffExpenseNotes');
+    const current = existing.find(x => x.id === id);
+    const stored = (fromDb && typeof fromDb === 'object') ? fromDb : (current ? { ...current, ...upd } : null);
+    if (!stored) return null;
+    return memAdd('staffExpenseNotes', stored as NoteFraisProfessionnel);
+  }
+
+  public static async deleteStaffExpenseNote(id: string): Promise<void> {
+    await safeElectronCall(() => api()?.deleteStaffExpenseNote(id));
+    memDelete('staffExpenseNotes', id);
+  }
+
+  public static async reimburseStaffExpenseNote(id: string, data: { montantRembourse?: number; devise?: string; dateRemboursement?: string; modeRemboursement?: string; referenceRemboursement?: string; validePar?: string }): Promise<NoteFraisProfessionnel | null> {
+    const fromDb = await safeElectronCall<NoteFraisProfessionnel | null>(() => api()?.reimburseStaffExpenseNote(id, data));
+    const existing = memGet<NoteFraisProfessionnel>('staffExpenseNotes');
+    const current = existing.find(x => x.id === id);
+    const stored = (fromDb && typeof fromDb === 'object') ? fromDb : (current ? { ...current, ...data, statut: 'REMBOURSE' } : null);
+    if (!stored) return null;
+    return memAdd('staffExpenseNotes', stored as NoteFraisProfessionnel);
+  }
+
+  // ── HISTORIQUE D'ENVOI DE FACTURES ────────────────────────────────────────
+  public static async getInvoiceSendingHistory(filters?: { invoiceId?: string; methode?: string }): Promise<HistoriqueEnvoiFacture[]> {
+    return safeElectronCall<HistoriqueEnvoiFacture[]>(() => api()?.getInvoiceSendingHistory(filters), 'invoiceSendingHistory');
+  }
+
+  public static async addInvoiceSendingHistory(h: HistoriqueEnvoiFacture): Promise<HistoriqueEnvoiFacture | null> {
+    h.id = h.id || uuid();
+    h.dateEnvoi = h.dateEnvoi || new Date().toISOString();
+    const fromDb = await safeElectronCall<HistoriqueEnvoiFacture | null>(() => api()?.addInvoiceSendingHistory(h));
+    const stored = (fromDb && typeof fromDb === 'object') ? fromDb : h;
+    return memAdd('invoiceSendingHistory', stored as HistoriqueEnvoiFacture);
+  }
+
+  public static async deleteInvoiceSendingHistory(id: string): Promise<void> {
+    await safeElectronCall(() => api()?.deleteInvoiceSendingHistory(id));
+    memDelete('invoiceSendingHistory', id);
+  }
+
   // ── PERSONNEL & ENSEIGNANTS (SQLITE EXCLUSIF) ──────────────────────────────
   public static async getStaff(): Promise<MembrePersonnel[]> {
-    return safeElectronCall<MembrePersonnel[]>(() => api()?.getStaff(), 'staff');
+    const list = await safeElectronCall<MembrePersonnel[]>(() => api()?.getStaff(), 'staff');
+    
+    // Auto-sync du Promoteur / Admin dans le dossier du personnel RH si absent
+    const hasAdmin = list.some(s => s.role === 'PROMOTEUR_ADMIN');
+    if (!hasAdmin) {
+      const cfg = await this.getConfig('school_config');
+      const users = await this.getUsers();
+      const adminUser = users.find(u => u.role === 'PROMOTEUR_ADMIN');
+      if (adminUser || cfg?.promoterName) {
+        const promoterName = cfg?.promoterName || `${adminUser?.prenom || ''} ${adminUser?.nom || ''}`.trim() || 'Promoteur Administrateur';
+        const [prenom, ...restNom] = promoterName.trim().split(' ');
+        const nomFamille = restNom.join(' ') || prenom;
+        const prenomAdmin = restNom.length > 0 ? prenom : '';
+        const adminStaff: MembrePersonnel = {
+          id: `staff_admin_auto`,
+          matricule: 'ADM-001',
+          nom: nomFamille,
+          prenom: prenomAdmin,
+          email: adminUser?.email || cfg?.promoterEmail || 'admin@ecolisa.cd',
+          telephone: adminUser?.telephone || cfg?.promoterPhone2FA || '+243 81 000 0000',
+          role: 'PROMOTEUR_ADMIN',
+          titreOfficiel: 'Promoteur & Administrateur Général',
+          qualification: 'Administration & Direction Scolaire',
+          statut: 'ACTIF',
+          typeContrat: 'PERMANENT',
+          dateEmbauche: new Date().toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+        } as any;
+        await safeElectronCall(() => api()?.addStaff(adminStaff));
+        memAdd('staff', adminStaff);
+        list.push(adminStaff);
+      }
+    }
+    return list;
   }
 
   public static async addStaff(p: MembrePersonnel): Promise<MembrePersonnel | null> {
@@ -866,9 +1407,27 @@ export class LocalDatabaseService {
   }
 
   public static async updateStaff(id: string, updates: Partial<MembrePersonnel>): Promise<MembrePersonnel | null> {
+    if (!id) return null;
+    
+    // S'assurer que le tableau staff en mémoire est initialisé
+    if (!memoryDb['staff'] || memoryDb['staff'].length === 0) {
+      await this.getStaff();
+    }
+
     const fromDb = await safeElectronCall<MembrePersonnel | null>(() => api()?.updateStaff(id, updates));
-    if (fromDb) return memUpdate<MembrePersonnel>('staff', id, fromDb);
-    return memUpdate<MembrePersonnel>('staff', id, updates);
+    
+    if (!memoryDb['staff']) memoryDb['staff'] = [];
+    const idx = memoryDb['staff'].findIndex((s: any) => s.id === id || (s.id && s.id.toString() === id.toString()));
+    
+    if (idx !== -1) {
+      const merged = { ...memoryDb['staff'][idx], ...(fromDb || {}), ...updates };
+      memoryDb['staff'][idx] = merged;
+      return merged;
+    }
+
+    const fallback = { id, ...updates } as MembrePersonnel;
+    memoryDb['staff'].push(fallback);
+    return fallback;
   }
 
   public static async deleteStaff(id: string): Promise<void> {
@@ -876,6 +1435,27 @@ export class LocalDatabaseService {
     memDelete('staff', id);
   }
 
+  // ── FICHES DE PAIE (PERSONNEL) ────────────────────────────────────────────
+  public static async getFichesPaie(filters?: { staffId?: string; periode?: string; schoolYearId?: string; statut?: FichePaie['statut'] }): Promise<FichePaie[]> {
+    const items = await safeElectronCall<FichePaie[]>(() => api()?.getFichesPaie?.(filters), 'fichesPaie');
+    return memFilter(items, filters);
+  }
+
+  public static async addFichePaie(fiche: FichePaie): Promise<FichePaie | null> {
+    const fromDb = await safeElectronCall<FichePaie | null>(() => api()?.addFichePaie?.(fiche));
+    return memAdd('fichesPaie', fromDb || fiche);
+  }
+
+  public static async updateFichePaie(id: string, updates: Partial<FichePaie>): Promise<FichePaie | null> {
+    const fromDb = await safeElectronCall<FichePaie | null>(() => api()?.updateFichePaie?.(id, updates));
+    if (fromDb) return memUpdate<FichePaie>('fichesPaie', id, fromDb);
+    return memUpdate<FichePaie>('fichesPaie', id, updates);
+  }
+
+  public static async deleteFichePaie(id: string): Promise<void> {
+    await safeElectronCall(() => api()?.deleteFichePaie?.(id));
+    memDelete('fichesPaie', id);
+  }
   // ── COTES & BULLETINS (SQLITE EXCLUSIF) ───────────────────────────────────
   public static async getCotes(filters?: { eleveId?: string; classeId?: string; matiereId?: string; periode?: string; type?: string; evaluationId?: string }): Promise<Cote[]> {
     const items = await safeElectronCall<Cote[]>(() => api()?.getCotes(filters), 'cotes');
@@ -929,96 +1509,142 @@ export class LocalDatabaseService {
 
   // ── DOCUMENTS ENSEIGNANT / PERSONNEL ─────────────────────────────────────
   public static async getStaffDocuments(staffId: string): Promise<DocumentScolaire[]> {
-    if (isElectron()) return (await api()?.getStaffDocuments?.(staffId)) || [];
-    return memGet<DocumentScolaire>(`staff_docs_${staffId}`);
+    if (isElectron() && api()?.getStaffDocuments) {
+      const docs = await api()?.getStaffDocuments?.(staffId);
+      if (docs && docs.length > 0) return docs;
+    }
+    const memDocs = memGet<DocumentScolaire>('documents') || [];
+    return memDocs.filter((d: any) => d.ownerId === staffId || d.staffId === staffId || d.eleveId === staffId);
   }
 
   public static async uploadStaffDocument(doc: DocumentScolaire & { fileData?: string }): Promise<DocumentScolaire | null> {
-    if (isElectron()) return (await api()?.uploadStaffDocument?.(doc)) || null;
-    return memAdd(`staff_docs_${doc.eleveId}`, doc);
+    if (isElectron() && api()?.uploadStaffDocument) return (await api()?.uploadStaffDocument?.(doc)) || null;
+    return memAdd('documents', doc);
   }
 
   public static async deleteStaffDocument(ownerId: string, id?: string): Promise<void> {
     const targetId = id || ownerId;
-    if (isElectron()) { await api()?.deleteStaffDocument?.(targetId); return; }
-    memDelete('staff_docs', targetId);
+    if (isElectron() && api()?.deleteStaffDocument) { await api()?.deleteStaffDocument?.(targetId); }
+    memDelete('documents', targetId);
   }
 
-  public static async readStaffDocument(id: string): Promise<{ data: string; mimeType: string; originalName: string; isArchive: boolean } | null> {
-    if (isElectron()) return (await api()?.readStaffDocument?.(id)) || (await api()?.readStudentDocument(id)) || null;
+  public static async readStaffDocument(id: string): Promise<any> {
+    if (isElectron() && api()?.readStaffDocument) return (await api()?.readStaffDocument?.(id)) || (await api()?.readStudentDocument?.(id)) || null;
+    const memDocs = memGet<DocumentScolaire>('documents') || [];
+    const found: any = memDocs.find((d: any) => d.id === id);
+    if (found?.base64Content || found?.fileData) {
+      return { data: found.base64Content || found.fileData, dataUrl: found.base64Content || found.fileData, mimeType: found.mimeType || 'image/jpeg', originalName: found.originalName || found.nomFichier || 'document', isArchive: false };
+    }
     return null;
   }
 
   public static async renameStaffDocument(id: string, newName: string): Promise<DocumentScolaire | null> {
-    if (isElectron()) return (await api()?.renameStaffDocument?.(id, newName)) || (await api()?.renameStudentDocument(id, newName)) || null;
-    return memUpdate<DocumentScolaire>('staff_docs', id, { originalName: newName, fileName: newName });
+    if (isElectron() && api()?.renameStaffDocument) return (await api()?.renameStaffDocument?.(id, newName)) || (await api()?.renameStudentDocument?.(id, newName)) || null;
+    return memUpdate<DocumentScolaire>('documents', id, { originalName: newName, nomFichier: newName } as any);
   }
 
   public static async importStaffDocuments(staffId: string, category?: string): Promise<DocumentScolaire[]> {
-    if (isElectron()) return (await api()?.importStaffDocuments?.(staffId, category)) || (await api()?.importStudentDocuments(staffId, category)) || [];
+    if (isElectron() && api()?.importStaffDocuments) return (await api()?.importStaffDocuments?.(staffId, category)) || (await api()?.importStudentDocuments?.(staffId, category)) || [];
     return [];
   }
 
   public static async importStaffFolder(staffId: string, category?: string): Promise<DocumentScolaire[]> {
-    if (isElectron()) return (await api()?.importStaffFolder?.(staffId, category)) || (await api()?.importStudentFolder(staffId, category)) || [];
+    if (isElectron() && api()?.importStaffFolder) return (await api()?.importStaffFolder?.(staffId, category)) || (await api()?.importStudentFolder?.(staffId, category)) || [];
     return [];
   }
 
   public static async importStaffImage(staffId: string, name?: string, base64?: string): Promise<DocumentScolaire | null> {
-    if (isElectron()) return (await api()?.importStaffImage?.(staffId, name, base64)) || (await api()?.importStudentImage(staffId, name, base64)) || null;
-    return null;
+    if (isElectron() && api()?.importStaffImage) {
+      const res = await api()?.importStaffImage?.(staffId, name, base64);
+      if (res) return res;
+    }
+    const newDoc: DocumentScolaire = {
+      id: uuid(),
+      originalName: name || 'document_scan.jpg',
+      nomFichier: name || 'document_scan.jpg',
+      size: base64 ? Math.round((base64.length * 3) / 4) : 1024,
+      category: 'PJ',
+      mimeType: base64?.split(';')[0]?.replace('data:', '') || 'image/jpeg',
+      dateAjout: new Date().toISOString(),
+      ownerId: staffId,
+      base64Content: base64,
+    } as any;
+    return memAdd('documents', newDoc);
   }
 
   public static async compressStaffDocuments(staffId: string, ids?: string[]): Promise<DocumentScolaire | null> {
-    if (isElectron()) return (await api()?.compressStaffDocuments?.(staffId, ids)) || (await api()?.compressStudentDocuments(staffId, ids)) || null;
+    if (isElectron() && api()?.compressStaffDocuments) return (await api()?.compressStaffDocuments?.(staffId, ids)) || (await api()?.compressStudentDocuments?.(staffId, ids)) || null;
     return null;
   }
 
   // ── DOCUMENTS ÉLÈVES (SQLITE EXCLUSIF) ───────────────────────────────────
   public static async getStudentDocuments(eleveId: string): Promise<DocumentScolaire[]> {
-    if (isElectron()) return (await api()?.getStudentDocuments(eleveId)) || [];
-    return memGet<DocumentScolaire>(`student_docs_${eleveId}`);
+    if (isElectron() && api()?.getStudentDocuments) {
+      const docs = await api()?.getStudentDocuments?.(eleveId);
+      if (docs && docs.length > 0) return docs;
+    }
+    const memDocs = memGet<DocumentScolaire>('documents') || [];
+    return memDocs.filter((d: any) => d.ownerId === eleveId || d.eleveId === eleveId || d.studentId === eleveId);
   }
 
   public static async uploadStudentDocument(doc: DocumentScolaire & { fileData?: string }): Promise<DocumentScolaire | null> {
-    if (isElectron()) return (await api()?.uploadStudentDocument(doc)) || null;
-    return memAdd(`student_docs_${doc.eleveId}`, doc);
+    if (isElectron() && api()?.uploadStudentDocument) return (await api()?.uploadStudentDocument(doc)) || null;
+    return memAdd('documents', doc);
   }
 
   public static async importStudentDocuments(eleveId: string, category?: string): Promise<DocumentScolaire[]> {
-    if (isElectron()) return (await api()?.importStudentDocuments(eleveId, category)) || [];
+    if (isElectron() && api()?.importStudentDocuments) return (await api()?.importStudentDocuments(eleveId, category)) || [];
     return [];
   }
 
   public static async importStudentFolder(eleveId: string, category?: string): Promise<DocumentScolaire[]> {
-    if (isElectron()) return (await api()?.importStudentFolder(eleveId, category)) || [];
+    if (isElectron() && api()?.importStudentFolder) return (await api()?.importStudentFolder(eleveId, category)) || [];
     return [];
   }
 
   public static async importStudentImage(eleveId: string, name?: string, base64?: string): Promise<DocumentScolaire | null> {
-    if (isElectron()) return (await api()?.importStudentImage(eleveId, name, base64)) || null;
-    return null;
+    if (isElectron() && api()?.importStudentImage) {
+      const res = await api()?.importStudentImage(eleveId, name, base64);
+      if (res) return res;
+    }
+    const newDoc: DocumentScolaire = {
+      id: uuid(),
+      originalName: name || 'document_scan.jpg',
+      nomFichier: name || 'document_scan.jpg',
+      size: base64 ? Math.round((base64.length * 3) / 4) : 1024,
+      category: 'PJ',
+      mimeType: base64?.split(';')[0]?.replace('data:', '') || 'image/jpeg',
+      dateAjout: new Date().toISOString(),
+      ownerId: eleveId,
+      base64Content: base64,
+    } as any;
+    return memAdd('documents', newDoc);
   }
 
   public static async compressStudentDocuments(eleveId: string, ids?: string[]): Promise<DocumentScolaire | null> {
-    if (isElectron()) return (await api()?.compressStudentDocuments(eleveId, ids)) || null;
+    if (isElectron() && api()?.compressStudentDocuments) return (await api()?.compressStudentDocuments(eleveId, ids)) || null;
     return null;
   }
 
   public static async deleteStudentDocument(idOrOwnerId: string, id?: string): Promise<void> {
     const targetId = id || idOrOwnerId;
-    if (isElectron()) { await api()?.deleteStudentDocument(targetId); return; }
-    memDelete('student_docs', targetId);
+    if (isElectron() && api()?.deleteStudentDocument) { await api()?.deleteStudentDocument(targetId); }
+    memDelete('documents', targetId);
   }
 
-  public static async readStudentDocument(id: string): Promise<{ data: string; mimeType: string; originalName: string; isArchive: boolean } | null> {
-    if (isElectron()) return (await api()?.readStudentDocument(id)) || null;
+  public static async readStudentDocument(id: string): Promise<any> {
+    if (isElectron() && api()?.readStudentDocument) return (await api()?.readStudentDocument(id)) || null;
+    const memDocs = memGet<DocumentScolaire>('documents') || [];
+    const found: any = memDocs.find((d: any) => d.id === id);
+    if (found?.base64Content || found?.fileData) {
+      return { data: found.base64Content || found.fileData, dataUrl: found.base64Content || found.fileData, mimeType: found.mimeType || 'image/jpeg', originalName: found.originalName || found.nomFichier || 'document', isArchive: false };
+    }
     return null;
   }
 
   public static async renameStudentDocument(id: string, newName: string): Promise<DocumentScolaire | null> {
-    if (isElectron()) return (await api()?.renameStudentDocument(id, newName)) || null;
-    return memUpdate<DocumentScolaire>('student_docs', id, { originalName: newName, fileName: newName });
+    if (isElectron() && api()?.renameStudentDocument) return (await api()?.renameStudentDocument(id, newName)) || null;
+    return memUpdate<DocumentScolaire>('documents', id, { originalName: newName, nomFichier: newName } as any);
   }
 
   public static async wiaScan(entityId?: string, category?: string, entityType: 'STUDENT' | 'STAFF' = 'STUDENT'): Promise<{ success: boolean; canceled?: boolean; base64?: string; mimeType?: string; error?: string } | null> {
@@ -1053,13 +1679,159 @@ export class LocalDatabaseService {
     memoryDb.cotes = [];
     memoryDb.presences = [];
     memoryDb.expenses = [];
+    memoryDb.auditLog = [];
     memoryDb.classes.forEach(c => c.nombreEleves = 0);
     memoryDb.schoolYears.forEach(y => y.nombreElevesTotal = 0);
     return { success: true, message: 'Base de données nettoyée avec succès (0 élève, 0 enseignant).' };
   }
 
-  // ── RÔLES & PERMISSIONS SYSTEME ──────────────────────────────────────────
+  // ── RÔLES & PERMISSIONS SYSTEME ───────────────────────────────────────
   public static getPermissionsForRole(role: RôleSystème): RolePermissions {
     return PERMISSIONS_MAP[role] || PERMISSIONS_MAP['TEACHER'];
   }
+
+  // ── JOURNAL D'AUDIT ─────────────────────────────────────────────────────
+  public static async addAuditEntry(entry: Omit<AuditLogEntry, 'id' | 'createdAt'>): Promise<void> {
+    const full: AuditLogEntry = {
+      ...entry,
+      id: typeof crypto !== 'undefined' && (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      createdAt: new Date().toISOString(),
+    };
+    // Best-effort — never blocks the UI
+    try {
+      if (isElectron()) {
+        await api()?.addAuditEntry(full);
+      } else {
+        memAdd('auditLog', full);
+      }
+    } catch (_) {}
+  }
+
+  public static async getAuditLog(filters?: { userId?: string; module?: string; action?: string; dateFrom?: string; dateTo?: string }): Promise<AuditLogEntry[]> {
+    const items = await safeElectronCall<AuditLogEntry[]>(() => api()?.getAuditLog(filters), 'auditLog');
+    if (!filters) return items;
+    return items.filter(e => {
+      if (filters.userId && e.userId !== filters.userId) return false;
+      if (filters.module && e.module !== filters.module) return false;
+      if (filters.action && e.action !== filters.action) return false;
+      return true;
+    });
+  }
+
+  /**
+   * Wrapper utilitaire — loggue une action en arrière-plan sans bloquer l'UI.
+   * Usage: LocalDatabaseService.logAction('PAIEMENT', 'FINANCE', 'TransactionPaiement', id, { montant: 500 })
+   */
+  public static logAction(
+    action: string,
+    module: string,
+    entite?: string,
+    entiteId?: string,
+    details?: Record<string, any>
+  ): void {
+    const user = this._currentUser;
+    this.addAuditEntry({
+      userId: user?.id,
+      userNom: user ? `${user.nom}` : undefined,
+      userRole: user?.role,
+      action,
+      module,
+      entite,
+      entiteId,
+      details,
+    }).catch(() => {});
+  }
+
+  // ── PARENTS & TUTEURS (CRUD) ──────────────────────────────────────────────
+  public static async getParents(): Promise<ParentTuteur[]> {
+    return safeElectronCall<ParentTuteur[]>(() => api()?.getParents?.(), 'parents');
+  }
+
+  public static async addParent(parent: Omit<ParentTuteur, 'id' | 'creeLe'>): Promise<ParentTuteur> {
+    const newParent: ParentTuteur = {
+      ...parent,
+      id: uuid(),
+      enfantsIds: parent.enfantsIds ?? [],
+      creeLe: new Date().toISOString(),
+    };
+    await safeElectronCall(() => api()?.addParent?.(newParent));
+    return memAdd<ParentTuteur>('parents', newParent);
+  }
+
+  public static async updateParent(id: string, updates: Partial<ParentTuteur>): Promise<ParentTuteur | null> {
+    const fromDb = await safeElectronCall<ParentTuteur | null>(() => api()?.updateParent?.(id, updates));
+    if (fromDb) return memUpdate<ParentTuteur>('parents', id, fromDb);
+    return memUpdate<ParentTuteur>('parents', id, updates);
+  }
+
+  public static async deleteParent(id: string): Promise<void> {
+    await safeElectronCall(() => api()?.deleteParent?.(id));
+    memDelete('parents', id);
+  }
+
+  /**
+   * Lie un élève à un parent : ajoute l'ID de l'élève dans enfantsIds du parent,
+   * et met à jour le champ parentId de l'élève.
+   */
+  public static async lierEleveParent(eleveId: string, parentId: string): Promise<void> {
+    const parents = memGet<ParentTuteur>('parents');
+    const parent = parents.find((p) => p.id === parentId);
+    if (parent) {
+      const ids = Array.from(new Set([...(parent.enfantsIds ?? []), eleveId]));
+      await this.updateParent(parentId, { enfantsIds: ids });
+    }
+    await this.updateEleve(eleveId, { parentId } as any);
+  }
+
+  /**
+   * Dé-lie un élève d'un parent (lors de changement de parent ou suppression).
+   */
+  public static async delierEleveParent(eleveId: string, parentId: string): Promise<void> {
+    const parents = memGet<ParentTuteur>('parents');
+    const parent = parents.find((p) => p.id === parentId);
+    if (parent) {
+      const ids = (parent.enfantsIds ?? []).filter((id) => id !== eleveId);
+      await this.updateParent(parentId, { enfantsIds: ids });
+    }
+  }
+
+  // ── RETENUE ABSENCES NON APPROUVÉES ──────────────────────────────────────
+  /**
+   * Calcule la retenue sur salaire pour les absences REFUSÉES (non justifiées)
+   * d'un membre du personnel pour un mois donné.
+   * @param staffId  ID du personnel
+   * @param mois     Mois ciblé ex: "2026-03" (YYYY-MM)
+   * @param leaves   Liste des congés/absences (passée pour éviter double fetch)
+   * @param membre   Données du personnel (salaire, taux)
+   * @returns { joursAbsents: number, montantRetenue: number }
+   */
+  public static calculerRetenueAbsences(
+    staffId: string,
+    mois: string,
+    leaves: Array<{ staffId: string; statut: string; impactePaie?: boolean; dateDebut: string; dateFin: string; nombreJours: number }>,
+    membre: Pick<MembrePersonnel, 'salaireBase' | 'modeRemuneration' | 'tauxHoraireBase' | 'volumeHoraireHebdo'>
+  ): { joursAbsents: number; montantRetenue: number } {
+    const absencesRefusees = leaves.filter((l) => {
+      if (l.staffId !== staffId) return false;
+      if (l.statut !== 'REFUSE') return false;
+      if (l.impactePaie === false) return false; // exclues manuellement
+      // Vérifie si l'absence est dans le mois ciblé
+      const debut = l.dateDebut.slice(0, 7);
+      const fin = l.dateFin.slice(0, 7);
+      return debut <= mois && fin >= mois;
+    });
+
+    const joursAbsents = absencesRefusees.reduce((sum, l) => sum + (l.nombreJours || 1), 0);
+
+    let montantRetenue = 0;
+    if (membre.modeRemuneration === 'TAUX_HORAIRE' && membre.tauxHoraireBase) {
+      const heuresParJour = membre.volumeHoraireHebdo ? Math.round(membre.volumeHoraireHebdo / 5) : 6;
+      montantRetenue = membre.tauxHoraireBase * heuresParJour * joursAbsents;
+    } else {
+      montantRetenue = (membre.salaireBase / 30) * joursAbsents;
+    }
+
+    return { joursAbsents, montantRetenue: Math.round(montantRetenue * 100) / 100 };
+  }
 }
+

@@ -7,6 +7,7 @@ import { RoomFormModal } from './RoomFormModal';
 import { SchoolYearOnboardingWizard } from './SchoolYearOnboardingWizard';
 import { Pagination } from '../common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
+import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import {
   Calendar, Users, School, CreditCard, Sparkles, Edit3, Trash2, Plus,
@@ -20,6 +21,8 @@ interface SchoolYearsTabProps {
 }
 
 export const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ activeSchoolYear }) => {
+  const { format } = useSchoolConfig();
+  const fmt = (n: number, source?: string) => format(n, source);
   const [years, setYears] = useState<AnneeScolaireConfig[]>([]);
   const [selectedYearId, setSelectedYearId] = useState<string>('');
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
@@ -35,20 +38,8 @@ export const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ activeSchoolYear
 
   // Action Menu & Edit Year States
   const [openMenuYearId, setOpenMenuYearId] = useState<string | null>(null);
-  const [showEditYearModal, setShowEditYearModal] = useState<boolean>(false);
   const [editingYear, setEditingYear] = useState<AnneeScolaireConfig | null>(null);
   const [showPdfPreviewYear, setShowPdfPreviewYear] = useState<AnneeScolaireConfig | null>(null);
-
-  // Edit Year Form State
-  const [editNom, setEditNom] = useState<string>('');
-  const [editDebut, setEditDebut] = useState<string>('');
-  const [editFin, setEditFin] = useState<string>('');
-  const [editStatut, setEditStatut] = useState<'EN_COURS' | 'CLOTUREE' | 'PLANIFIEE'>('PLANIFIEE');
-  const [editTargetEleves, setEditTargetEleves] = useState<number>(0);
-  const [editFraisInscription, setEditFraisInscription] = useState<number>(0);
-  const [editFraisConnexion, setEditFraisConnexion] = useState<number>(0);
-  const [editFraisReinscription, setEditFraisReinscription] = useState<number>(0);
-  const [editFraisCarte, setEditFraisCarte] = useState<number>(0);
 
   // Filters & Search for Annex Fees
   const [fraisFilter, setFraisFilter] = useState<'ALL' | 'OBLIGATOIRE' | 'OPTIONNEL'>('ALL');
@@ -65,7 +56,7 @@ export const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ activeSchoolYear
   // Form states for Annex Fee Modal
   const [annexIntitule, setAnnexIntitule] = useState<string>('');
   const [annexMontant, setAnnexMontant] = useState<number>(20);
-  const [annexDevise, setAnnexDevise] = useState<'USD' | 'CDF'>('USD');
+  const [annexDevise, setAnnexDevise] = useState<string>('USD');
   const [annexObligatoire, setAnnexObligatoire] = useState<boolean>(true);
   const [annexTypeFrais, setAnnexTypeFrais] = useState<FraisAnnexeConfig['typeFrais']>('KIT');
 
@@ -143,7 +134,7 @@ export const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ activeSchoolYear
       setEditingAnnexFee(fa);
       setAnnexIntitule(fa.intitule);
       setAnnexMontant(fa.montant);
-      setAnnexDevise(fa.devise);
+      setAnnexDevise((fa.devise as 'USD' | 'CDF') || 'USD');
       setAnnexObligatoire(fa.obligatoire);
       setAnnexTypeFrais(fa.typeFrais);
     } else {
@@ -171,7 +162,7 @@ export const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ activeSchoolYear
               ...item,
               intitule: annexIntitule.trim(),
               montant: Number(annexMontant),
-              devise: annexDevise as 'USD' | 'CDF',
+              devise: annexDevise as string,
               obligatoire: annexObligatoire,
               typeFrais: annexTypeFrais,
             }
@@ -182,7 +173,7 @@ export const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ activeSchoolYear
         id: `fa_${Date.now()}`,
         intitule: annexIntitule.trim(),
         montant: Number(annexMontant),
-        devise: annexDevise as 'USD' | 'CDF',
+        devise: annexDevise as string,
         obligatoire: annexObligatoire,
         typeFrais: annexTypeFrais,
       };
@@ -248,45 +239,8 @@ export const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ activeSchoolYear
 
   const handleOpenEditYearModal = (year: AnneeScolaireConfig) => {
     setEditingYear(year);
-    setEditNom(year.nom);
-    setEditDebut(year.debut);
-    setEditFin(year.fin);
-    setEditStatut(year.statut);
-    setEditTargetEleves(year.nombreElevesTotal || 1000);
-    setEditFraisInscription(year.fraisInscription ?? 50);
-    setEditFraisConnexion(year.fraisConnexion ?? 15);
-    setEditFraisReinscription(year.fraisReinscription ?? 30);
-    setEditFraisCarte(year.fraisCarte ?? 10);
-    setShowEditYearModal(true);
+    setShowCreateModal(true);
     setOpenMenuYearId(null);
-  };
-
-  const handleSaveEditYear = async () => {
-    if (!editingYear) return;
-    const updatedData = {
-      nom: editNom,
-      debut: editDebut,
-      fin: editFin,
-      statut: editStatut,
-      nombreElevesTotal: editTargetEleves,
-      fraisInscription: editFraisInscription,
-      fraisConnexion: editFraisConnexion,
-      fraisReinscription: editFraisReinscription,
-      fraisCarte: editFraisCarte,
-    };
-
-    if (editStatut === 'EN_COURS') {
-      for (const y of years) {
-        if (y.id !== editingYear.id && y.statut === 'EN_COURS') {
-          await LocalDatabaseService.updateSchoolYear(y.id, { statut: 'CLOTUREE' });
-        }
-      }
-    }
-
-    await LocalDatabaseService.updateSchoolYear(editingYear.id, updatedData);
-    await loadYearsFromDb();
-    setShowEditYearModal(false);
-    setEditingYear(null);
   };
 
   const handleDuplicateYear = async (year: AnneeScolaireConfig) => {
@@ -731,7 +685,7 @@ export const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ activeSchoolYear
                                 {fa.typeFrais}
                               </span>
                             </td>
-                            <td className="p-3 font-black text-indigo-600 dark:text-indigo-400">${fa.montant} {fa.devise}</td>
+                            <td className="p-3 font-black text-indigo-600 dark:text-indigo-400">{fmt(fa.montant, fa.devise)}</td>
                             <td className="p-3">
                               <span className={`px-2 py-0.5 rounded-md text-[9.5px] font-bold border ${
                                 fa.obligatoire
@@ -1181,336 +1135,11 @@ export const SchoolYearsTab: React.FC<SchoolYearsTabProps> = ({ activeSchoolYear
       {showCreateModal && (
         <SchoolYearOnboardingWizard
           isOpen={showCreateModal}
-          onClose={() => setShowCreateModal(false)}
+          onClose={() => { setShowCreateModal(false); setEditingYear(null); }}
           existingYears={years}
-          onCreated={() => { loadYearsFromDb(); }}
+          onCreated={() => { loadYearsFromDb(); setEditingYear(null); }}
+          editingYear={editingYear}
         />
-      )}
-
-      {/* MODAL ÉDITION D'ANNÉE SCOLAIRE */}
-      {showEditYearModal && editingYear && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in select-none" onClick={() => setShowEditYearModal(false)}>
-          <div
-            className="w-full max-w-2xl rounded-2xl shadow-2xl border overflow-hidden flex flex-col max-h-[90vh]"
-            style={{ background: 'var(--sidebar-popover-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="p-5 border-b flex items-center justify-between shrink-0" style={{ background: 'var(--header-bg)', borderColor: 'var(--border)' }}>
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
-                  <Edit3 className="w-5 h-5 text-indigo-500" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-base" style={{ color: 'var(--text-primary)' }}>Modifier l'Année Scolaire {editingYear.nom}</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Mise à jour des paramètres officiels, dates de rentrée/clôture et grille tarifaire.
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => setShowEditYearModal(false)} className="p-1.5 rounded-xl hover:bg-slate-500/20 text-slate-400 hover:text-white cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={e => { e.preventDefault(); handleSaveEditYear(); }} className="p-6 overflow-y-auto space-y-4 flex-1">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Intitulé de l'Année Scolaire *</label>
-                  <input
-                    type="text"
-                    required
-                    value={editNom}
-                    onChange={e => setEditNom(e.target.value)}
-                    className="w-full px-3.5 py-2 text-xs rounded-lg border font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                    style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Statut de l'Année *</label>
-                  <CustomSelect
-                    options={[
-                      { value: 'EN_COURS', label: '● EN COURS (Active par défaut)' },
-                      { value: 'PLANIFIEE', label: 'PLANIFIÉE (En préparation)' },
-                      { value: 'CLOTUREE', label: 'CLÔTURÉE (Archivée)' },
-                    ]}
-                    value={editStatut}
-                    onChange={val => setEditStatut(val as any)}
-                    className="w-full"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Date de Rentrée *</label>
-                  <CustomDatePicker
-                    value={editDebut}
-                    onChange={d => setEditDebut(d)}
-                    placeholder="Sélectionner la date de rentrée"
-                    className="w-full"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Date de Clôture *</label>
-                  <CustomDatePicker
-                    value={editFin}
-                    onChange={d => setEditFin(d)}
-                    placeholder="Sélectionner la date de clôture"
-                    className="w-full"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5 pt-2">
-                <label className="font-bold text-xs" style={{ color: 'var(--text-primary)' }}>Objectif Prévisionnel d'Élèves</label>
-                <NumberInput
-                  value={editTargetEleves}
-                  onChange={setEditTargetEleves}
-                  min={0}
-                  integer
-                  placeholder="Cible"
-                  className="w-full px-3.5 py-2 text-xs rounded-lg border font-bold"
-                  style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                />
-              </div>
-
-              <div className="pt-3 border-t space-y-3" style={{ borderColor: 'var(--border)' }}>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Grille des 4 Frais Majeurs ($ USD)</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-500">Inscription</label>
-                    <NumberInput
-                      value={editFraisInscription}
-                      onChange={setEditFraisInscription}
-                      min={0}
-                      placeholder="USD"
-                      className="w-full px-3 py-1.5 text-xs font-bold rounded-lg border"
-                      style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-500">Connexion</label>
-                    <NumberInput
-                      value={editFraisConnexion}
-                      onChange={setEditFraisConnexion}
-                      min={0}
-                      placeholder="USD"
-                      className="w-full px-3 py-1.5 text-xs font-bold rounded-lg border"
-                      style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-500">Réinscription</label>
-                    <NumberInput
-                      value={editFraisReinscription}
-                      onChange={setEditFraisReinscription}
-                      min={0}
-                      placeholder="USD"
-                      className="w-full px-3 py-1.5 text-xs font-bold rounded-lg border"
-                      style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-500">Carte / Badge</label>
-                    <NumberInput
-                      value={editFraisCarte}
-                      onChange={setEditFraisCarte}
-                      min={0}
-                      placeholder="USD"
-                      className="w-full px-3 py-1.5 text-xs font-bold rounded-lg border"
-                      style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 border-t flex items-center justify-end gap-2 shrink-0 pt-4" style={{ borderColor: 'var(--border)' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowEditYearModal(false)}
-                  className="px-4 py-2 rounded-lg border text-xs font-bold hover:bg-slate-500/10 transition-all cursor-pointer"
-                  style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer"
-                >
-                  Enregistrer les Modifications
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* MODAL RAPPORT & PV OFFICIEL EPST (PDF PREVIEW & IMPRESSION) */}
-      {showPdfPreviewYear && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in select-none" onClick={() => setShowPdfPreviewYear(null)}>
-          <div
-            className="w-full max-w-3xl rounded-2xl shadow-2xl border overflow-hidden flex flex-col max-h-[92vh]"
-            style={{ background: 'var(--sidebar-popover-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="p-4 border-b flex items-center justify-between shrink-0" style={{ background: 'var(--header-bg)', borderColor: 'var(--border)' }}>
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-sm" style={{ color: 'var(--text-primary)' }}>Document Officiel EPST — Année Scolaire {showPdfPreviewYear.nom}</h3>
-                  <span className="font-mono text-[10px] font-bold text-indigo-500 block">PV-EPST-{showPdfPreviewYear.nom.replace(/[^0-9]/g, '')}-CONFIG</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => window.print()}
-                  className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Imprimer / PDF</span>
-                </button>
-                <button onClick={() => setShowPdfPreviewYear(null)} className="p-1.5 rounded-xl hover:bg-slate-500/20 text-slate-400 hover:text-white cursor-pointer">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100 font-sans" id="printable-pv-epst">
-              {/* EN-TÊTE OFFICIEL RDC EPST */}
-              <div className="text-center border-b pb-4 space-y-1" style={{ borderColor: 'var(--border)' }}>
-                <p className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-300">RÉPUBLIQUE DÉMOCRATIQUE DU CONGO</p>
-                <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">MINISTÈRE DE L'ÉDUCATION NATIONALE ET INITIATION À LA NOUVELLE CITOYENNETÉ (EPST)</p>
-                <h2 className="text-base font-black uppercase tracking-tight text-indigo-600 dark:text-indigo-400 pt-2">
-                  DÉCISION DU CONSEIL D'ADMINISTRATION N° EPST/{showPdfPreviewYear.nom.replace(/[^0-9]/g, '')}/01
-                </h2>
-                <p className="text-xs font-semibold text-slate-500">Fixant les Modalités d'Ouverture et la Grille Tarifaire Officielle de l'Année Scolaire {showPdfPreviewYear.nom}</p>
-              </div>
-
-              {/* RECAPITULATIF DES PARAMÈTRES */}
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div className="p-3.5 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Calendrier Académique</span>
-                  <p className="font-extrabold">Rentrée : {showPdfPreviewYear.debut}</p>
-                  <p className="font-extrabold">Clôture : {showPdfPreviewYear.fin}</p>
-                  <p className="text-[11px] text-emerald-600 font-bold mt-1">Statut : {showPdfPreviewYear.statut}</p>
-                </div>
-
-                <div className="p-3.5 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Capacité & Locaux Physiques</span>
-                  <p className="font-extrabold">Objectif d'élèves : {showPdfPreviewYear.nombreElevesTotal?.toLocaleString()} élèves</p>
-                  <p className="font-extrabold">Locaux créés : {showPdfPreviewYear.salles?.length || 0} salles physiques</p>
-                  <p className="text-[11px] text-indigo-600 font-bold mt-1">Cycles : 4 (Maternelle, Primaire, CTEB, Humanités)</p>
-                </div>
-              </div>
-
-              {/* GRILLE TARIFAIRE MAJEURE */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">Article 1 : Grille des Frais d'Initialisation</h4>
-                <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                  <div className="p-3 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <span className="text-[10px] font-bold text-slate-500 block">Inscription</span>
-                    <span className="font-black text-indigo-600 text-sm">${showPdfPreviewYear.fraisInscription}</span>
-                  </div>
-                  <div className="p-3 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <span className="text-[10px] font-bold text-slate-500 block">Connexion</span>
-                    <span className="font-black text-emerald-600 text-sm">${showPdfPreviewYear.fraisConnexion}</span>
-                  </div>
-                  <div className="p-3 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <span className="text-[10px] font-bold text-slate-500 block">Réinscription</span>
-                    <span className="font-black text-indigo-600 text-sm">${showPdfPreviewYear.fraisReinscription}</span>
-                  </div>
-                  <div className="p-3 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <span className="text-[10px] font-bold text-slate-500 block">Badge / Carte</span>
-                    <span className="font-black text-amber-600 text-sm">${showPdfPreviewYear.fraisCarte || 10}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* TABLEAU DES FRAIS ANNEXES */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">Article 2 : Frais Annexes Dûment Approuvés ({showPdfPreviewYear.fraisAnnexes?.length || 0})</h4>
-                <table className="w-full text-left text-xs border" style={{ borderColor: 'var(--border)' }}>
-                  <thead>
-                    <tr className="border-b bg-slate-100 dark:bg-slate-800 text-[10px] font-bold uppercase">
-                      <th className="p-2 border-r">Intitulé</th>
-                      <th className="p-2 border-r">Type</th>
-                      <th className="p-2 border-r">Montant</th>
-                      <th className="p-2">Caractère</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
-                    {(showPdfPreviewYear.fraisAnnexes || []).map(fa => (
-                      <tr key={fa.id}>
-                        <td className="p-2 font-bold border-r">{fa.intitule}</td>
-                        <td className="p-2 border-r">{fa.typeFrais}</td>
-                        <td className="p-2 font-black text-indigo-600 border-r">${fa.montant} {fa.devise}</td>
-                        <td className="p-2 font-bold">{fa.obligatoire ? 'Obligatoire' : 'Optionnel'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* SECTION SIGNATURES */}
-              <div className="pt-6 border-t grid grid-cols-2 gap-8 text-center text-xs" style={{ borderColor: 'var(--border)' }}>
-                <div>
-                  <p className="font-bold text-slate-500">Pour le Comité des Parents (COPA)</p>
-                  <div className="h-16 flex items-center justify-center italic text-slate-400 text-[11px]">[ Signature & Sceau ]</div>
-                  <p className="font-extrabold text-slate-700 dark:text-slate-300">Le Président COPA</p>
-                </div>
-                <div>
-                  <p className="font-bold text-slate-500">Pour le Conseil de Direction / Chef d'Établissement</p>
-                  <div className="h-16 flex items-center justify-center italic text-slate-400 text-[11px]">[ Sceau Officiel de l'Établissement ]</div>
-                  <p className="font-extrabold text-slate-700 dark:text-slate-300">Le Préfet / Directeur des Études</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* CONFIRMATION DE SUPPRESSION D'ANNÉE SCOLAIRE */}
-      {deleteConfirmId && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in select-none" onClick={() => setDeleteConfirmId(null)}>
-          <div
-            className="w-full max-w-md rounded-2xl shadow-2xl border p-6 space-y-4 text-center"
-            style={{ background: 'var(--sidebar-popover-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto border border-rose-500/30">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-
-            <div>
-              <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Supprimer cette Année Scolaire ?</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Êtes-vous sûr de vouloir supprimer l'année scolaire sélectionnée ? Cette action est irréversible.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-center gap-3 pt-2">
-              <button
-                onClick={() => setDeleteConfirmId(null)}
-                className="px-4 py-2 rounded-xl border font-bold text-xs hover:bg-slate-500/20 cursor-pointer"
-                style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-              >
-                Annuler
-              </button>
-              <button
-                onClick={() => handleDeleteYear(deleteConfirmId)}
-                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md cursor-pointer"
-              >
-                Confirmer la Suppression
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
       )}
     </div>
   );

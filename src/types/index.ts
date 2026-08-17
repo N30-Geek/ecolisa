@@ -1,14 +1,17 @@
 // Définition des Types ECOLISA - 100% Français
 
 export type RôleSystème = 
-  | 'PROMOTEUR_ADMIN'
-  | 'PREFET_DIRECTEUR'
-  | 'DIRECTEUR_ETUDES'
-  | 'DIRECTEUR_DISCIPLINE'
-  | 'COMPTABLE'
-  | 'TITULAIRE'
-  | 'ENSEIGNANT'
-  | 'PARENT_ELEVE';
+  | 'PROMOTEUR_ADMIN'       // Promoteur — vue globale réseau + admin système
+  | 'PREFET_DIRECTEUR'      // Préfet (secondaire) / Directeur (primaire/maternel)
+  | 'DIRECTEUR_ETUDES'      // Directeur des Études — pédagogie & résultats
+  | 'DIRECTEUR_DISCIPLINE'  // Directeur de Discipline / Censeur
+  | 'COMPTABLE'             // Comptable Intendant Général — finances complètes
+  | 'SECRETAIRE'            // Secrétariat — inscriptions, dossiers, documents
+  | 'INTENDANT'             // Intendant Financier — caisse, reçus, remises
+  | 'TITULAIRE'             // Enseignant Titulaire de classe
+  | 'ENSEIGNANT'            // Enseignant / Professeur
+  | 'CENSEUR'               // Censeur des études (secondaire)
+  | 'PARENT_ELEVE';         // Espace parent & élève (lecture seule)
 
 export type CodeCycle = 'PRESCHOOL' | 'PRIMAIRE' | 'CTEB' | 'HUMANITES' | 'CUSTOM';
 
@@ -49,7 +52,30 @@ export interface ClasseScolaire {
   fraisInscription?: number;
   fraisMinerval?: number;
   fraisAnnexe?: number;
-  devise?: 'USD' | 'CDF';
+  devise?: string;
+}
+
+// ─── Parent / Tuteur ────────────────────────────────────────────────────────
+export type LienParente = 'PERE' | 'MERE' | 'TUTEUR' | 'GRAND_PARENT' | 'ONCLE_TANTE' | 'AUTRE';
+
+export interface ParentTuteur {
+  id: string;
+  nom: string;
+  prenom?: string;
+  postnom?: string;
+  lienParente: LienParente;
+  telephone: string;
+  telephoneSecondaire?: string;
+  email?: string;
+  profession?: string;
+  employeur?: string;
+  adresse?: string;
+  province?: string;
+  nationalite?: string;
+  photoUrl?: string;
+  enfantsIds: string[];   // IDs des élèves scolarisés dans cet établissement
+  observations?: string;
+  creeLe?: string;
 }
 
 export interface Eleve {
@@ -87,18 +113,30 @@ export interface Eleve {
   schoolYearId: string;
   classId: string;
   nomClasse: string;
+  // Lien Parent/Tuteur
+  parentId?: string;           // ID du ParentTuteur principal (père/mère/tuteur)
   nomParent: string;
   telephoneParent: string;
   emailParent?: string;
   notesPsychopedagogiques?: string;
   photoUrl?: string;
 
+  // Scolarité
+  regime?: 'EXTERNE' | 'INTERNE' | 'SEMI_INTERNE';
+  langue?: string;
+  langueInstruction?: string;
+  optionEPST?: string;
+  salleId?: string;
+  salle?: string;
+
   // Dossier complet supplémentaire
   numeroActeNaissance?: string;
   ecoleOrigine?: string;
   religion?: string;
+  religionAutre?: string;
   langueMaternelle?: string;
   handicap?: string;
+  aptitudes?: string;
   vaccinations?: string;
   medecinTraitant?: string;
   assuranceSante?: string;
@@ -212,22 +250,24 @@ export interface TypeFrais {
   id: string;
   titre: string; // Minerval, Frais d'Examen, Bus, Uniforme
   montant: number;
-  devise: 'USD' | 'CDF';
+  devise: string;
   tranche: 'MENSUEL' | 'TRIMESTRIEL' | 'ANNUEL';
 }
 
 export interface FactureEleve {
   id: string;
   anneeScolaireId?: string;
+  schoolYearId?: string;
   numeroFacture: string;
   eleveId?: string;
   studentId: string;
+  classeId?: string;
   nomEleve: string;
   nomClasse: string;
   anneeScolaire: string;
   montantTotal: number;
   montantPaye: number;
-  devise: 'USD' | 'CDF';
+  devise: string;
   statut: 'NON_PAYE' | 'PARTIEL' | 'PAYE';
   dateEcheance: string;
   lignes?: LigneFacture[];
@@ -237,31 +277,58 @@ export interface TransactionPaiement {
   id: string;
   anneeScolaireId?: string;
   invoiceId: string;
+  eleveId?: string;
+  studentId?: string;
   nomEleve: string;
   registrationNumber: string;
   montantPaye: number;
-  devise: 'USD' | 'CDF';
+  devise: string;
   moyenPaiement: 'CASH' | 'BANK' | 'FLEXPAY_MPESA' | 'FLEXPAY_ORANGE' | 'FLEXPAY_AIRTEL' | 'FLUTTERWAVE_CARTE';
   reference: string;
   numeroRecu: string;
   dateCreation: string;
   nomCaissier: string;
   jetonQrCode: string;
-  allocations?: Array<{ feeTypeId: string; montant: number }>;
+  allocations?: Array<{ feeTypeId: string; trancheId?: string; montant: number }>;
+}
+
+export interface UserAccount {
+  id: string;
+  email: string;
+  nom: string;
+  prenom?: string;
+  role: RôleSystème;
+  pinCode?: string;
+  avatarUrl?: string;
+  statut: 'ACTIF' | 'SUSPENDU' | 'INACTIF';
+  telephone?: string;
+  creeLe: string;
+  derniereConnexion?: string;
+  usernameGenerated?: string;
+  generatedPassword?: string;
 }
 
 export interface DocumentScolaire {
   id: string;
-  eleveId: string;
-  fileName: string;
-  originalName: string;
+  eleveId?: string;
+  staffId?: string;
+  ownerId?: string;
+  anneeScolaireId?: string;
+  type?: string;
+  nomFichier?: string;
+  fileName?: string;
+  originalName?: string;
   mimeType?: string;
   category?: string;
-  sizeBytes: number;
+  sizeBytes?: number;
+  size?: number;
   storagePath?: string;
-  isArchive: boolean;
-  archiveCount: number;
-  createdAt: string;
+  url?: string;
+  dateAjout?: string;
+  taille?: string;
+  isArchive?: boolean;
+  archiveCount?: number;
+  createdAt?: string;
   description?: string;
 }
 
@@ -284,15 +351,23 @@ export interface MembrePersonnel {
   telephoneSecondaire?: string;
   email: string;
   // Rôle & Fonction
-  role: 'ENSEIGNANT' | 'COMPTABLE' | 'PREFET' | 'SURVEILLANT' | 'DE' | 'ADMIN';
+  role: RôleSystème | 'ENSEIGNANT' | 'COMPTABLE' | 'PREFET' | 'SURVEILLANT' | 'DE' | 'ADMIN' | string;
+  titreOfficiel?: string;
   // Qualification & Compétences
   grade?: GradeEnseignant;
   diplome?: string;
   specialite?: string;
   disciplines?: string[];          // matières enseignées
   qualitesCompetences?: string[];  // aptitudes & compétences pédagogiques
-  // Affectation
-  classesAssignees?: string[];
+  // Affectation granulaire par cycle
+  cyclePrincipal?: 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE';
+  salleUniqueId?: string;           // Pour Maternelle/Primaire (enseignant unique titulaire de sa classe)
+  estTitulaire?: boolean;
+  classeTitulaireId?: string;
+  classesTitularisees?: string[];   // Multi-titularisation possible par enseignant
+  optionTitulaireCode?: string;
+  coursAttribues?: string[];       // Pour le Secondaire : liste des IDs/noms des cours attribués
+  classesAssignees?: string[];     // Classes secondaires où il enseigne
   cyclesAssignes?: string[];       // ex: ['MATERNELLE', 'PRIMAIRE', 'HUMANITES']
   optionsAssignees?: string[];      // ex: ['Math-Physique', 'Biologie-Chimie']
   // Contrat
@@ -333,7 +408,7 @@ export interface MembrePersonnel {
   volumeHoraireHebdo?: number;      // ex: 18h / semaine
   heuresPresteesMois?: number;       // ex: 72h prestées le mois en cours
   salaireBase: number;
-  devise: 'USD' | 'CDF';
+  devise: string;
   // Identifiants officiels
   numeroMatriculeEPST?: string;
   matricule?: string;
@@ -347,6 +422,50 @@ export interface MembrePersonnel {
   avatarUrl?: string;
   notesBiographiques?: string;
   creeLe?: string;
+  motDePasse?: string;
+  password?: string;
+}
+
+// ─── FICHES DE PAIE (PERSONNEL) ─────────────────────────────────────────────
+export interface LigneFichePaie {
+  id: string;
+  libelle: string;
+  montant: number;
+  devise: string;
+  type: 'PRIME' | 'DEDUCTION' | 'AVANCE';
+  categorie?: string;
+}
+
+export interface FichePaie {
+  id: string;
+  staffId: string;
+  staffName: string;
+  staffMatricule?: string;
+  staffRole?: string;
+  staffFunction?: string;
+  staffBankAccount?: string;
+  staffMobileMoney?: string;
+  staffPaymentMode?: string;
+  periode: string; // MM-YYYY
+  schoolYearId?: string;
+  anneeScolaire?: string;
+  salaireBase: number;
+  devise: string;
+  heuresPrestees?: number;
+  lignes: LigneFichePaie[];
+  salaireBrut: number;
+  totalPrimes: number;
+  totalDeductions: number;
+  totalAvances: number;
+  salaireNet: number;
+  modePaiement: 'CASH' | 'BANQUE' | 'MOBILE_MONEY';
+  reference?: string;
+  datePaiement?: string;
+  caissier: string;
+  statut: 'BROUILLON' | 'VALIDE' | 'PAYE';
+  numeroFiche?: string;
+  notes?: string;
+  origineExpenseId?: string;
 }
 
 export type StatutAnnéeScolaire = 'EN_COURS' | 'CLOTUREE' | 'PLANIFIEE';
@@ -417,7 +536,7 @@ export interface ConfigEtablissement {
   nomCenseur?: string;
   nomSecrétaireGeneral?: string;
   // Financier
-  deviseLocale: 'USD' | 'CDF' | 'USD_CDF';
+  deviseLocale: string;
   // Visuel
   logoUrl?: string;
   couleurPrimaire?: string;
@@ -480,11 +599,13 @@ export interface FraisAnnexeConfig {
   id: string;
   intitule: string;
   montant: number;
-  devise: 'USD' | 'CDF';
+  devise: string;
   obligatoire: boolean;
   typeFrais: string;
   priorite?: string;
   portee?: string;
+  modePaiement?: 'UNIQUE' | 'MENSUEL' | 'TRIMESTRIEL' | 'SEMESTRIEL' | 'PERSONNALISE';
+  nombreTranches?: number;
 }
 
 export interface SalleConfig {
@@ -525,19 +646,6 @@ export interface AnneeScolaireConfig {
   periodes: { id: string; nom: string; debut: string; fin: string; type: 'PERIOD' | 'EXAM' }[];
 }
 
-export interface UserAccount {
-  id: string;
-  email: string;
-  nom: string;
-  prenom?: string;
-  role: RôleSystème;
-  pinCode?: string;
-  avatarUrl?: string;
-  statut: 'ACTIF' | 'SUSPENDU';
-  telephone?: string;
-  creeLe: string;
-  derniereConnexion?: string;
-}
 
 export interface RolePermissions {
   role: RôleSystème;
@@ -566,32 +674,51 @@ export type CategorieFrais =
   | 'FRAIS_ACTIVITE'
   | 'AUTRE';
 
+export type ModePaiementFrais = 'UNIQUE' | 'MENSUEL' | 'TRIMESTRIEL' | 'SEMESTRIEL' | 'PERSONNALISE';
+
+export interface FraisTranche {
+  id: string;
+  nom: string;
+  montant: number;
+  devise: string;
+  dateEcheance?: string;
+  ordre: number;
+}
+
 export interface TypeFraisScolaire {
   id: string;
   code: string;
   nom: string;
   categorie: CategorieFrais;
   montant: number;
-  devise: 'USD' | 'CDF';
+  devise: string;
   obligatoire: boolean;
   portee?: 'TOUS' | string;
   anneeScolaireId?: string;
   schoolYearId?: string;
   // Ciblage automatique
   cycleId?: 'TOUS' | 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES' | string;
+  classId?: string;       // ID de la classe spécifique (ciblage précis)
+  salleId?: string;       // ID de la salle spécifique
   optionCode?: 'TOUS' | 'TRONC_COMMUN' | string;
   regime?: 'TOUS' | 'EXTERNE' | 'INTERNE' | 'SEMI_INTERNE';
   actif?: boolean;
+  // Gestion des tranches (RDC : minerval par mois, etc.)
+  modePaiement?: ModePaiementFrais;
+  nombreTranches?: number;
+  tranches?: FraisTranche[];
+  priorite?: number;
 }
 
 export interface LigneFacture {
   id: string;
   invoiceId: string;
   feeTypeId: string;
+  trancheId?: string; // pour les frais échelonnés (mensualisés)
   nom: string;
   categorie: CategorieFrais;
   montant: number;
-  devise: 'USD' | 'CDF';
+  devise: string;
   montantPaye?: number;
 }
 
@@ -602,8 +729,8 @@ export interface OperationCaisse {
   motif?: string;
   description?: string;
   montant: number;
-  devise: 'USD' | 'CDF';
-  type: 'ENTREE' | 'SORTIE';
+  devise: string;
+  type: 'ENTREE' | 'SORTIE' | 'TRANSFERT';
   categorie: string;
   modePaiement: 'CASH' | 'BANQUE' | 'MOBILE_MONEY' | string;
   reference?: string;
@@ -646,6 +773,7 @@ export interface LigneEcriture {
   compteNom?: string;
   debit: number;
   credit: number;
+  devise?: string;
   libelle?: string;
 }
 
@@ -657,6 +785,79 @@ export interface EcritureComptable {
   reference: string;
   libelle: string;
   piece?: string;
+  devise?: string;
   lignes: LigneEcriture[];
 }
 
+export interface BudgetPrevisionnel {
+  id: string;
+  schoolYearId?: string;
+  periode: string; // ex: 2025-01, T1-2025, 2025
+  dateDebut?: string;
+  dateFin?: string;
+  categorie: string;
+  type: 'REVENU' | 'DEPENSE';
+  montant: number;
+  devise: string;
+  note?: string;
+}
+
+export interface NoteFraisProfessionnel {
+  id: string;
+  staffId?: string;
+  staffName?: string;
+  schoolYearId?: string;
+  dateNote: string;
+  categorie: string;
+  description?: string;
+  montant: number;
+  devise: string;
+  justificatif?: string;
+  statut: 'SOUMIS' | 'VALIDE' | 'REJETE' | 'REMBOURSE';
+  validePar?: string;
+  dateValidation?: string;
+  commentaireValidation?: string;
+  montantRembourse?: number;
+  dateRemboursement?: string;
+  modeRemboursement?: string;
+  referenceRemboursement?: string;
+  creePar?: string;
+  dateCreation?: string;
+}
+
+export interface HistoriqueEnvoiFacture {
+  id: string;
+  invoiceId?: string;
+  methode: 'EMAIL' | 'SMS' | 'WHATSAPP' | 'PRINT' | 'DOWNLOAD' | 'SHARE';
+  destinataire?: string;
+  contact?: string;
+  statut?: 'SIMULE' | 'ENVOYE' | 'ERREUR';
+  dateEnvoi?: string;
+  message?: string;
+}
+
+// ─── Audit & Contrôle d'Accès ─────────────────────────────────────────────────
+
+export type ActionAudit =
+  | 'CONNEXION'
+  | 'DECONNEXION'
+  | 'CREATION'
+  | 'MODIFICATION'
+  | 'SUPPRESSION'
+  | 'PAIEMENT'
+  | 'EXPORT'
+  | 'IMPRESSION'
+  | 'CONSULTATION';
+
+export interface AuditLogEntry {
+  id: string;
+  userId?: string;
+  userNom?: string;
+  userRole?: string;
+  action: ActionAudit | string;
+  module?: string;         // ex: 'FINANCE', 'ELEVES', 'FRAIS', 'USERS'
+  entite?: string;         // ex: 'FactureEleve', 'TypeFraisScolaire'
+  entiteId?: string;       // ID de l'entité concernée
+  details?: Record<string, any>;
+  createdAt: string;
+}

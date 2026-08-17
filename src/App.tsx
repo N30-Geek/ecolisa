@@ -10,10 +10,15 @@ import { LicenseSyncManager } from './components/system/LicenseSyncManager';
 import { OnboardingWizard, SchoolConfig } from './components/onboarding/OnboardingWizard';
 import { SettingsManager } from './components/settings/SettingsManager';
 import { TeacherManager } from './components/administration/TeacherManager';
+import { UsersManager } from './components/administration/UsersManager';
+import { AuditLogViewer } from './components/administration/AuditLogViewer';
 import { LoginScreen } from './components/auth/LoginScreen';
+import { AccountSwitcherModal } from './components/auth/AccountSwitcherModal';
+import { ToastContainer } from './components/common/ToastNotification';
 import { RôleSystème } from './types';
 import { OfflineStorageService } from './services/offlineStorage';
 import { LocalDatabaseService, UserSession } from './services/localDatabase';
+import { hasTabAccess, getDefaultTabForRole } from './utils/permissions';
 
 // ─── Placeholder pour les modules en développement ───────────────────────────
 const ComingSoonModule: React.FC<{ title: string; icon: string; description: string }> = ({
@@ -35,16 +40,45 @@ const ComingSoonModule: React.FC<{ title: string; icon: string; description: str
   </div>
 );
 
+// ─── Banner pour Accès Restreint ──────────────────────────────────────────────
+const AccessDeniedBanner: React.FC<{ role: RôleSystème; onFallback: () => void }> = ({ role, onFallback }) => (
+  <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-8 animate-fade-in">
+    <div className="w-20 h-20 rounded-3xl bg-rose-500/10 text-rose-500 border border-rose-500/20 flex items-center justify-center text-3xl mb-6 shadow-md">
+      🛡️
+    </div>
+    <h2 className="text-2xl font-black mb-2 text-rose-500">Accès Restreint pour ce Rôle</h2>
+    <p className="text-sm max-w-md leading-relaxed mb-6" style={{ color: 'var(--text-muted)' }}>
+      Votre compte est configuré sous le rôle <span className="font-black text-indigo-500">{role}</span>. Ce module est réservé aux administrateurs autorisés.
+    </p>
+    <button
+      onClick={onFallback}
+      className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs transition-all shadow-md cursor-pointer"
+    >
+      Retourner à mon Tableau de Bord
+    </button>
+  </div>
+);
+
 export function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [userRole, setUserRole] = useState<RôleSystème>('PROMOTEUR_ADMIN');
   const [activeSchoolYear, setActiveSchoolYear] = useState<string>('2025–2026');
   const [isOnline, setIsOnline] = useState<boolean>(true);
 
+  // Verification dynamique de permission d'onglet
+  useEffect(() => {
+    if (!hasTabAccess(userRole, activeTab)) {
+      const fallback = getDefaultTabForRole(userRole);
+      setActiveTab(fallback);
+    }
+  }, [userRole, activeTab]);
+
   // Auth & Onboarding State
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<UserSession | null>(null);
+  const [lockedUser, setLockedUser] = useState<UserSession | null>(null); // Dernier utilisateur verrouillé
   const [showOnboardingModal, setShowOnboardingModal] = useState<boolean>(false);
+  const [isAccountSwitcherOpen, setIsAccountSwitcherOpen] = useState<boolean>(false);
   const [appLoading, setAppLoading] = useState<boolean>(true);
 
   // Le theme reste dans localStorage (preference UI seulement)
@@ -71,12 +105,16 @@ export function App() {
       const onboardingDone = await LocalDatabaseService.getConfig('onboarding_completed');
       setIsOnboardingCompleted(!!onboardingDone);
 
-      // Restaurer la session utilisateur depuis SQLite
-      const user = LocalDatabaseService.getCurrentUser();
-      if (user) {
-        setCurrentUser(user);
-        setUserRole(user.role);
+      // Restaurer l'année scolaire active depuis la config établissement
+      const savedConfig = await LocalDatabaseService.getConfig('school_config');
+      if (savedConfig?.activeSchoolYear) {
+        setActiveSchoolYear(savedConfig.activeSchoolYear);
       }
+
+      // ⚠️ RE-AUTHENTIFICATION OBLIGATOIRE à chaque lancement.
+      // La session précédente est effacée : l'utilisateur doit toujours
+      // saisir son code PIN ou mot de passe au démarrage et après verrouillage.
+      await LocalDatabaseService.logout();
 
       setAppLoading(false);
     };
@@ -93,14 +131,62 @@ export function App() {
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
 
+  // Déclencheur pour ouvrir le formulaire d'inscription depuis le dashboard
+  const [registrationRequest, setRegistrationRequest] = useState<number>(0);
+
   const toggleSidebar = () => {
     setIsSidebarCollapsed(prev => !prev);
   };
 
   const handleCompleteOnboarding = async (config: SchoolConfig) => {
-    // Persister l'etat onboarding et la config ecole dans SQLite
+    // 1. Persister la config établissement dans SQLite
     await LocalDatabaseService.setConfig('onboarding_completed', true);
     await LocalDatabaseService.setConfig('school_config', config);
+    localStorage.setItem('ecolisa_school_config', JSON.stringify(config));
+
+    // 2. Synchroniser l'année scolaire active dans l'état de l'app
+    if (config.activeSchoolYear) {
+      setActiveSchoolYear(config.activeSchoolYear);
+    }
+
+    // 3. Créer l'année scolaire dans SQLite si elle n'existe pas encore
+    try {
+      const existingYears = await LocalDatabaseService.getSchoolYears();
+      const nomAnnee = config.activeSchoolYear || '2025–2026';
+      // Chercher par le champ "nom" (type canonique AnneeScolaireConfig)
+      const alreadyExists = existingYears.some(y => y.nom === nomAnnee);
+      if (!alreadyExists) {
+        const yearParts = nomAnnee.split(/[–-]/);
+        const startYear = yearParts[0]?.trim() || new Date().getFullYear().toString();
+        const endYear   = yearParts[1]?.trim() || String(parseInt(startYear) + 1);
+        await LocalDatabaseService.addSchoolYear({
+          id:               `sy_${Date.now()}`,
+          nom:              nomAnnee,
+          statut:           'EN_COURS',
+          debut:            `${startYear}-09-01`,
+          fin:              `${endYear}-06-30`,
+          nombreElevesTotal: 0,
+          fraisInscription:  0,
+          fraisConnexion:    0,
+          fraisReinscription: 0,
+          fraisCarte:        0,
+          fraisAnnexes:      [],
+          cycles:            [],
+          salles:            [],
+          semestres:         [],
+          periodes:          [],
+        });
+      } else {
+        // S'assurer que l'année existante est marquée EN_COURS
+        const target = existingYears.find(y => y.nom === nomAnnee);
+        if (target && target.statut !== 'EN_COURS') {
+          await LocalDatabaseService.updateSchoolYear(target.id, { statut: 'EN_COURS' });
+        }
+      }
+    } catch (e) {
+      console.warn('[Onboarding] Impossible de créer l\'année scolaire :', e);
+    }
+
     setIsOnboardingCompleted(true);
     setShowOnboardingModal(false);
   };
@@ -108,13 +194,26 @@ export function App() {
   const handleLoginSuccess = async (user: UserSession) => {
     await LocalDatabaseService.setCurrentUser(user);
     setCurrentUser(user);
+    setLockedUser(null); // Effacer le verrouillage une fois authentifié
     setUserRole(user.role);
-    setActiveTab('dashboard');
+    const targetTab = getDefaultTabForRole(user.role);
+    setActiveTab(targetTab);
   };
 
   const handleLogout = async () => {
+    // Mémoriser le dernier utilisateur pour l'écran de verrouillage rapide
+    if (currentUser) setLockedUser(currentUser);
+    // Journaliser le verrouillage avant d'effacer la session
+    try {
+      await LocalDatabaseService.logAction('DECONNEXION', 'SYSTEME', undefined, undefined, {
+        role: userRole,
+        action: 'Verrouillage de session',
+        timestamp: new Date().toISOString(),
+      });
+    } catch {}
     await LocalDatabaseService.logout();
     setCurrentUser(null);
+    setIsAccountSwitcherOpen(false);
   };
 
   const handleResetAndReconfigure = async () => {
@@ -141,7 +240,14 @@ export function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <ExecutiveDashboard activeSchoolYear={activeSchoolYear} onNavigate={setActiveTab} onOpenRegistration={() => setActiveTab('students')} />;
+        return (
+          <ExecutiveDashboard
+            activeSchoolYear={activeSchoolYear}
+            onNavigate={setActiveTab}
+            onOpenRegistration={() => { setActiveTab('students'); setRegistrationRequest(n => n + 1); }}
+            userRole={userRole}
+          />
+        );
 
       // ── Gestion Pédagogies ──
       case 'students':
@@ -152,7 +258,7 @@ export function App() {
       case 'examens':
       case 'classes':
       case 'subjects':
-        return <AcademicManager activeSchoolYear={activeSchoolYear} activeSubTab={activeTab} />;
+        return <AcademicManager activeSchoolYear={activeSchoolYear} activeSubTab={activeTab} registrationRequest={registrationRequest} />;
 
       // ── Finances & Caisse ──
       case 'invoices':
@@ -162,6 +268,7 @@ export function App() {
       case 'fees':
       case 'accounting':
       case 'reports':
+      case 'analytics':
         return <FinanceManager activeSchoolYear={activeSchoolYear} activeSubTab={activeTab} />;
 
       // ── Administration ──
@@ -171,6 +278,14 @@ export function App() {
         return <TeacherManager activeSchoolYear={activeSchoolYear} targetCategory="ENSEIGNANT" />;
       case 'hr':
         return <TeacherManager activeSchoolYear={activeSchoolYear} targetCategory="STAFF" />;
+      case 'users':
+        return hasTabAccess(userRole, 'users')
+          ? <div className="p-6 animate-fade-in"><UsersManager /></div>
+          : <AccessDeniedBanner role={userRole} onFallback={() => setActiveTab(getDefaultTabForRole(userRole))} />;
+      case 'audit':
+        return hasTabAccess(userRole, 'audit')
+          ? <div className="p-6 animate-fade-in"><AuditLogViewer /></div>
+          : <AccessDeniedBanner role={userRole} onFallback={() => setActiveTab(getDefaultTabForRole(userRole))} />;
       case 'leaves':
         return <ComingSoonModule title="Congés & Absences" icon="🗓️" description="Gestion des demandes de congés et suivi des présences du personnel." />;
       // ── Vie Scolaire ──
@@ -193,10 +308,19 @@ export function App() {
       case 'license':
         return <LicenseSyncManager />;
       case 'settings':
-        return <SettingsManager onOpenOnboarding={() => setShowOnboardingModal(true)} />;
+        return hasTabAccess(userRole, 'settings')
+          ? <SettingsManager onOpenOnboarding={() => setShowOnboardingModal(true)} />
+          : <AccessDeniedBanner role={userRole} onFallback={() => setActiveTab(getDefaultTabForRole(userRole))} />;
 
       default:
-        return <ExecutiveDashboard onNavigate={setActiveTab} onOpenRegistration={() => setActiveTab('students')} />;
+        return (
+          <ExecutiveDashboard
+            activeSchoolYear={activeSchoolYear}
+            onNavigate={setActiveTab}
+            onOpenRegistration={() => { setActiveTab('students'); setRegistrationRequest(n => n + 1); }}
+            userRole={userRole}
+          />
+        );
     }
   };
 
@@ -216,7 +340,7 @@ export function App() {
     );
   }
 
-  // 2. Si non authentifié -> Afficher l'Écran de Connexion
+  // 2. Si non authentifié -> Afficher l'Écran de Connexion ou de Verrouillage
   if (!currentUser) {
     return (
       <div className={`h-screen w-screen overflow-hidden flex flex-col antialiased font-sans select-none ${theme}`}>
@@ -226,6 +350,7 @@ export function App() {
           onResetAndReconfigure={handleResetAndReconfigure}
           isDarkMode={theme === 'dark'}
           toggleTheme={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+          lockedUser={lockedUser ?? undefined}
         />
       </div>
     );
@@ -250,6 +375,7 @@ export function App() {
           isCollapsed={isSidebarCollapsed}
           setIsCollapsed={setIsSidebarCollapsed}
           onLock={handleLogout}
+          onOpenAccountSwitcher={() => setIsAccountSwitcherOpen(true)}
         />
 
         {/* Colonne de droite : Header FIXE + Zone de contenu défilante */}
@@ -272,6 +398,7 @@ export function App() {
             isSidebarCollapsed={isSidebarCollapsed}
             toggleSidebar={toggleSidebar}
             onLogout={handleLogout}
+            onOpenAccountSwitcher={() => setIsAccountSwitcherOpen(true)}
           />
 
           {/* Zone de contenu principale */}
@@ -282,6 +409,13 @@ export function App() {
           </main>
         </div>
       </div>
+      <AccountSwitcherModal
+        isOpen={isAccountSwitcherOpen}
+        onClose={() => setIsAccountSwitcherOpen(false)}
+        currentUser={currentUser}
+        onSwitchUser={handleLoginSuccess}
+      />
+      <ToastContainer />
     </div>
   );
 }

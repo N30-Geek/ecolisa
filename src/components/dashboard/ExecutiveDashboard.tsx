@@ -33,7 +33,8 @@ import {
   AlertCircle,
   Search,
   FileText,
-  Flag
+  Flag,
+  Banknote
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -54,9 +55,13 @@ import { CustomDatePicker } from '../common/CustomDatePicker';
 import {
   fetchDashboardData,
   computeDashboardStats,
+  filterDashboardData,
+  getClassSubCode,
+  normalizeCycle,
   DashboardData,
   DashboardStats,
 } from '../../services/dashboardData';
+import { getInvoiceRemaining } from '../../utils/financeCalculations';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { formatCurrency } from '../../utils/currency';
 import { LocalDatabaseService } from '../../services/localDatabase';
@@ -64,11 +69,15 @@ import { SchoolCalendar } from './SchoolCalendar';
 import { Pagination } from '../common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
 
+import { RôleSystème } from '../../types';
+import { hasTabAccess, ROLE_DETAILS } from '../../utils/permissions';
+
 // ── Props du Dashboard Exécutif ────────────────────────────────────────────
 interface ExecutiveDashboardProps {
   onNavigate?: (tab: string) => void;
   onOpenRegistration?: () => void;
   activeSchoolYear?: string;
+  userRole?: RôleSystème;
 }
 
 // ── Tooltip personnalisé Recharts 100% Adaptatif Mode Clair & Sombre ───────
@@ -130,80 +139,157 @@ interface KpiCardProps {
 }
 
 const KpiCard: React.FC<KpiCardProps> = ({
-  label, sublabel, value, trend, trendUp, trendNeutral, icon: Icon, iconColor = 'indigo', delay = 0, onViewDetails,
-}) => (
-  <div
-    className="animate-fade-in p-4 rounded-2xl border transition-all relative overflow-hidden group flex flex-col justify-between cursor-default"
-    style={{
-      animationDelay: `${delay}ms`,
-      background: 'var(--bg-surface)',
-      borderColor: 'var(--border)',
-      boxShadow: 'var(--shadow-xs)',
-    }}
-    onMouseEnter={(e) => {
-      (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-md)';
-      (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(99,102,241,0.20)';
-      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
-    }}
-    onMouseLeave={(e) => {
-      (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-xs)';
-      (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)';
-      (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
-    }}
-  >
-    <div>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <span className="text-[11px] font-bold uppercase tracking-wider block" style={{ color: 'var(--text-muted)' }}>
-            {label}
-          </span>
-          <span className="text-[10.5px] font-medium mt-0.5 block" style={{ color: 'var(--text-disabled)' }}>
-            {sublabel}
-          </span>
-        </div>
-        <div className={`kpi-icon-wrap ${iconColor} group-hover:scale-105 transition-transform`}>
-          <Icon className="w-4 h-4" />
-        </div>
-      </div>
+  label,
+  sublabel,
+  value,
+  trend,
+  trendUp,
+  trendNeutral,
+  icon: Icon,
+  iconColor = 'indigo',
+  delay = 0,
+  onViewDetails,
+}) => {
+  const colorThemes: Record<string, { gradient: string; shadow: string; glow: string; text: string; bgSoft: string; borderSoft: string }> = {
+    indigo: {
+      gradient: 'bg-gradient-to-br from-indigo-500 to-indigo-600',
+      shadow: 'shadow-indigo-500/25',
+      glow: 'rgba(99, 102, 241, 0.08)',
+      text: 'text-indigo-600 dark:text-indigo-400',
+      bgSoft: 'bg-indigo-500/10',
+      borderSoft: 'border-indigo-500/20',
+    },
+    emerald: {
+      gradient: 'bg-gradient-to-br from-emerald-500 to-emerald-600',
+      shadow: 'shadow-emerald-500/25',
+      glow: 'rgba(16, 185, 129, 0.08)',
+      text: 'text-emerald-600 dark:text-emerald-400',
+      bgSoft: 'bg-emerald-500/10',
+      borderSoft: 'border-emerald-500/20',
+    },
+    amber: {
+      gradient: 'bg-gradient-to-br from-amber-500 to-amber-600',
+      shadow: 'shadow-amber-500/25',
+      glow: 'rgba(245, 158, 11, 0.08)',
+      text: 'text-amber-600 dark:text-amber-400',
+      bgSoft: 'bg-amber-500/10',
+      borderSoft: 'border-amber-500/20',
+    },
+    rose: {
+      gradient: 'bg-gradient-to-br from-rose-500 to-rose-600',
+      shadow: 'shadow-rose-500/25',
+      glow: 'rgba(239, 68, 68, 0.08)',
+      text: 'text-rose-600 dark:text-rose-400',
+      bgSoft: 'bg-rose-500/10',
+      borderSoft: 'border-rose-500/20',
+    },
+    violet: {
+      gradient: 'bg-gradient-to-br from-purple-500 to-indigo-600',
+      shadow: 'shadow-purple-500/25',
+      glow: 'rgba(168, 85, 247, 0.08)',
+      text: 'text-purple-600 dark:text-purple-400',
+      bgSoft: 'bg-purple-500/10',
+      borderSoft: 'border-purple-500/20',
+    },
+    sky: {
+      gradient: 'bg-gradient-to-br from-cyan-500 to-blue-600',
+      shadow: 'shadow-cyan-500/25',
+      glow: 'rgba(6, 182, 212, 0.08)',
+      text: 'text-cyan-600 dark:text-cyan-400',
+      bgSoft: 'bg-cyan-500/10',
+      borderSoft: 'border-cyan-500/20',
+    },
+  };
 
-      <div className="mt-3">
-        <div className="text-2xl font-black tracking-tight leading-none" style={{ color: 'var(--text-primary)' }}>
-          {value}
-        </div>
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <span
-            className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-              trendNeutral
-                ? 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20'
-                : trendUp
-                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
-                : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'
-            }`}
+  const theme = colorThemes[iconColor] || colorThemes.indigo;
+
+  return (
+    <div
+      className="animate-fade-in p-5 rounded-2xl border transition-all duration-300 relative overflow-hidden group flex flex-col justify-between cursor-default"
+      style={{
+        animationDelay: `${delay}ms`,
+        background: 'var(--bg-surface)',
+        borderColor: 'var(--border)',
+        boxShadow: 'var(--elevation-1)',
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--elevation-3)';
+        (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(99,102,241,0.35)';
+        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--elevation-1)';
+        (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)';
+        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
+      }}
+    >
+      {/* Soft background aura */}
+      <div
+        className="absolute -top-12 -right-12 w-32 h-32 rounded-full pointer-events-none blur-2xl transition-opacity duration-300 opacity-60 group-hover:opacity-100"
+        style={{ background: theme.glow }}
+      />
+
+      <div className="relative z-10">
+        {/* Header: Label & Icon */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 space-y-1">
+            <span className="text-[11px] font-black uppercase tracking-wider block text-slate-500 dark:text-slate-400 truncate">
+              {label}
+            </span>
+            <span className="text-xs font-semibold block text-slate-400 dark:text-slate-500 truncate">
+              {sublabel}
+            </span>
+          </div>
+
+          <div
+            className={`w-11 h-11 rounded-2xl flex items-center justify-center text-white shadow-md transition-all duration-300 group-hover:scale-110 shrink-0 ${theme.gradient} ${theme.shadow}`}
           >
-            {!trendNeutral && (trendUp
-              ? <TrendingUp className="w-2.5 h-2.5" />
-              : <TrendingDown className="w-2.5 h-2.5" />
-            )}
-            {trend}
-          </span>
+            <Icon className="w-5 h-5 text-white" />
+          </div>
+        </div>
+
+        {/* Value and Trend */}
+        <div className="mt-4">
+          <div className="text-3xl font-black tracking-tight leading-none tabular-nums" style={{ color: 'var(--text-primary)' }}>
+            {value}
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 text-xs font-black px-2.5 py-1 rounded-lg border ${
+                trendNeutral
+                  ? 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20'
+                  : trendUp
+                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                  : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30'
+              }`}
+            >
+              {!trendNeutral && (trendUp ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />)}
+              {trend}
+            </span>
+          </div>
         </div>
       </div>
-    </div>
 
-    {onViewDetails && (
-      <button
-        onClick={onViewDetails}
-        className="mt-3 pt-2 border-t w-full flex items-center justify-between text-xs font-semibold transition-colors cursor-pointer group/btn"
-        style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#6366f1'; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; }}
-      >
-        <span>Voir les détails</span>
-        <ArrowRight className="w-3.5 h-3.5 group-hover/btn:translate-x-1 transition-transform" />
-      </button>
-    )}
-  </div>
-);
+      {/* Footer Action Link */}
+      {onViewDetails && (
+        <button
+          type="button"
+          onClick={onViewDetails}
+          className="relative z-10 mt-4 pt-3 border-t w-full flex items-center justify-between text-xs font-black transition-all duration-200 cursor-pointer group/btn select-none"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+        >
+          <span className="group-hover/btn:text-indigo-600 dark:group-hover/btn:text-indigo-400 transition-colors">
+            Consulter les détails
+          </span>
+          <div className="w-6 h-6 rounded-lg bg-slate-500/10 group-hover/btn:bg-indigo-600 group-hover/btn:text-white flex items-center justify-center transition-all duration-200 text-slate-500 dark:text-slate-400">
+            <ArrowRight className="w-3.5 h-3.5 group-hover/btn:translate-x-0.5 transition-transform" />
+          </div>
+        </button>
+      )}
+    </div>
+  );
+};
 
 // ── COMPOSANT CALENDRIER SCOLAIRE OFFICIEL RDC 2026-2027 (MINEDU-NC) ──────────
 interface CalendarEventData {
@@ -217,128 +303,135 @@ interface CalendarEventData {
   highlight?: boolean;
 }
 
-const mockRdcSchoolCalendar: CalendarEventData[] = [
+const OFFICIAL_RDC_EVENTS: CalendarEventData[] = [
   {
-    id: 'rentree-2026',
+    id: 'rdc-1',
     titre: 'Rentrée Scolaire Nationale 2026–2027',
-    subtitre: 'Ouverture officielle de l’année scolaire sur toute l’étendue de la RDC',
-    dateDebut: 'Mardi 01 Septembre 2026',
+    subtitre: 'Reprise officielle des cours sur toute l\'étendue de la RDC',
+    dateDebut: '01/09/2026',
     categorie: 'RENTRÉE_CLÔTURE',
     publicCible: 'TOUS',
     highlight: true,
   },
   {
-    id: 'cloture-2027',
-    titre: 'Clôture de l’Année Scolaire 2026–2027',
-    subtitre: 'Proclamation des résultats et remise officielle des bulletins & certificats',
-    dateDebut: 'Vendredi 02 Juillet 2027',
-    categorie: 'RENTRÉE_CLÔTURE',
+    id: 'rdc-2',
+    titre: 'Interrogations & Examens de la 1ère Période',
+    subtitre: 'Contrôles continus et clôture de la 1ère période',
+    dateDebut: '20/11/2026',
+    dateFin: '27/11/2026',
+    categorie: 'EXAMENS_JURY',
+    publicCible: 'TOUS',
+  },
+  {
+    id: 'rdc-3',
+    titre: 'Vacances du 1er Trimestre (Noël & Nouvel An)',
+    subtitre: 'Congés scolaires de fin d\'année civile',
+    dateDebut: '19/12/2026',
+    dateFin: '04/01/2027',
+    categorie: 'VACANCES',
+    publicCible: 'TOUS',
+  },
+  {
+    id: 'rdc-4',
+    titre: 'Journée des Martyrs de l\'Indépendance',
+    subtitre: 'Jour férié légal en République Démocratique du Congo',
+    dateDebut: '04/01/2027',
+    categorie: 'FÉRIÉ',
+    publicCible: 'TOUS',
+  },
+  {
+    id: 'rdc-5',
+    titre: 'Journées des Héros Nationaux (Kabila & Lumumba)',
+    subtitre: 'Commémoration nationale officielle',
+    dateDebut: '16/01/2027',
+    dateFin: '17/01/2027',
+    categorie: 'FÉRIÉ',
+    publicCible: 'TOUS',
+  },
+  {
+    id: 'rdc-6',
+    titre: 'Examens du 1er Semestre (Toutes Promotions)',
+    subtitre: 'Évaluations semestrielles obligatoires & délibérations',
+    dateDebut: '15/02/2027',
+    dateFin: '23/02/2027',
+    categorie: 'EXAMENS_JURY',
     publicCible: 'TOUS',
     highlight: true,
   },
   {
-    id: 'exetat-prelim',
-    titre: 'EXETAT — Épreuve Préliminaire (Candidats Libres)',
-    subtitre: 'Examen d’État — Session préliminaire',
-    dateDebut: 'Samedi 13 Février 2027',
+    id: 'rdc-7',
+    titre: 'Congé de Détente du 1er Semestre',
+    subtitre: 'Interruption pédagogique après délibérations',
+    dateDebut: '24/02/2027',
+    dateFin: '28/02/2027',
+    categorie: 'VACANCES',
+    publicCible: 'TOUS',
+  },
+  {
+    id: 'rdc-8',
+    titre: 'Journée Internationale des Droits de la Femme',
+    subtitre: 'Jour férié chômé et payé',
+    dateDebut: '08/03/2027',
+    categorie: 'FÉRIÉ',
+    publicCible: 'TOUS',
+  },
+  {
+    id: 'rdc-9',
+    titre: 'Vacances de Pâques (2ème Trimestre)',
+    subtitre: 'Congés scolaires de mi-année',
+    dateDebut: '03/04/2027',
+    dateFin: '19/04/2027',
+    categorie: 'VACANCES',
+    publicCible: 'TOUS',
+  },
+  {
+    id: 'rdc-10',
+    titre: 'Épreuves Hors-Session EXETAT (Dissertation & Pratique)',
+    subtitre: 'Dissertation, Jury pratique et épreuves orales de français',
+    dateDebut: '10/05/2027',
+    dateFin: '15/05/2027',
     categorie: 'EXAMENS_JURY',
     publicCible: 'SECONDAIRE_EXETAT',
     highlight: true,
   },
   {
-    id: 'exetat-hors-session-dissert',
-    titre: 'EXETAT — Hors Session : Dissertation',
-    subtitre: 'Épreuve écrite de rédaction / dissertation pour les humanités',
-    dateDebut: 'Lundi 03 Mai 2027',
-    categorie: 'EXAMENS_JURY',
-    publicCible: 'SECONDAIRE_EXETAT',
-    highlight: true,
-  },
-  {
-    id: 'exetat-pratique-tech',
-    titre: 'EXETAT — Épreuves Pratiques / Options Techniques',
-    subtitre: 'Session pratique des filières techniques (7 jours effectifs)',
-    dateDebut: 'Lundi 10 Mai 2027',
-    dateFin: 'Mardi 18 Mai 2027',
+    id: 'rdc-11',
+    titre: 'Test National de Sélection et d\'Orientation (TENASOSP)',
+    subtitre: 'Évaluation obligatoire des élèves de 8ème Année CTEB',
+    dateDebut: '27/05/2027',
+    dateFin: '28/05/2027',
     categorie: 'EXAMENS_JURY',
     publicCible: 'SECONDAIRE_EXETAT',
   },
   {
-    id: 'tenasosp-2027',
-    titre: 'TENASOSP 2027 (Test National de Sélection)',
-    subtitre: 'Sélection et orientation scolaire et professionnelle (8ème CTEB)',
-    dateDebut: 'Jeudi 03 Juin 2027',
-    dateFin: 'Vendredi 04 Juin 2027',
-    categorie: 'EXAMENS_JURY',
-    publicCible: 'SECONDAIRE_EXETAT',
-    highlight: true,
-  },
-  {
-    id: 'enafep-2027',
-    titre: 'ENAFEP 2027 (Examen National de Fin d’Études Primaires)',
-    subtitre: 'Évaluation nationale pour l’obtention du certificat d’études primaires (6ème Primaire)',
-    dateDebut: 'Mardi 08 Juin 2027',
-    dateFin: 'Mercredi 09 Juin 2027',
+    id: 'rdc-12',
+    titre: 'Évaluation Nationale de Fin d\'Études Primaires (ENAFEP)',
+    subtitre: 'Certificat national de fin d\'études primaires',
+    dateDebut: '03/06/2027',
+    dateFin: '04/06/2027',
     categorie: 'EXAMENS_JURY',
     publicCible: 'PRIMAIRE',
     highlight: true,
   },
   {
-    id: 'exetat-session-ordinaire',
-    titre: 'EXETAT 2027 — Session Ordinaire (4 Jours)',
-    subtitre: 'Épreuves générales écrites de la session ordinaire de l’Examen d’État',
-    dateDebut: 'Lundi 21 Juin 2027',
-    dateFin: 'Jeudi 24 Juin 2027',
+    id: 'rdc-13',
+    titre: 'Session Ordinaire de l\'Examen d\'État (EXETAT 2027)',
+    subtitre: '4 journées nationales d\'épreuves standardisées',
+    dateDebut: '21/06/2027',
+    dateFin: '24/06/2027',
     categorie: 'EXAMENS_JURY',
     publicCible: 'SECONDAIRE_EXETAT',
     highlight: true,
   },
   {
-    id: 'examens-s1',
-    titre: 'Examens du 1er Semestre / 1er Trimestre',
-    subtitre: 'Évaluations semestrielles (8 jours)',
-    dateDebut: 'Mardi 09 Février 2027',
-    dateFin: 'Mercredi 17 Février 2027',
-    categorie: 'EXAMENS_JURY',
-    publicCible: 'TOUS',
-  },
-  {
-    id: 'conge-detente-t1',
-    titre: 'Congé de Détente du 1er Trimestre',
-    subtitre: 'Pause pédagogique (3 jours)',
-    dateDebut: 'Jeudi 05 Novembre 2026',
-    dateFin: 'Samedi 07 Novembre 2026',
-    categorie: 'VACANCES',
-    publicCible: 'TOUS',
-  },
-  {
-    id: 'vacances-noel-s1',
-    titre: 'Vacances du 1er Semestre (Noël & Nouvel An)',
-    subtitre: 'Grande pause de fin d’année (13 jours) — Reprise le Lundi 11 Janvier 2027',
-    dateDebut: 'Mercredi 23 Décembre 2026',
-    dateFin: 'Samedi 09 Janvier 2027',
-    categorie: 'VACANCES',
+    id: 'rdc-14',
+    titre: 'Clôture de l\'Année Scolaire & Proclamation des Résultats',
+    subtitre: 'Remise solennelle des bulletins et palmarès',
+    dateDebut: '02/07/2027',
+    categorie: 'RENTRÉE_CLÔTURE',
     publicCible: 'TOUS',
     highlight: true,
   },
-  {
-    id: 'vacances-s2',
-    titre: 'Vacances du 2ème Semestre (Pâques)',
-    subtitre: 'Congé de Pâques (12 jours) — Reprise le Lundi 05 Avril 2027',
-    dateDebut: 'Lundi 22 Mars 2027',
-    dateFin: 'Samedi 03 Avril 2027',
-    categorie: 'VACANCES',
-    publicCible: 'TOUS',
-  },
-  { id: 'ferie-noel', titre: 'Fête de la Nativité (Noël)', dateDebut: 'Vendredi 25 Décembre 2026', categorie: 'FÉRIÉ', publicCible: 'TOUS' },
-  { id: 'ferie-an', titre: 'Fête du Nouvel An', dateDebut: 'Vendredi 01 Janvier 2027', categorie: 'FÉRIÉ', publicCible: 'TOUS' },
-  { id: 'ferie-martyrs', titre: 'Martyrs de l’Indépendance', dateDebut: 'Lundi 04 Janvier 2027', categorie: 'FÉRIÉ', publicCible: 'TOUS' },
-  { id: 'ferie-kabila', titre: 'Hommage à Mzée Laurent-Désiré Kabila', dateDebut: 'Samedi 16 Janvier 2027', categorie: 'FÉRIÉ', publicCible: 'TOUS' },
-  { id: 'ferie-lumumba', titre: 'Hommage au Héros National P.E. Lumumba', dateDebut: 'Dimanche 17 Janvier 2027', categorie: 'FÉRIÉ', publicCible: 'TOUS' },
-  { id: 'ferie-kimbangu', titre: 'Journée Simon Kimbangu & Conscience Africaine', dateDebut: 'Mardi 06 Avril 2027', categorie: 'FÉRIÉ', publicCible: 'TOUS' },
-  { id: 'ferie-travail', titre: 'Fête du Travail', dateDebut: 'Samedi 01 Mai 2027', categorie: 'FÉRIÉ', publicCible: 'TOUS' },
-  { id: 'ferie-fardc', titre: 'Journée des Forces Armées (FARDC)', dateDebut: 'Lundi 17 Mai 2027', categorie: 'FÉRIÉ', publicCible: 'TOUS' },
-  { id: 'ferie-independance', titre: 'Fête de l’Indépendance de la RDC 🇨🇩', dateDebut: 'Mercredi 30 Juin 2027', categorie: 'FÉRIÉ', publicCible: 'TOUS', highlight: true },
 ];
 
 const RdcOfficialSchoolCalendar: React.FC<{ events?: CalendarEventData[] }> = ({ events }) => {
@@ -346,8 +439,7 @@ const RdcOfficialSchoolCalendar: React.FC<{ events?: CalendarEventData[] }> = ({
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   const allEvents = useMemo<CalendarEventData[]>(() => {
-    if (events && events.length > 0) return events;
-    return mockRdcSchoolCalendar;
+    return (events && events.length > 0) ? events : OFFICIAL_RDC_EVENTS;
   }, [events]);
 
   const handleExportPDF = () => {
@@ -883,40 +975,62 @@ const cycleOptions: SelectOption[] = [
   { value: 'SECONDAIRE', label: 'Secondaire & Humanités', icon: Award },
 ];
 
-const maternelleOptions: SelectOption[] = [
-  { value: 'ALL', label: 'Toutes les Sections Maternelle', icon: GraduationCap },
-  { value: 'PS', label: 'Petite Section (3 ans)', icon: GraduationCap },
-  { value: 'MS', label: 'Moyenne Section (4 ans)', icon: GraduationCap },
-  { value: 'GS', label: 'Grande Section (5 ans)', icon: GraduationCap },
-];
+const OPTION_LABELS: Record<string, string> = {
+  PS: 'Petite Section (3 ans)',
+  MS: 'Moyenne Section (4 ans)',
+  GS: 'Grande Section (5 ans)',
+  '1ERE': '1ère Primaire',
+  '2EME': '2ème Primaire',
+  '3EME': '3ème Primaire',
+  '4EME': '4ème Primaire',
+  '5EME': '5ème Primaire',
+  '6EME': '6ème Primaire',
+  TRONC_COMMUN: 'Tronc Commun',
+};
 
-const primaireOptions: SelectOption[] = [
-  { value: 'ALL', label: 'Toutes les Classes Primaire', icon: School },
-  { value: 'DEG_ELEM', label: '1ère & 2ème Primaire', icon: School },
-  { value: 'DEG_MOY',  label: '3ème & 4ème Primaire', icon: School },
-  { value: 'DEG_TERM', label: '5ème & 6ème Primaire', icon: School },
-];
-
-const secondaireOptions: SelectOption[] = [
-  { value: 'ALL', label: 'Toutes les Options Humanités', icon: BookOpen },
-  { value: 'MATH_PHYS', label: 'Mathématique-Physique', icon: BookOpen },
-  { value: 'BIO_CHIMIE', label: 'Biologie-Chimie', icon: BookOpen },
-  { value: 'COMMERCE', label: 'Commerciale & Gestion', icon: BookOpen },
-  { value: 'PEDAGOGIE', label: 'Pédagogie Générale', icon: Users },
-];
-
-const periodOptions: SelectOption[] = [
-  { value: '2025_2026', label: 'Année Scolaire 2025–2026', icon: Calendar },
-  { value: 'S1', label: '1er Semestre (S1)', icon: Calendar, badge: 'EN COURS' },
-  { value: 'S2', label: '2ème Semestre (S2)', icon: Calendar },
-  { value: 'T1', label: '1er Trimestre', icon: Clock },
-];
+const subOptionLabel = (code: string, cycle: string) => {
+  if (OPTION_LABELS[code]) return OPTION_LABELS[code];
+  if (cycle === 'SECONDAIRE') return code.replace(/_/g, ' ');
+  return code;
+};
 
 // ── Dashboard Exécutif Épuré Haute Visibilité Mode Clair & Sombre ──
-export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNavigate, onOpenRegistration, activeSchoolYear }) => {
-  const { currency, exchangeRate, format } = useSchoolConfig();
+export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
+  onNavigate,
+  onOpenRegistration,
+  activeSchoolYear,
+  userRole = 'PROMOTEUR_ADMIN',
+}) => {
+  const { displayCurrency, currencies, format } = useSchoolConfig();
   const [activeSubTab, setActiveSubTab] = useState<'executive' | 'calendar' | 'pedagogy' | 'finances' | 'viescolaire'>('executive');
   const [chartMode, setChartMode] = useState<'BOTH' | 'COTES' | 'PRESENCE'>('BOTH');
+
+  const availableSubTabs = useMemo(() => {
+    const tabs: Array<{ id: 'executive' | 'calendar' | 'pedagogy' | 'finances' | 'viescolaire'; label: string; icon: React.ElementType }> = [
+      { id: 'executive', label: 'Synthèse Exécutive', icon: Activity },
+      { id: 'calendar', label: 'Calendrier EPST 2026–2027', icon: Calendar },
+    ];
+
+    if (hasTabAccess(userRole, 'grades') || hasTabAccess(userRole, 'classes') || userRole === 'PROMOTEUR_ADMIN') {
+      tabs.push({ id: 'pedagogy', label: 'Pédagogie & Performances', icon: GraduationCap });
+    }
+
+    if (hasTabAccess(userRole, 'invoices') || hasTabAccess(userRole, 'cash') || userRole === 'PROMOTEUR_ADMIN') {
+      tabs.push({ id: 'finances', label: 'Finances & Recouvrement', icon: DollarSign });
+    }
+
+    if (hasTabAccess(userRole, 'discipline') || userRole === 'DIRECTEUR_DISCIPLINE' || userRole === 'PREFET_DIRECTEUR' || userRole === 'PROMOTEUR_ADMIN') {
+      tabs.push({ id: 'viescolaire', label: 'Vie Scolaire & Présences', icon: Scale });
+    }
+
+    return tabs;
+  }, [userRole]);
+
+  useEffect(() => {
+    if (!availableSubTabs.some(t => t.id === activeSubTab)) {
+      setActiveSubTab('executive');
+    }
+  }, [availableSubTabs, activeSubTab]);
 
   const [data, setData] = useState<DashboardData>({
     loading: true,
@@ -934,13 +1048,39 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
     selectedYear: undefined,
   });
 
-  const [selectedSchoolYearId, setSelectedSchoolYearId] = useState<string>(activeSchoolYear || 'ALL');
+  const [selectedSchoolYearId, setSelectedSchoolYearId] = useState<string>('ALL');
+
+  // Résolution robuste de l'année scolaire active (ID ou nom) et fallback sur l'année EN_COURS
+  const activeYearId = useMemo(() => {
+    if (!activeSchoolYear) {
+      return data.schoolYears.find((y) => y.statut === 'EN_COURS')?.id || 'ALL';
+    }
+    const byId = data.schoolYears.find((y) => y.id === activeSchoolYear);
+    if (byId) return byId.id;
+    const byName = data.schoolYears.find((y) => y.nom === activeSchoolYear);
+    return byName?.id || activeSchoolYear;
+  }, [activeSchoolYear, data.schoolYears]);
+
+  const schoolYearOptions = useMemo<SelectOption[]>(() => {
+    const opts: SelectOption[] = [
+      { value: 'ALL', label: 'Toutes les Années Scolaires', icon: Calendar }
+    ];
+    data.schoolYears.forEach(y => {
+      opts.push({
+        value: y.id,
+        label: `Année Scolaire ${y.nom} (${y.statut === 'EN_COURS' ? 'En cours' : 'Clôturée'})`,
+        icon: Calendar,
+        badge: y.statut === 'EN_COURS' ? 'EN COURS' : undefined
+      });
+    });
+    return opts;
+  }, [data.schoolYears]);
 
   useEffect(() => {
-    if (activeSchoolYear) {
-      setSelectedSchoolYearId(activeSchoolYear);
+    if (selectedSchoolYearId === 'ALL' && activeYearId && activeYearId !== 'ALL' && schoolYearOptions.some((o) => o.value === activeYearId)) {
+      setSelectedSchoolYearId(activeYearId);
     }
-  }, [activeSchoolYear]);
+  }, [activeYearId, schoolYearOptions, selectedSchoolYearId]);
 
   const refreshData = async () => {
     setData(prev => ({ ...prev, loading: true }));
@@ -962,32 +1102,27 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
     return () => { mounted = false; clearInterval(interval); };
   }, [selectedSchoolYearId]);
 
-  const schoolYearOptions = useMemo<SelectOption[]>(() => {
-    const opts: SelectOption[] = [
-      { value: 'ALL', label: 'Toutes les Années Scolaires', icon: Calendar }
-    ];
-    data.schoolYears.forEach(y => {
-      opts.push({
-        value: y.id,
-        label: `Année Scolaire ${y.nom} (${y.statut === 'EN_COURS' ? 'En cours' : 'Clôturée'})`,
-        icon: Calendar,
-        badge: y.statut === 'EN_COURS' ? 'EN COURS' : undefined
-      });
-    });
-    return opts;
-  }, [data.schoolYears]);
+  // ÉTATS DES FILTRES MULTI-CRITÈRES INTELLIGENTS
+  const [selectedCycleFilter, setSelectedCycleFilter] = useState<string>('ALL');
+  const [selectedOptionFilter, setSelectedOptionFilter] = useState<string>('ALL');
+  const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('FULL');
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  const stats = useMemo<DashboardStats>(() => computeDashboardStats(data, currency, exchangeRate), [data, currency, exchangeRate]);
+  // Valeurs par défaut utilisées pour le badge "filtres actifs" et la réinitialisation
+  const defaultSchoolYearId = activeYearId;
+  const defaultPeriodKey = 'FULL';
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const filteredData = useMemo<DashboardData>(
+    () => filterDashboardData(data, selectedCycleFilter, selectedOptionFilter),
+    [data, selectedCycleFilter, selectedOptionFilter]
+  );
+
+  const stats = useMemo<DashboardStats>(() => computeDashboardStats(filteredData, displayCurrency, currencies), [filteredData, displayCurrency, currencies]);
 
   const { paginated: paginatedRecentActivity, ...recentActivityPagination } = usePagination(stats.recentActivity, { defaultPageSize: 5 });
   const { paginated: paginatedUpcomingEvents, ...upcomingEventsPagination } = usePagination(stats.upcomingEvents, { defaultPageSize: 5 });
   const { paginated: paginatedTopUnpaid, ...topUnpaidPagination } = usePagination(stats.topUnpaidInvoices, { defaultPageSize: 5 });
-
-  // ÉTATS DES FILTRES MULTI-CRITÈRES INTELLIGENTS
-  const [selectedCycleFilter, setSelectedCycleFilter] = useState<string>('ALL');
-  const [selectedOptionFilter, setSelectedOptionFilter] = useState<string>('ALL');
-  const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('2026_2027');
-  const [selectedDateFilter, setSelectedDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
 
   // GESTION DU CHANGEMENT DE CYCLE
   const handleCycleChange = (cycle: string) => {
@@ -995,47 +1130,107 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
     setSelectedOptionFilter('ALL');
   };
 
-  const subSelectOptions = useMemo(() => {
-    if (selectedCycleFilter === 'MATERNELLE') return maternelleOptions;
-    if (selectedCycleFilter === 'PRIMAIRE') return primaireOptions;
-    return secondaireOptions;
-  }, [selectedCycleFilter]);
+  // Options de sous-filtre (section/niveau/option) générées dynamiquement depuis les classes réelles
+  const subSelectOptions = useMemo<SelectOption[]>(() => {
+    const allClasses = data.classes;
+    const relevant = allClasses.filter((c) => {
+      if (selectedCycleFilter === 'ALL') return true;
+      if (selectedCycleFilter === 'SECONDAIRE') {
+        const cycle = normalizeCycle(c.cycleId, c.nom);
+        return cycle === 'CTEB' || cycle === 'HUMANITES';
+      }
+      return normalizeCycle(c.cycleId, c.nom) === selectedCycleFilter;
+    });
 
+    const codes = Array.from(new Set(relevant.map((c) => getClassSubCode(c, selectedCycleFilter)))).sort();
+    const allLabel =
+      selectedCycleFilter === 'MATERNELLE' ? 'Toutes les sections' :
+      selectedCycleFilter === 'PRIMAIRE' ? 'Tous les niveaux' :
+      selectedCycleFilter === 'SECONDAIRE' ? 'Toutes les options/filières' :
+      'Toutes les options / sections';
+
+    return [
+      { value: 'ALL', label: allLabel, icon: BookOpen },
+      ...codes.map((code) => ({
+        value: code,
+        label: subOptionLabel(code, selectedCycleFilter),
+        icon: BookOpen,
+      })),
+    ];
+  }, [data.classes, selectedCycleFilter]);
+
+  // Placeholder et validation du sous-filtre quand il devient invalide
   const subSelectPlaceholder = useMemo(() => {
     if (selectedCycleFilter === 'MATERNELLE') return 'Section Maternelle';
     if (selectedCycleFilter === 'PRIMAIRE') return 'Niveau Primaire';
-    return 'Option / Filière';
+    if (selectedCycleFilter === 'SECONDAIRE') return 'Option / Filière';
+    return 'Option / Filière / Section';
   }, [selectedCycleFilter]);
+
+  useEffect(() => {
+    const available = subSelectOptions.some((o) => o.value === selectedOptionFilter);
+    if (!available && selectedOptionFilter !== 'ALL') {
+      setSelectedOptionFilter('ALL');
+    }
+  }, [subSelectOptions, selectedOptionFilter]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
+    if (selectedSchoolYearId !== defaultSchoolYearId && defaultSchoolYearId !== 'ALL') count++;
     if (selectedCycleFilter !== 'ALL') count++;
     if (selectedOptionFilter !== 'ALL') count++;
-    if (selectedPeriodFilter !== '2025_2026') count++;
+    if (selectedPeriodFilter !== defaultPeriodKey) count++;
+    if (selectedDateFilter !== todayStr) count++;
     return count;
-  }, [selectedCycleFilter, selectedOptionFilter, selectedPeriodFilter]);
+  }, [selectedSchoolYearId, defaultSchoolYearId, selectedCycleFilter, selectedOptionFilter, selectedPeriodFilter, selectedDateFilter, todayStr]);
+
+  // Options de période dynamiques (année active + semestres/trimestres)
+  const periodOptions = useMemo<SelectOption[]>(() => {
+    const yearLabel = data.selectedYear?.nom || new Date().getFullYear().toString();
+    return [
+      { value: 'FULL', label: `Année Scolaire ${yearLabel}`, icon: Calendar },
+      { value: 'S1', label: '1er Semestre', icon: Calendar },
+      { value: 'S2', label: '2ème Semestre', icon: Calendar },
+      { value: 'T1', label: '1er Trimestre', icon: Clock },
+      { value: 'T2', label: '2ème Trimestre', icon: Clock },
+      { value: 'T3', label: '3ème Trimestre', icon: Clock },
+      { value: 'T4', label: '4ème Trimestre', icon: Clock },
+    ];
+  }, [data.selectedYear]);
+
+  useEffect(() => {
+    if (!periodOptions.some((o) => o.value === selectedPeriodFilter)) {
+      setSelectedPeriodFilter(defaultPeriodKey);
+    }
+  }, [periodOptions, selectedPeriodFilter]);
 
   const periodFilterMonths: Record<string, number[]> = {
-    '2025_2026': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    FULL: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     S1: [0, 1, 2, 3, 4],
     S2: [5, 6, 7, 8, 9, 10],
     T1: [0, 1, 2],
+    T2: [3, 4, 5],
+    T3: [6, 7, 8],
+    T4: [9, 10],
   };
 
   const periodFilterQuarters: Record<string, string[]> = {
-    '2025_2026': ['T1', 'T2', 'T3', 'T4'],
+    FULL: ['T1', 'T2', 'T3', 'T4'],
     S1: ['T1', 'T2'],
     S2: ['T3', 'T4'],
     T1: ['T1'],
+    T2: ['T2'],
+    T3: ['T3'],
+    T4: ['T4'],
   };
 
   const donneesPerformance = useMemo(() => {
-    const allowed = periodFilterMonths[selectedPeriodFilter] || periodFilterMonths['2025_2026'];
+    const allowed = periodFilterMonths[selectedPeriodFilter] || periodFilterMonths['FULL'];
     return stats.monthlyPerformance.filter((_, idx) => allowed.includes(idx));
   }, [stats.monthlyPerformance, selectedPeriodFilter]);
 
   const donneesFinancieres = useMemo(() => {
-    const allowed = periodFilterQuarters[selectedPeriodFilter] || periodFilterQuarters['2025_2026'];
+    const allowed = periodFilterQuarters[selectedPeriodFilter] || periodFilterQuarters['FULL'];
     return stats.quarterlyFinance.filter((q) => allowed.some((a) => q.trimestre.startsWith(a)));
   }, [stats.quarterlyFinance, selectedPeriodFilter]);
 
@@ -1054,7 +1249,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
   const monthlyPresenceStats = useMemo(() => {
     const month = Number(selectedDateFilter.split('-')[1]) - 1;
     if (Number.isNaN(month)) return { absences: 0, retards: 0, justifiees: 0 };
-    return data.presences.reduce((acc, p) => {
+    return filteredData.presences.reduce((acc, p) => {
       const m = Number((p.dateJour || '').split('-')[1]) - 1;
       if (m === month) {
         if (p.statut === 'ABSENT') acc.absences++;
@@ -1063,7 +1258,60 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
       }
       return acc;
     }, { absences: 0, retards: 0, justifiees: 0 });
-  }, [data.presences, selectedDateFilter]);
+  }, [filteredData.presences, selectedDateFilter]);
+
+  const roleHeader = useMemo(() => {
+    const yrNom = data.selectedYear?.nom;
+    switch (userRole) {
+      case 'COMPTABLE':
+      case 'INTENDANT':
+        return {
+          badge: 'Finances & Caisse — EPST RDC',
+          title: 'Tableau de Bord Financier & Caisse',
+          desc: `Gestion des encaissements USD/CDF, bilans de caisse et facturation de la scolarité (${yrNom ? `Année ${yrNom}` : 'En cours'}).`,
+        };
+      case 'PREFET_DIRECTEUR':
+      case 'DIRECTEUR_ETUDES':
+      case 'CENSEUR':
+        return {
+          badge: 'Direction & Pédagogie — EPST RDC',
+          title: 'Tableau de Bord Pédagogique & Direction',
+          desc: `Pilotage des enseignements, assiduité des élèves, moyennes et suivi des délibérations (${yrNom ? `Année ${yrNom}` : 'En cours'}).`,
+        };
+      case 'SECRETAIRE':
+        return {
+          badge: 'Secrétariat & Admissions — EPST RDC',
+          title: 'Tableau de Bord Secrétariat & Inscriptions',
+          desc: `Suivi des admissions, délivrance d'attestations et mise à jour des dossiers des élèves.`,
+        };
+      case 'DIRECTEUR_DISCIPLINE':
+        return {
+          badge: 'Discipline & Assiduité — EPST RDC',
+          title: 'Tableau de Bord Discipline & Conduite',
+          desc: `Suivi du comportement des élèves, registre d'absences, retards et convocations des tuteurs.`,
+        };
+      case 'TITULAIRE':
+      case 'ENSEIGNANT':
+        return {
+          badge: 'Espace Pédagogique Enseignant — EPST RDC',
+          title: 'Tableau de Bord Professeur & Titulaire',
+          desc: `Gestion des cours attribués, encodage des cotes d'interrogations/examens et emplois du temps.`,
+        };
+      case 'PARENT_ELEVE':
+        return {
+          badge: 'Portail Famille & Parent — EPST RDC',
+          title: 'Espace Parent & Suivi Élève',
+          desc: `Consultation des bulletins de vos enfants, état de compte des frais scolaires et communiqués.`,
+        };
+      case 'PROMOTEUR_ADMIN':
+      default:
+        return {
+          badge: 'Pilotage Établissement — EPST RDC',
+          title: 'Tableau de Bord Exécutif & Multi-Établissements',
+          desc: `${yrNom ? `Année Scolaire ${yrNom} — ` : ''}Suivez en temps réel les effectifs, performances et finances de votre établissement.`,
+        };
+    }
+  }, [userRole, data.selectedYear]);
 
   const kpis: KpiCardProps[] = useMemo(() => {
     const fmt = (n: number) => n.toLocaleString();
@@ -1073,6 +1321,359 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
     const activeStudents = stats.activeStudents;
     const girls = stats.girlsCount;
     const boys = stats.boysCount;
+
+    if (userRole === 'COMPTABLE' || userRole === 'INTENDANT') {
+      return [
+        {
+          label: 'Encaissements Perçus',
+          sublabel: 'Minerval & frais scolaires payés',
+          value: format(paid),
+          trend: recovery > 0 ? `${recovery}% recouvré` : '0% encaissements',
+          trendUp: recovery > 50,
+          trendNeutral: recovery === 0,
+          icon: DollarSign,
+          iconColor: 'emerald',
+          delay: 0,
+          onViewDetails: () => onNavigate && onNavigate('invoices'),
+        },
+        {
+          label: 'Solde Caisse & Opérations',
+          sublabel: 'Avoirs et entrées de la caisse',
+          value: format(paid),
+          trend: `${fmt(stats.topUnpaidInvoices.length)} factures impayées`,
+          trendUp: true,
+          icon: CreditCard,
+          iconColor: 'indigo',
+          delay: 60,
+          onViewDetails: () => onNavigate && onNavigate('cash'),
+        },
+        {
+          label: 'Dépenses & Paie du Mois',
+          sublabel: 'Décaissements et salaires',
+          value: format(paid * 0.35),
+          trend: 'Caisse en équilibre',
+          trendUp: true,
+          icon: Banknote,
+          iconColor: 'violet',
+          delay: 120,
+          onViewDetails: () => onNavigate && onNavigate('payroll'),
+        },
+        {
+          label: 'Effectif Payant Total',
+          sublabel: `${fmt(activeStudents)} élèves en règle`,
+          value: `${fmt(totalStudents)}`,
+          trend: `${recovery}% à jour`,
+          trendUp: recovery >= 70,
+          trendNeutral: recovery < 70,
+          icon: Users,
+          iconColor: 'sky',
+          delay: 180,
+          onViewDetails: () => onNavigate && onNavigate('students'),
+        },
+      ];
+    }
+
+    if (userRole === 'PREFET_DIRECTEUR' || userRole === 'DIRECTEUR_ETUDES' || userRole === 'CENSEUR') {
+      return [
+        {
+          label: 'Effectif Élèves Inscrit',
+          sublabel: `${fmt(girls)} Filles / ${fmt(boys)} Garçons`,
+          value: fmt(totalStudents),
+          trend: `${fmt(activeStudents)} actifs en classe`,
+          trendUp: totalStudents > 0,
+          icon: GraduationCap,
+          iconColor: 'indigo',
+          delay: 0,
+          onViewDetails: () => onNavigate && onNavigate('students'),
+        },
+        {
+          label: 'Taux de Présence du Jour',
+          sublabel: 'Assiduité répertoriée aujourd\'hui',
+          value: `${stats.presenceRate}%`,
+          trend: stats.presenceRate >= 85 ? 'Excellente présence' : 'Absences à suivre',
+          trendUp: stats.presenceRate >= 85,
+          icon: UserCheck,
+          iconColor: 'emerald',
+          delay: 60,
+          onViewDetails: () => onNavigate && onNavigate('apprenants'),
+        },
+        {
+          label: 'Moyenne Générale École',
+          sublabel: 'Cotes & délibérations d\'examens',
+          value: `${stats.averageScore}%`,
+          trend: stats.averageScore >= 60 ? 'Moyenne positive' : 'Attention requise',
+          trendUp: stats.averageScore >= 60,
+          icon: Award,
+          iconColor: 'amber',
+          delay: 120,
+          onViewDetails: () => onNavigate && onNavigate('grades'),
+        },
+        {
+          label: 'Classes & Enseignants',
+          sublabel: `${fmt(stats.totalClasses)} promotions · ${fmt(stats.totalStaff)} profs`,
+          value: `${fmt(stats.totalClasses)}`,
+          trend: `${fmt(stats.totalSubjects)} cours dispensés`,
+          trendUp: true,
+          icon: BookOpen,
+          iconColor: 'violet',
+          delay: 180,
+          onViewDetails: () => onNavigate && onNavigate('classes'),
+        },
+      ];
+    }
+
+    if (userRole === 'SECRETAIRE') {
+      return [
+        {
+          label: 'Dossiers Inscrits Total',
+          sublabel: `${fmt(activeStudents)} fiches complètes`,
+          value: fmt(totalStudents),
+          trend: `${fmt(totalStudents)} élèves au registre`,
+          trendUp: true,
+          icon: GraduationCap,
+          iconColor: 'indigo',
+          delay: 0,
+          onViewDetails: () => onNavigate && onNavigate('students'),
+        },
+        {
+          label: 'Inscriptions à Compléter',
+          sublabel: 'Pièces administratives manquantes',
+          value: `${Math.max(0, totalStudents - activeStudents)}`,
+          trend: 'Fiches à vérifier',
+          trendUp: false,
+          icon: FileText,
+          iconColor: 'amber',
+          delay: 60,
+          onViewDetails: () => onNavigate && onNavigate('students'),
+        },
+        {
+          label: 'Classes & Capacité d\'Accueil',
+          sublabel: `${fmt(stats.totalClasses)} salles attribuées`,
+          value: `${fmt(stats.totalClasses)}`,
+          trend: 'Capacité optimale',
+          trendUp: true,
+          icon: School,
+          iconColor: 'emerald',
+          delay: 120,
+          onViewDetails: () => onNavigate && onNavigate('classes'),
+        },
+        {
+          label: 'Attestations & Reçus',
+          sublabel: 'Certificats prêts à l\'impression',
+          value: `${fmt(activeStudents)}`,
+          trend: 'Documents à jour',
+          trendUp: true,
+          icon: Check,
+          iconColor: 'violet',
+          delay: 180,
+          onViewDetails: () => onNavigate && onNavigate('documents'),
+        },
+      ];
+    }
+
+    if (userRole === 'DIRECTEUR_DISCIPLINE') {
+      const absencesJour = monthlyPresenceStats.absences || 0;
+      const retardsJour = monthlyPresenceStats.retards || 0;
+      const assiduite = stats.presenceRate || 95;
+      return [
+        {
+          label: 'Registre Conduite & Sanctions',
+          sublabel: 'Avertissements & retenues',
+          value: '0 actif',
+          trend: 'Discipline sous contrôle',
+          trendUp: true,
+          icon: Scale,
+          iconColor: 'amber',
+          delay: 0,
+          onViewDetails: () => onNavigate && onNavigate('discipline'),
+        },
+        {
+          label: 'Taux d’Assiduité École',
+          sublabel: 'Présence générale des élèves',
+          value: `${assiduite}%`,
+          trend: assiduite >= 90 ? 'Excellente assiduité' : 'Vigilance requise',
+          trendUp: assiduite >= 90,
+          icon: UserCheck,
+          iconColor: 'emerald',
+          delay: 60,
+          onViewDetails: () => onNavigate && onNavigate('apprenants'),
+        },
+        {
+          label: 'Absences Signalées Aujourd’hui',
+          sublabel: `${absencesJour} absence${absencesJour > 1 ? 's' : ''} · ${retardsJour} retard${retardsJour > 1 ? 's' : ''}`,
+          value: `${absencesJour}`,
+          trend: absencesJour === 0 ? 'Aucune absence' : `${absencesJour} dossier(s) à justifier`,
+          trendUp: absencesJour === 0,
+          trendNeutral: absencesJour > 0,
+          icon: AlertCircle,
+          iconColor: 'rose',
+          delay: 120,
+          onViewDetails: () => onNavigate && onNavigate('apprenants'),
+        },
+        {
+          label: 'Effectif Présent en Cours',
+          sublabel: `${fmt(activeStudents)} élèves encadrés`,
+          value: `${fmt(activeStudents)}`,
+          trend: `${fmt(stats.totalClasses)} salles surveillées`,
+          trendUp: true,
+          icon: GraduationCap,
+          iconColor: 'indigo',
+          delay: 180,
+          onViewDetails: () => onNavigate && onNavigate('classes'),
+        },
+      ];
+    }
+
+    if (userRole === 'PARENT_ELEVE') {
+      const recovery = stats.recoveryRate;
+      return [
+        {
+          label: 'Moyenne & Progression Élève',
+          sublabel: 'Résultats scolaires récents',
+          value: `${stats.averageScore || 0}%`,
+          trend: stats.averageScore >= 60 ? 'Bonne progression' : 'Soutien recommandé',
+          trendUp: stats.averageScore >= 60,
+          icon: Award,
+          iconColor: 'amber',
+          delay: 0,
+          onViewDetails: () => onNavigate && onNavigate('grades'),
+        },
+        {
+          label: 'Assiduité & Présence en Classe',
+          sublabel: 'Assiduité de l’enfant aux cours',
+          value: `${stats.presenceRate || 100}%`,
+          trend: 'Présence régulière',
+          trendUp: true,
+          icon: UserCheck,
+          iconColor: 'emerald',
+          delay: 60,
+          onViewDetails: () => onNavigate && onNavigate('grades'),
+        },
+        {
+          label: 'Situation Frais Scolaires',
+          sublabel: 'Minerval & frais d’études',
+          value: recovery >= 100 ? 'En Règle' : `${recovery}% payé`,
+          trend: recovery >= 100 ? 'Compte scolarité à jour' : 'Solde en cours',
+          trendUp: recovery >= 100,
+          trendNeutral: recovery < 100,
+          icon: DollarSign,
+          iconColor: 'indigo',
+          delay: 120,
+          onViewDetails: () => onNavigate && onNavigate('invoices'),
+        },
+        {
+          label: 'Calendrier & Examens à Venir',
+          sublabel: 'Échéances EPST du trimestre',
+          value: `${stats.upcomingEvents.length}`,
+          trend: 'Événements prévus',
+          trendUp: true,
+          icon: Calendar,
+          iconColor: 'violet',
+          delay: 180,
+          onViewDetails: () => onNavigate && onNavigate('grades'),
+        },
+      ];
+    }
+
+    if (userRole === 'TITULAIRE') {
+      return [
+        {
+          label: 'Élèves sous ma Titularisation',
+          sublabel: 'Effectif de ma classe assignée',
+          value: `${fmt(stats.totalStudents)}`,
+          trend: `${fmt(activeStudents)} élèves actifs`,
+          trendUp: true,
+          icon: School,
+          iconColor: 'indigo',
+          delay: 0,
+          onViewDetails: () => onNavigate && onNavigate('grades'),
+        },
+        {
+          label: 'Moyenne Générale Classe',
+          sublabel: 'Cotes de la promotion',
+          value: `${stats.averageScore}%`,
+          trend: stats.averageScore >= 60 ? 'Moyenne satisfaisante' : 'Remise à niveau',
+          trendUp: stats.averageScore >= 60,
+          icon: Award,
+          iconColor: 'amber',
+          delay: 60,
+          onViewDetails: () => onNavigate && onNavigate('grades'),
+        },
+        {
+          label: 'Taux de Présence de la Classe',
+          sublabel: 'Assiduité des élèves',
+          value: `${stats.presenceRate}%`,
+          trend: 'Présence en classe',
+          trendUp: true,
+          icon: UserCheck,
+          iconColor: 'emerald',
+          delay: 120,
+          onViewDetails: () => onNavigate && onNavigate('grades'),
+        },
+        {
+          label: 'Préparation des Bulletins',
+          sublabel: 'Délibérations & synthèses',
+          value: 'Prêt',
+          trend: 'Génération instantanée',
+          trendUp: true,
+          icon: ClipboardCheck,
+          iconColor: 'violet',
+          delay: 180,
+          onViewDetails: () => onNavigate && onNavigate('grades'),
+        },
+      ];
+    }
+
+    if (userRole === 'ENSEIGNANT') {
+      return [
+        {
+          label: 'Classes & Cours Attribués',
+          sublabel: 'Professeur de cours',
+          value: `${fmt(stats.totalClasses)}`,
+          trend: `${fmt(stats.totalSubjects)} cours dispensés`,
+          trendUp: true,
+          icon: BookOpen,
+          iconColor: 'indigo',
+          delay: 0,
+          onViewDetails: () => onNavigate && onNavigate('schedule'),
+        },
+        {
+          label: 'Moyenne des Interrogations',
+          sublabel: 'Cotes d\'évaluations récentes',
+          value: `${stats.averageScore}%`,
+          trend: stats.averageScore >= 60 ? 'Moyenne satisfaisante' : 'Remise à niveau',
+          trendUp: stats.averageScore >= 60,
+          icon: Award,
+          iconColor: 'amber',
+          delay: 60,
+          onViewDetails: () => onNavigate && onNavigate('grades'),
+        },
+        {
+          label: 'Taux de Présence des Élèves',
+          sublabel: 'Assiduité dans vos cours',
+          value: `${stats.presenceRate}%`,
+          trend: 'Présence en classe',
+          trendUp: true,
+          icon: UserCheck,
+          iconColor: 'emerald',
+          delay: 120,
+          onViewDetails: () => onNavigate && onNavigate('grades'),
+        },
+        {
+          label: 'Prochaines Évaluations',
+          sublabel: 'Interros / Examens programmés',
+          value: `${stats.upcomingEvents.length}`,
+          trend: 'Échéances à venir',
+          trendUp: true,
+          icon: Calendar,
+          iconColor: 'violet',
+          delay: 180,
+          onViewDetails: () => onNavigate && onNavigate('examens'),
+        },
+      ];
+    }
+
+    // Default: PROMOTEUR_ADMIN
     return [
       {
         label: 'Effectif Total Élèves',
@@ -1108,7 +1709,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
         icon: UserCheck,
         iconColor: 'violet',
         delay: 120,
-        onViewDetails: () => onNavigate && onNavigate('staff'),
+        onViewDetails: () => onNavigate && onNavigate('teachers'),
       },
       {
         label: 'Taux de Réussite',
@@ -1123,7 +1724,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
         onViewDetails: () => onNavigate && onNavigate('grades'),
       },
     ];
-  }, [stats, format, onNavigate]);
+  }, [stats, format, onNavigate, userRole, monthlyPresenceStats]);
 
   return (
     <div className="space-y-4 w-full px-1 py-1 pb-8">
@@ -1140,7 +1741,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25 flex items-center gap-1">
               <ShieldCheck className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
-              Pilotage Établissement — EPST RDC
+              {roleHeader.badge}
             </span>
             <span className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -1148,11 +1749,11 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
             </span>
           </div>
           <h1 className="text-xl md:text-2xl font-extrabold tracking-tight flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-            <span>Bonjour, Bienvenue sur ECOLISA PRO</span>
+            <span>{roleHeader.title}</span>
             <Sparkles className="w-5 h-5 text-amber-500 shrink-0" />
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
-            {data.selectedYear ? `Année Scolaire ${data.selectedYear.nom} — ` : ''}Suivez en temps réel les effectifs, performances et finances de votre établissement.
+            {roleHeader.desc}
           </p>
           {!data.loading && (
             <div className="flex flex-wrap items-center gap-2 mt-1.5">
@@ -1178,7 +1779,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
           )}
         </div>
 
-        {/* BOUTONS D'ACTION ÉPURÉS */}
+        {/* BOUTONS D'ACTION ÉPURÉS SEGMENTÉS PAR PERMISSIONS DU RÔLE */}
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             onClick={refreshData}
@@ -1193,163 +1794,184 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
             <span>Actualiser</span>
           </button>
 
-          <button
-            onClick={() => {
-              if (onOpenRegistration) {
-                onOpenRegistration();
-              } else if (onNavigate) {
-                onNavigate('students');
-              }
-            }}
-            className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4 text-white" />
-            <span>Inscrire Élève</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate && onNavigate('invoices')}
-            className="px-3.5 py-2 rounded-lg font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer border"
-            style={{
-              background: 'var(--bg-sunken)',
-              borderColor: 'var(--border)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            <CreditCard className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-            <span>Saisir Paiement</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate && onNavigate('grades')}
-            className="px-3.5 py-2 rounded-lg font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer border"
-            style={{
-              background: 'var(--bg-sunken)',
-              borderColor: 'var(--border)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            <ClipboardCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-            <span>Cotes & Bulletins</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate && onNavigate('documents')}
-            className="px-3.5 py-2 rounded-lg font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer border"
-            style={{
-              background: 'var(--bg-sunken)',
-              borderColor: 'var(--border)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            <Zap className="w-4 h-4 text-amber-500" />
-            <span>Document EPST</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ===== BARRE DE FILTRAGE MULTI-CRITÈRES INTELLIGENTE ===== */}
-      <div
-        className="p-3 rounded-2xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 animate-fade-in relative z-20 transition-colors"
-        style={{
-          background: 'var(--bg-surface)',
-          borderColor: 'var(--border)',
-        }}
-      >
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-indigo-500/15 border border-indigo-500/25 flex items-center justify-center shrink-0">
-            <Filter className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>Filtres Adaptatifs EPST</h3>
-              {activeFilterCount > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-600 text-white shadow-xs">
-                  {activeFilterCount} actif{activeFilterCount > 1 ? 's' : ''}
-                </span>
-              )}
-            </div>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400">Adaptation dynamique selon le cycle sélectionné</p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <CustomSelect
-            options={schoolYearOptions}
-            value={selectedSchoolYearId}
-            onChange={setSelectedSchoolYearId}
-            placeholder="Année Scolaire"
-          />
-
-          <CustomSelect
-            options={cycleOptions}
-            value={selectedCycleFilter}
-            onChange={handleCycleChange}
-            placeholder="Cycle EPST"
-          />
-
-          <CustomSelect
-            options={subSelectOptions}
-            value={selectedOptionFilter}
-            onChange={setSelectedOptionFilter}
-            placeholder={subSelectPlaceholder}
-          />
-
-          <CustomSelect
-            options={periodOptions}
-            value={selectedPeriodFilter}
-            onChange={setSelectedPeriodFilter}
-            placeholder="Période Scolaire"
-          />
-
-          <CustomDatePicker
-            value={selectedDateFilter}
-            onChange={setSelectedDateFilter}
-            alignRight={true}
-          />
-
-          {activeFilterCount > 0 && (
+          {hasTabAccess(userRole, 'students') && (
             <button
               onClick={() => {
-                setSelectedCycleFilter('ALL');
-                setSelectedOptionFilter('ALL');
-                setSelectedPeriodFilter('2025_2026');
-                setSelectedDateFilter('2025-09-01');
+                if (onOpenRegistration) {
+                  onOpenRegistration();
+                } else if (onNavigate) {
+                  onNavigate('students');
+                }
               }}
-              className="px-3 py-2 rounded-lg text-xs font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 hover:bg-rose-500/25 transition-all flex items-center gap-1 cursor-pointer"
+              className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Réinitialiser</span>
+              <UserPlus className="w-4 h-4 text-white" />
+              <span>Inscrire Élève</span>
+            </button>
+          )}
+
+          {hasTabAccess(userRole, 'invoices') && (
+            <button
+              onClick={() => onNavigate && onNavigate('invoices')}
+              className="px-3.5 py-2 rounded-lg font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer border"
+              style={{
+                background: 'var(--bg-sunken)',
+                borderColor: 'var(--border)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <CreditCard className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Saisir Paiement</span>
+            </button>
+          )}
+
+          {hasTabAccess(userRole, 'grades') && (
+            <button
+              onClick={() => onNavigate && onNavigate('grades')}
+              className="px-3.5 py-2 rounded-lg font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer border"
+              style={{
+                background: 'var(--bg-sunken)',
+                borderColor: 'var(--border)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <ClipboardCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Cotes & Bulletins</span>
+            </button>
+          )}
+
+          {hasTabAccess(userRole, 'documents') && (
+            <button
+              onClick={() => onNavigate && onNavigate('documents')}
+              className="px-3.5 py-2 rounded-lg font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer border"
+              style={{
+                background: 'var(--bg-sunken)',
+                borderColor: 'var(--border)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <Zap className="w-4 h-4 text-amber-500" />
+              <span>Document EPST</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* ===== BARRE D'ONGLETS DU DASHBOARD ===== */}
-      <div className="flex items-center gap-2 p-1.5 rounded-xl shadow-xs overflow-x-auto sidebar-scroll" style={{ background: 'var(--bg-sunken)', border: '1px solid var(--border)' }}>
-        {[
-          { id: 'executive', label: 'Synthèse Exécutive', icon: Activity },
-          { id: 'calendar', label: 'Calendrier EPST 2026–2027', icon: Calendar },
-          { id: 'pedagogy', label: 'Pédagogie & Performances', icon: GraduationCap },
-          { id: 'finances', label: 'Finances & Recouvrement', icon: DollarSign },
-          { id: 'viescolaire', label: 'Vie Scolaire & Présences', icon: Scale },
-        ].map((tab) => {
+      {/* ===== BARRE DE FILTRAGE MULTI-CRITÈRES INTELLIGENTE ===== */}
+      <div
+        className="p-3.5 rounded-2xl flex flex-col xl:flex-row xl:items-center justify-between gap-3 animate-fade-in relative z-20 transition-all border"
+        style={{
+          background: 'var(--bg-surface)',
+          borderColor: activeFilterCount > 0 ? 'rgba(99,102,241,0.40)' : 'var(--border)',
+          boxShadow: 'var(--elevation-1)',
+        }}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors shadow-xs ${activeFilterCount > 0 ? 'bg-indigo-500/15 border-indigo-500/30' : 'bg-slate-500/10 border-slate-500/20'}`}>
+            <Filter className="w-4.5 h-4.5 text-indigo-600 dark:text-indigo-400" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>Filtres Adaptatifs EPST</h3>
+              {activeFilterCount > 0 ? (
+                <span className="px-2 py-0.5 rounded-md text-[9.5px] font-black bg-indigo-600 text-white shadow-xs">
+                  {activeFilterCount} actif{activeFilterCount > 1 ? 's' : ''}
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-md text-[9.5px] font-bold bg-slate-500/10 text-slate-500 border border-slate-500/20">
+                  Par défaut
+                </span>
+              )}
+            </div>
+            <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">Adaptation dynamique selon le cycle et l'option sélectionnés</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="w-full sm:w-auto min-w-[180px]">
+            <CustomSelect
+              options={schoolYearOptions}
+              value={selectedSchoolYearId}
+              onChange={setSelectedSchoolYearId}
+              placeholder="Année Scolaire"
+            />
+          </div>
+
+          <div className="w-full sm:w-auto min-w-[170px]">
+            <CustomSelect
+              options={cycleOptions}
+              value={selectedCycleFilter}
+              onChange={handleCycleChange}
+              placeholder="Cycle EPST"
+            />
+          </div>
+
+          <div className="w-full sm:w-auto min-w-[170px]">
+            <CustomSelect
+              options={subSelectOptions}
+              value={selectedOptionFilter}
+              onChange={setSelectedOptionFilter}
+              placeholder={subSelectPlaceholder}
+              disabled={subSelectOptions.length <= 1}
+            />
+          </div>
+
+          <div className="w-full sm:w-auto min-w-[170px]">
+            <CustomSelect
+              options={periodOptions}
+              value={selectedPeriodFilter}
+              onChange={setSelectedPeriodFilter}
+              placeholder="Période Scolaire"
+            />
+          </div>
+
+          <CustomDatePicker
+            value={selectedDateFilter}
+            onChange={setSelectedDateFilter}
+            alignRight={true}
+            className="w-full sm:w-auto"
+          />
+
+          <button
+            onClick={() => {
+              setSelectedSchoolYearId(defaultSchoolYearId);
+              setSelectedCycleFilter('ALL');
+              setSelectedOptionFilter('ALL');
+              setSelectedPeriodFilter(defaultPeriodKey);
+              setSelectedDateFilter(todayStr);
+            }}
+            className="px-3 py-2 rounded-lg text-xs font-bold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/25 hover:bg-rose-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Réinitialiser tous les filtres"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Réinitialiser</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ===== BARRE D'ONGLETS DU DASHBOARD (Material 3 Segmented Control) ===== */}
+      <div
+        className="flex items-center gap-1.5 p-1.5 rounded-2xl overflow-x-auto sidebar-scroll border transition-all"
+        style={{
+          background: 'var(--bg-sunken)',
+          borderColor: 'var(--border)',
+          boxShadow: 'var(--elevation-1)',
+        }}
+      >
+        {availableSubTabs.map((tab) => {
           const TabIcon = tab.icon;
           const isActive = activeSubTab === tab.id;
           return (
             <button
               key={tab.id}
               onClick={() => setActiveSubTab(tab.id as any)}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap cursor-pointer select-none ${
                 isActive
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'hover:bg-slate-500/10'
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-600/30 border border-indigo-400/40'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10 border border-transparent'
               }`}
-              style={{
-                color: isActive ? '#ffffff' : 'var(--text-secondary)',
-              }}
             >
-              <TabIcon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
+              <TabIcon className={`w-4 h-4 transition-transform ${isActive ? 'text-white scale-110' : 'text-indigo-500 dark:text-indigo-400'}`} />
               <span>{tab.label}</span>
             </button>
           );
@@ -1746,21 +2368,10 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
         </>
       )}
 
-      {/* ===== ONGLET 2 : CALENDRIER SCOLAIRE ===== */}
+      {/* ===== ONGLET 2 : CALENDRIER SCOLAIRE INTERACTIF & OFFICIEL RDC ===== */}
       {activeSubTab === 'calendar' && (
         <div className="space-y-4 animate-fade-in">
-          <SchoolCalendar
-            events={(data.schoolEvents.length > 0 ? data.schoolEvents : mockRdcSchoolCalendar) as any}
-            defaultYear={data.selectedYear?.debut ? new Date(data.selectedYear.debut).getFullYear() : undefined}
-            onAddEvent={async (ev) => {
-              const saved = await LocalDatabaseService.addSchoolEvent(ev as any);
-              if (saved) {
-                setData(prev => ({ ...prev, schoolEvents: [...prev.schoolEvents, saved] }));
-              } else {
-                setData(prev => ({ ...prev, schoolEvents: [...prev.schoolEvents, ev as any] }));
-              }
-            }}
-          />
+          <SchoolCalendar />
         </div>
       )}
 
@@ -1771,19 +2382,23 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
 
             {/* Distribution des Élèves par Cycle EPST */}
             <div
-              className="lg:col-span-6 p-5 rounded-2xl shadow-xs flex flex-col justify-between border transition-colors"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+              className="lg:col-span-5 p-5 rounded-2xl flex flex-col justify-between border transition-all"
+              style={{
+                background: 'var(--bg-surface)',
+                borderColor: 'var(--border)',
+                boxShadow: 'var(--elevation-1)',
+              }}
             >
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <h3 className="font-bold text-base" style={{ color: 'var(--text-primary)' }}>
-                    Distribution des Élèves par Cycle EPST
+                  <h3 className="font-extrabold text-base tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                    Distribution par Cycle EPST
                   </h3>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
-                    Total: {cycleTotal.toLocaleString()}
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
+                    {cycleTotal.toLocaleString()} Élèves
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Répartition des effectifs selon le filtre actif ({selectedCycleFilter})</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Répartition des effectifs selon le cycle actif ({selectedCycleFilter})</p>
 
                 {/* Graphique Donut avec Badge Central */}
                 <div className="h-56 relative flex items-center justify-center">
@@ -1808,23 +2423,21 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
                   </ResponsiveContainer>
 
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-xl font-black" style={{ color: 'var(--text-primary)' }}>{cycleTotal.toLocaleString()}</span>
-                    <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Élève{cycleTotal > 1 ? 's' : ''}</span>
+                    <span className="text-2xl font-black" style={{ color: 'var(--text-primary)' }}>{cycleTotal.toLocaleString()}</span>
+                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Élèves Inscrits</span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2 mt-2 pt-3 border-t text-center" style={{ borderColor: 'var(--border)' }}>
                   {donneesCycle.map(dc => (
-                    <div key={dc.name} className="p-2 rounded-xl border shadow-xs" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <div key={dc.name} className="p-2.5 rounded-xl border shadow-xs" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                       <div className="flex items-center justify-center gap-1.5 mb-1">
-                        <span className="w-2.5 h-2.5 rounded-full shadow-xs" style={{ background: dc.color }} />
-                        <span className="text-[11px] font-bold" style={{ color: 'var(--text-primary)' }}>{dc.name}</span>
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: dc.color }} />
+                        <span className="text-[11px] font-black" style={{ color: 'var(--text-primary)' }}>{dc.name}</span>
                       </div>
-                      <p className="text-xs font-bold flex items-center justify-center gap-1">
+                      <p className="text-xs font-black flex items-center justify-center gap-1">
                         <span style={{ color: dc.color }}>{dc.value}</span>
-                        <span className="text-[10.5px] text-slate-500 dark:text-slate-400">
-                          ({dc.pct})
-                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">({dc.pct})</span>
                       </p>
                     </div>
                   ))}
@@ -1833,7 +2446,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
 
               <button
                 onClick={() => onNavigate && onNavigate('students')}
-                className="mt-4 pt-3 border-t w-full flex items-center justify-between text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline transition-colors cursor-pointer"
+                className="mt-4 pt-3 border-t w-full flex items-center justify-between text-xs font-black text-indigo-600 dark:text-indigo-400 hover:underline transition-colors cursor-pointer"
                 style={{ borderColor: 'var(--border)' }}
               >
                 <span>Accéder au répertoire global des élèves</span>
@@ -1841,39 +2454,88 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
               </button>
             </div>
 
-            {/* Progression des Cours & Palmarès des Classes */}
+            {/* Palmarès & Performance des Classes */}
             <div
-              className="lg:col-span-6 p-5 rounded-2xl shadow-xs flex flex-col justify-between space-y-4 border transition-colors"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+              className="lg:col-span-7 p-5 rounded-2xl flex flex-col justify-between border transition-all"
+              style={{
+                background: 'var(--bg-surface)',
+                borderColor: 'var(--border)',
+                boxShadow: 'var(--elevation-1)',
+              }}
             >
               <div>
-                <h3 className="font-bold text-base mb-2" style={{ color: 'var(--text-primary)' }}>
-                  Avancement des Programmes & Palmarès
-                </h3>
-
-                <div className="mt-4 flex flex-col items-center justify-center py-8 gap-3">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'var(--bg-sunken)' }}>
-                    <BookOpen className="w-6 h-6 text-slate-400" />
-                  </div>
-                  <p className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Aucun avancement enregistré</p>
-                  <p className="text-xs text-center max-w-[200px]" style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>Les progressions par filière apparaîtront ici dès qu'une activité pédagogique sera saisie.</p>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="font-extrabold text-base tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                    Palmarès & Effectifs par Promotion
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+                    {filteredData.classes.length} Classe(s) Ouverte(s)
+                  </span>
                 </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Synthèse des effectifs et indicateurs de performance</p>
+
+                {filteredData.classes.length > 0 ? (
+                  <div className="space-y-2.5 max-h-[300px] overflow-y-auto sidebar-scroll pr-1">
+                    {filteredData.classes.map(cls => {
+                      const classStudents = filteredData.students.filter(s => s.classId === cls.id || s.nomClasse === cls.nom);
+                      const girls = classStudents.filter(s => s.sexe === 'F').length;
+                      const boys = classStudents.length - girls;
+                      const hasStudents = classStudents.length > 0;
+                      return (
+                        <div
+                          key={cls.id}
+                          className="p-3 rounded-xl border flex items-center justify-between gap-3 transition-all hover:bg-indigo-500/5"
+                          style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-black text-xs shrink-0 border border-indigo-500/25">
+                              {cls.nom.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-black truncate" style={{ color: 'var(--text-primary)' }}>{cls.nom}</p>
+                              <p className="text-[10.5px] text-slate-400 font-medium">
+                                {cls.salle || 'Salle de classe'} · {cls.optionCode || 'Tronc Commun'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0">
+                            <div className="text-right">
+                              <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 block">{classStudents.length} élève{classStudents.length > 1 ? 's' : ''}</span>
+                              <span className="text-[10px] text-slate-400 font-medium">{girls}F / {boys}M</span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${
+                              hasStudents ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25' : 'bg-slate-500/10 text-slate-500 border-slate-500/20'
+                            }`}>
+                              {hasStudents ? 'Actif' : 'En attente'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-8 text-center space-y-2">
+                    <BookOpen className="w-8 h-8 text-slate-400 mx-auto" />
+                    <p className="text-xs font-bold text-slate-500">Aucune classe répertoriée pour ce cycle</p>
+                  </div>
+                )}
               </div>
 
-              <div className="pt-3 border-t flex items-center justify-between gap-3" style={{ borderColor: 'var(--border)' }}>
+              <div className="pt-3.5 mt-3 border-t flex items-center justify-between gap-3" style={{ borderColor: 'var(--border)' }}>
                 <button
                   onClick={() => onNavigate && onNavigate('classes')}
-                  className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1.5 cursor-pointer"
+                  className="text-xs font-black text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1.5 cursor-pointer"
                 >
                   <Eye className="w-3.5 h-3.5" />
-                  <span>Voir le palmarès des classes</span>
+                  <span>Gestion complète des classes</span>
                 </button>
                 <button
-                  onClick={() => onNavigate && onNavigate('documents')}
-                  className="px-3 py-1.5 rounded-lg bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25 text-xs font-bold flex items-center gap-1 hover:bg-indigo-500/25 transition-all cursor-pointer shadow-xs"
+                  onClick={() => onNavigate && onNavigate('grades')}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Exporter PV EPST</span>
+                  <Award className="w-3.5 h-3.5 text-white" />
+                  <span>Palmarès & Cotes</span>
                 </button>
               </div>
             </div>
@@ -1895,7 +2557,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ onNaviga
               {
                 label: 'Reste à Recouvrer (Impayés)',
                 val: format(stats.totalUnpaid),
-                sub: `${data.invoices.filter((inv) => (inv.montantTotal || 0) - (inv.montantPaye || 0) > 0).length} dossier(s) en retard`,
+                sub: `${filteredData.invoices.filter((inv) => getInvoiceRemaining(inv, filteredData.payments, displayCurrency) > 0.001).length} dossier(s) en retard`,
               },
               {
                 label: 'Solde en Caisse & Banques',

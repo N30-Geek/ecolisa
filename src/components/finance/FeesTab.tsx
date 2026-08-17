@@ -1,14 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Plus, X, Trash2, Loader2, Save, Tag, Filter, TrendingUp, AlertTriangle, TrendingDown, Wallet, PieChart } from 'lucide-react';
+import { Plus, Trash2, Loader2, Filter, TrendingUp, AlertTriangle, TrendingDown, Wallet, PieChart, LayoutGrid, TreePine, Eye } from 'lucide-react';
 import { Pagination } from '../common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
 import { CustomSelect } from '../common/CustomSelect';
-import { NumberInput } from '../common/NumberInput';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { formatCurrency, convertCurrency } from '../../utils/currency';
+import { MODE_PAIEMENT_LABELS } from '../../utils/feeTranches';
 import type { TypeFraisScolaire, AnneeScolaireConfig, CategorieFrais, FactureEleve, TransactionPaiement, ClasseScolaire } from '../../types';
+import { FeesByContextPanel } from './FeesByContextPanel';
+import { FeeTypeFormModal } from './FeeTypeFormModal';
+import { FeeTypeDetailModal } from './FeeTypeDetailModal';
+import { ReceiptModal } from './ReceiptModal';
 
 const CATEGORIES: CategorieFrais[] = [
   'FRAIS_INSCRIPTION', 'FRAIS_REINSCRIPTION', 'FRAIS_MINERVAL', 'FRAIS_CONNEXES', 'FRAIS_KITS_EQUIPEMENTS',
@@ -35,6 +38,8 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
   const { currency, exchangeRate } = useSchoolConfig();
   const fmt = (n: number, source?: string) => formatCurrency(n, currency, source || currency, exchangeRate);
 
+  const [viewMode, setViewMode] = useState<'catalogue' | 'context'>('catalogue');
+
   const [feeTypes, setFeeTypes] = useState<TypeFraisScolaire[]>([]);
   const [years, setYears] = useState<AnneeScolaireConfig[]>([]);
   const [classes, setClasses] = useState<ClasseScolaire[]>([]);
@@ -42,6 +47,8 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
   const [payments, setPayments] = useState<TransactionPaiement[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<TypeFraisScolaire | null>(null);
+  const [selectedFee, setSelectedFee] = useState<TypeFraisScolaire | null>(null);
+  const [viewPayment, setViewPayment] = useState<TransactionPaiement | null>(null);
 
   const [cycleFilter, setCycleFilter] = useState<string>('TOUS');
   const [optionFilter, setOptionFilter] = useState<string>('TOUS');
@@ -74,7 +81,8 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
     }
   }, [autoOpenFee, onActionConsumed]);
 
-  const activeYear = years.find(y => y.statut === 'EN_COURS') || years[0];
+  const activeYear = useMemo(() => years.find(y => y.id === activeSchoolYear || y.nom === activeSchoolYear) || years.find(y => y.statut === 'EN_COURS') || years[0], [years, activeSchoolYear]);
+  const activeYearId = activeYear?.id;
 
   const cycleOptions = useMemo(() => [
     { value: 'TOUS', label: 'Tous les cycles' },
@@ -99,19 +107,19 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
 
   const filteredFeeTypes = useMemo(() => {
     let list = feeTypes.filter(f => f.actif !== false);
-    if (activeSchoolYear) list = list.filter(f => f.schoolYearId === activeSchoolYear || f.anneeScolaireId === activeSchoolYear);
+    if (activeYearId) list = list.filter(f => f.schoolYearId === activeYearId || f.anneeScolaireId === activeYearId);
     if (cycleFilter !== 'TOUS') list = list.filter(f => f.cycleId === cycleFilter || f.cycleId === 'TOUS');
     if (optionFilter !== 'TOUS') list = list.filter(f => f.optionCode === optionFilter || f.optionCode === 'TOUS');
     if (deviseFilter !== 'TOUS') list = list.filter(f => f.devise === deviseFilter);
     return list;
-  }, [feeTypes, activeSchoolYear, cycleFilter, optionFilter, deviseFilter]);
+  }, [feeTypes, activeYearId, cycleFilter, optionFilter, deviseFilter]);
 
   const feeStats = useMemo(() => {
     const map = new Map<string, { attendu: number; paye: number }>();
     filteredFeeTypes.forEach(ft => map.set(ft.id, { attendu: 0, paye: 0 }));
 
     const relevantInvoices = invoices.filter(inv => {
-      if (activeSchoolYear && inv.anneeScolaireId !== activeSchoolYear) return false;
+      if (activeYearId && inv.anneeScolaireId !== activeYearId) return false;
       if (classFilter !== 'TOUS' && inv.nomClasse !== classFilter) return false;
       return true;
     });
@@ -119,12 +127,12 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
     relevantInvoices.forEach(inv => {
       inv.lignes?.forEach(l => {
         const s = map.get(l.feeTypeId);
-        if (s) s.attendu += convertCurrency(l.montant, inv.devise, currency, exchangeRate);
+        if (s) s.attendu += convertCurrency(l.montant, l.devise || inv.devise, currency, exchangeRate);
       });
     });
 
     payments.forEach(p => {
-      if (activeSchoolYear && p.anneeScolaireId !== activeSchoolYear) return;
+      if (activeYearId && p.anneeScolaireId !== activeYearId) return;
       p.allocations?.forEach(a => {
         const s = map.get(a.feeTypeId);
         if (s) s.paye += convertCurrency(a.montant, p.devise, currency, exchangeRate);
@@ -132,7 +140,7 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
     });
 
     return map;
-  }, [filteredFeeTypes, invoices, payments, activeSchoolYear, classFilter, currency, exchangeRate]);
+  }, [filteredFeeTypes, invoices, payments, activeYearId, classFilter, currency, exchangeRate]);
 
   const globalStats = useMemo(() => {
     let attendu = 0, paye = 0;
@@ -164,7 +172,7 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
       nom: '',
       categorie: 'FRAIS_MINERVAL',
       montant: 0,
-      devise: currency,
+      devise: (currency as string) || 'USD',
       obligatoire: true,
       schoolYearId: activeYear?.id,
       anneeScolaireId: activeYear?.id,
@@ -172,6 +180,9 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
       optionCode: 'TOUS',
       regime: 'TOUS',
       actif: true,
+      modePaiement: 'UNIQUE',
+      nombreTranches: 1,
+      tranches: [{ id: uuid(), nom: 'Paiement unique', montant: 0, devise: (currency as string) || 'USD', ordre: 1 }],
     });
   };
 
@@ -179,13 +190,49 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
     <div>
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Types de frais & Recouvrement</h2>
+          <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Types de frais &amp; Recouvrement</h2>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Seuls les frais créés et définis sont affichés.</p>
         </div>
-        <button onClick={startNew} className="btn-primary flex items-center gap-2" style={{ fontSize: '12px' }}>
-          <Plus className="w-3.5 h-3.5" /> Nouveau type
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Mode Toggle */}
+          <div className="flex items-center gap-1 p-1 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+            <button
+              onClick={() => setViewMode('catalogue')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${viewMode === 'catalogue' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-300 hover:bg-slate-500/10'}`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" /> Catalogue
+            </button>
+            <button
+              onClick={() => setViewMode('context')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${viewMode === 'context' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-300 hover:bg-slate-500/10'}`}
+            >
+              <TreePine className="w-3.5 h-3.5" /> Par Contexte
+            </button>
+          </div>
+          {viewMode === 'catalogue' && (
+            <button onClick={startNew} className="btn-primary flex items-center gap-2" style={{ fontSize: '12px' }}>
+              <Plus className="w-3.5 h-3.5" /> Nouveau type
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* ── Mode Par Contexte */}
+      {viewMode === 'context' ? (
+        <FeesByContextPanel activeSchoolYear={activeSchoolYear} />
+      ) : (
+        <>
+          {selectedFee ? (
+            <FeeTypeDetailModal
+              feeType={selectedFee}
+              invoices={invoices}
+              payments={payments}
+              classes={classes}
+              onClose={() => setSelectedFee(null)}
+              onViewReceipt={setViewPayment}
+            />
+          ) : (
+          <>
 
       {/* KPI globaux de recouvrement */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -251,7 +298,12 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
           const reste = Math.max(0, s.attendu - s.paye);
           const taux = s.attendu > 0 ? Math.round((s.paye / s.attendu) * 100) : 0;
           return (
-            <div key={ft.id} className="p-4 rounded-xl border" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+            <div
+              key={ft.id}
+              onClick={() => setSelectedFee(ft)}
+              className="p-4 rounded-xl border cursor-pointer hover:shadow-lg transition-all group"
+              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">{ft.categorie.replace(/_/g, ' ')}</span>
@@ -265,6 +317,10 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
                 <div className="p-2 rounded-lg bg-slate-500/5">
                   <p className="text-[10px] text-slate-500 font-bold uppercase">Montant</p>
                   <p className="font-black" style={{ color: 'var(--text-primary)' }}>{fmt(ft.montant, ft.devise)}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-slate-500/5">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase">Paiement</p>
+                  <p className="font-black" style={{ color: 'var(--text-primary)' }}>{MODE_PAIEMENT_LABELS[ft.modePaiement || 'UNIQUE']}</p>
                 </div>
                 <div className="p-2 rounded-lg bg-slate-500/5">
                   <p className="text-[10px] text-slate-500 font-bold uppercase">Attendu</p>
@@ -288,6 +344,12 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
                   <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${taux}%` }} />
                 </div>
               </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setSelectedFee(ft); }}
+                className="w-full mt-3 py-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white transition-all"
+              >
+                <Eye className="w-3.5 h-3.5" /> Voir le détail
+              </button>
             </div>
           );
         })}
@@ -302,6 +364,7 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
               <th>Categorie</th>
               <th>Montant</th>
               <th>Devise</th>
+              <th>Paiement</th>
               <th>Obligatoire</th>
               <th>Cycle</th>
               <th>Option</th>
@@ -318,6 +381,7 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
                 <td className="text-[11px]">{ft.categorie}</td>
                 <td className="font-black text-[14px]">{fmt(ft.montant, ft.devise)}</td>
                 <td className="text-[11px]">{ft.devise}</td>
+                <td className="text-[11px]">{MODE_PAIEMENT_LABELS[ft.modePaiement || 'UNIQUE']}</td>
                 <td>{ft.obligatoire ? <span className="text-emerald-600 font-bold text-[11px]">Oui</span> : <span className="text-slate-400 text-[11px]">Non</span>}</td>
                 <td className="text-[11px]">{ft.cycleId || 'TOUS'}</td>
                 <td className="text-[11px]">{ft.optionCode || 'TOUS'}</td>
@@ -334,7 +398,7 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
               </tr>
             ))}
             {feeTypes.length === 0 && !loading && (
-              <tr><td colSpan={11} className="text-center py-8 text-sm" style={{ color: 'var(--text-muted)' }}>Aucun type de frais.</td></tr>
+              <tr><td colSpan={12} className="text-center py-8 text-sm" style={{ color: 'var(--text-muted)' }}>Aucun type de frais.</td></tr>
             )}
             {loading && (
               <tr><td colSpan={11} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" style={{ color: 'var(--text-muted)' }} /></td></tr>
@@ -354,132 +418,40 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
       </div>
 
       {editing && (
-        <FeeTypeModal
+        <FeeTypeFormModal
           fee={editing}
           years={years}
+          classes={classes}
           onClose={() => setEditing(null)}
           onSave={handleSave}
         />
       )}
-    </div>
+
+      {selectedFee && (
+        <FeeTypeDetailModal
+          feeType={selectedFee}
+          invoices={invoices}
+          payments={payments}
+          classes={classes}
+          onClose={() => setSelectedFee(null)}
+          onViewReceipt={setViewPayment}
+        />
+      )}
+
+      {viewPayment && (
+        <ReceiptModal
+          isOpen={!!viewPayment}
+          onClose={() => { setViewPayment(null); load(); }}
+          payment={viewPayment}
+          invoice={invoices.find(i => i.id === viewPayment.invoiceId)}
+          feeTypes={feeTypes}
+        />
+      )}
+        </>
+      )}
+    </>
+  )}
+</div>
   );
 };
 
-const FeeTypeModal: React.FC<{
-  fee: TypeFraisScolaire;
-  years: AnneeScolaireConfig[];
-  onClose: () => void;
-  onSave: (ft: TypeFraisScolaire) => void;
-}> = ({ fee, years, onClose, onSave }) => {
-  const [form, setForm] = useState<TypeFraisScolaire>({ ...fee });
-
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, []);
-
-  const categoryOptions = CATEGORIES.map(c => ({ value: c, label: c.replace(/_/g, ' ') }));
-  const cycleOptions = CYCLES.map(c => ({ value: c, label: c }));
-  const regimeOptions = REGIMES.map(r => ({ value: r, label: r.replace(/_/g, ' ') }));
-  const yearOptions = years.map(y => ({ value: y.id, label: y.nom }));
-  const currencyOptions = [
-    { value: 'USD', label: 'USD ($)' },
-    { value: 'CDF', label: 'CDF (FC)' },
-  ];
-
-  return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in" onClick={onClose}>
-      <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl border shadow-2xl p-6 animate-scale-in" onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)', boxShadow: 'var(--shadow-2xl)' }}>
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-600">
-              <Tag className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-black" style={{ color: 'var(--text-primary)' }}>{form.id ? 'Modifier le type de frais' : 'Nouveau type de frais'}</h3>
-              <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Configurez le montant, la cible et les options.</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-500/10 text-slate-400 hover:text-rose-500 transition-all">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="space-y-5">
-          <div>
-            <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Nom du frais</label>
-            <input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder="ex: Minerval annuel" className="input w-full text-sm py-2.5" />
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Code</label>
-              <input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} className="input w-full text-sm py-2.5" placeholder="ex: MIN-001" />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Catégorie</label>
-              <CustomSelect options={categoryOptions} value={form.categorie} onChange={val => setForm({ ...form, categorie: val as any })} />
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Montant</label>
-              <NumberInput value={form.montant} onChange={v => setForm({ ...form, montant: v })} min={0} placeholder="0" className="input w-full text-sm py-2.5" />
-            </div>
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Devise</label>
-              <CustomSelect options={currencyOptions} value={form.devise || 'USD'} onChange={val => setForm({ ...form, devise: val as any })} />
-            </div>
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Année scolaire</label>
-              <CustomSelect options={yearOptions} value={form.schoolYearId || yearOptions[0]?.value || ''} onChange={val => setForm({ ...form, schoolYearId: val, anneeScolaireId: val })} />
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Cycle cible</label>
-              <CustomSelect options={cycleOptions} value={form.cycleId || 'TOUS'} onChange={val => setForm({ ...form, cycleId: val as any })} />
-            </div>
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Option cible</label>
-              <input value={form.optionCode || ''} onChange={e => setForm({ ...form, optionCode: e.target.value.toUpperCase() || 'TOUS' })} className="input w-full text-sm py-2.5" placeholder="TOUS ou section" />
-            </div>
-            <div>
-              <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Régime cible</label>
-              <CustomSelect options={regimeOptions} value={form.regime || 'TOUS'} onChange={val => setForm({ ...form, regime: val as any })} />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>Portée / classe cible</label>
-            <input value={form.portee || ''} onChange={e => setForm({ ...form, portee: e.target.value })} className="input w-full text-sm py-2.5" placeholder="TOUS ou nom de classe (ex: 6ème Primaire)" />
-          </div>
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="obligatoire"
-                checked={form.obligatoire}
-                onChange={e => setForm({ ...form, obligatoire: e.target.checked })}
-                className="w-4 h-4 rounded border accent-indigo-500 cursor-pointer"
-              />
-              <label htmlFor="obligatoire" className="text-sm font-semibold cursor-pointer">Obligatoire</label>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="actif"
-                checked={form.actif !== false}
-                onChange={e => setForm({ ...form, actif: e.target.checked })}
-                className="w-4 h-4 rounded border accent-emerald-500 cursor-pointer"
-              />
-              <label htmlFor="actif" className="text-sm font-semibold cursor-pointer">Actif</label>
-            </div>
-          </div>
-          <button onClick={() => onSave(form)} className="w-full rounded-xl py-3.5 text-sm font-black flex items-center justify-center gap-2 transition-all hover:opacity-90" style={{ background: '#6366f1', color: 'white' }}>
-            <Save className="w-4 h-4" /> Enregistrer le type de frais
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-};

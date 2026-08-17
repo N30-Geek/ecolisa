@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Printer, Download, School, CheckCircle2, Layers } from 'lucide-react';
+import { X, Printer, Download, School, CheckCircle2, Layers, MessageSquare, Mail, Share2 } from 'lucide-react';
 import { TeacherIdCardRenderer } from './TeacherIdCardRenderer';
 import { MembrePersonnel } from '../../types';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
@@ -53,14 +53,31 @@ export const TeacherIdCardModal: React.FC<TeacherIdCardModalProps> = ({
   const handleDownloadPNG = async () => {
     const element = document.getElementById('teacher-card-print-section');
     if (!element) return;
-    const html2canvasModule = await import('html2canvas').catch(() => null);
-    if (!html2canvasModule) return;
-    const html2canvas = (html2canvasModule as any).default || html2canvasModule;
+    const htmlcanvasModule = await import('html2canvas').catch(() => null);
+    if (!htmlcanvasModule) return;
+    const html2canvas = (htmlcanvasModule as any).default || htmlcanvasModule;
     const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
     const link = document.createElement('a');
     link.download = `${fileNameBase}.png`;
     link.href = canvas.toDataURL('image/png');
     link.click();
+  };
+
+  const shareText = `Bonjour ${teacher.prenom} ${teacher.nom},\n\nVoici vos accès professionnels ECOLISA pour ${config?.schoolName || "l'établissement"} :\n- E-mail : ${teacher.email || 'Non renseigné'}\n- Matricule : ${teacher.numeroMatriculeEPST || teacher.id}\n- Fonction : ${(teacher as any).fonction || (teacher as any).categorie || 'Enseignant'}\n\nVeuillez conserver ces informations en toute sécurité.`;
+
+  const handleWhatsAppShare = () => {
+    const rawPhone = (teacher.telephone || '').replace(/[^0-9]/g, '');
+    const phone = rawPhone.startsWith('243') ? rawPhone : (rawPhone ? `243${rawPhone.replace(/^0/, '')}` : '');
+    const url = phone
+      ? `https://wa.me/${phone}?text=${encodeURIComponent(shareText)}`
+      : `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleEmailShare = () => {
+    const subject = `Accès ECOLISA - ${config?.schoolName || 'Établissement Scolaire'}`;
+    const url = `mailto:${teacher.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(shareText)}`;
+    window.location.href = url;
   };
 
   return createPortal(
@@ -91,6 +108,7 @@ export const TeacherIdCardModal: React.FC<TeacherIdCardModalProps> = ({
       <div
         className="relative w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col border text-slate-900 dark:text-white"
         style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+        onClick={e => e.stopPropagation()}
       >
         {/* EN-TÊTE */}
         <div
@@ -120,7 +138,7 @@ export const TeacherIdCardModal: React.FC<TeacherIdCardModalProps> = ({
         </div>
 
         {/* TOOLBAR CONTROLES */}
-        <div className="px-6 py-3 border-b flex items-center justify-between gap-3 no-print" style={{ borderColor: 'var(--border)' }}>
+        <div className="px-6 py-3 border-b flex flex-wrap items-center justify-between gap-3 no-print" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-indigo-500" />
             <span className="text-xs font-bold text-slate-400">Affichage :</span>
@@ -143,7 +161,21 @@ export const TeacherIdCardModal: React.FC<TeacherIdCardModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleWhatsAppShare}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 text-xs font-bold hover:bg-emerald-500/20 transition-colors cursor-pointer"
+              title="Envoyer les identifiants via WhatsApp"
+            >
+              <MessageSquare className="w-3.5 h-3.5" /> WhatsApp
+            </button>
+            <button
+              onClick={handleEmailShare}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-sky-500/30 text-sky-600 dark:text-sky-400 bg-sky-500/10 text-xs font-bold hover:bg-sky-500/20 transition-colors cursor-pointer"
+              title="Envoyer par E-mail"
+            >
+              <Mail className="w-3.5 h-3.5" /> E-mail
+            </button>
             <button
               onClick={handleDownloadPNG}
               className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-indigo-500/30 text-indigo-500 text-xs font-bold hover:bg-indigo-500/10 transition-colors cursor-pointer"

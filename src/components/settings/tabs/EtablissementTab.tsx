@@ -3,6 +3,7 @@ import { Building2, Save, MapPin, Phone, Mail, Globe, Shield, UserCheck, DollarS
 import type { ConfigEtablissement } from '../../../types';
 import { PROVINCES_RDC } from '../../../data/referentielEPST';
 import { CustomSelect } from '../../common/CustomSelect';
+import { PhoneInput } from '../../common/PhoneInput';
 
 const CONFIG_KEY = 'ecolisa_etablissement';
 
@@ -337,14 +338,11 @@ export const EtablissementTab: React.FC = () => {
               <label className="block text-xs font-semibold mb-1 flex items-center gap-1" style={{ color: 'var(--text-secondary)' }}>
                 <Phone className="w-3.5 h-3.5 text-slate-400" /> Téléphone Principal (Accueil) *
               </label>
-              <input
-                type="tel"
-                required
+              <PhoneInput
                 value={config.telephone1}
-                onChange={e => handleChange('telephone1', e.target.value)}
-                placeholder="+243 810 000 000"
-                className="w-full px-3 py-2 rounded-lg text-xs border font-medium focus:outline-none focus:border-indigo-500"
-                style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                onChange={val => handleChange('telephone1', val)}
+                required
+                className="w-full"
               />
             </div>
 
@@ -352,13 +350,10 @@ export const EtablissementTab: React.FC = () => {
               <label className="block text-xs font-semibold mb-1 flex items-center gap-1" style={{ color: 'var(--text-secondary)' }}>
                 <Phone className="w-3.5 h-3.5 text-slate-400" /> Téléphone Secondaire (Comptabilité)
               </label>
-              <input
-                type="tel"
+              <PhoneInput
                 value={config.telephone2 || ''}
-                onChange={e => handleChange('telephone2', e.target.value)}
-                placeholder="+243 990 000 000"
-                className="w-full px-3 py-2 rounded-lg text-xs border font-medium focus:outline-none focus:border-indigo-500"
-                style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                onChange={val => handleChange('telephone2', val)}
+                className="w-full"
               />
             </div>
 
