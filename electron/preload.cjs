@@ -119,6 +119,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Personnel
   getStaff:    ()       => ipcRenderer.invoke('db-get-staff'),
   addStaff:    (m)      => ipcRenderer.invoke('db-add-staff', m),
+  updateStaff: (id, m)  => ipcRenderer.invoke('db-update-staff', id, m),
   deleteStaff: (id)     => ipcRenderer.invoke('db-delete-staff', id),
 
   // Fiches de paie
