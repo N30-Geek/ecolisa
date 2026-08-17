@@ -168,7 +168,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [notifFilter, setNotifFilter] = useState<'all' | 'finance' | 'system'>('all');
+  const [notifFilter, setNotifFilter] = useState<'all' | 'finance' | 'pedagogy' | 'system'>('all');
   const [yearOptions, setYearOptions] = useState<SelectOption[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [readNotifIds, setReadNotifIds] = useState<Set<string>>(new Set());
@@ -178,6 +178,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   const NOTIF_FINANCE_KEY = 'ecolisa_financial_notifications';
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const notifMenuRef = useRef<HTMLDivElement>(null);
+
+  const isFinanceAllowed = useMemo(() => {
+    return hasTabAccess(userRole, 'invoices') || hasTabAccess(userRole, 'cash') || userRole === 'PROMOTEUR_ADMIN' || userRole === 'COMPTABLE';
+  }, [userRole]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -231,7 +235,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     }, 1200);
   };
 
-  // Charger les alertes financières du centre de notifications
+  // Charger les alertes du centre de notifications selon le rôle
   useEffect(() => {
     const loadRead = () => {
       try {
@@ -244,13 +248,24 @@ export const Navbar: React.FC<NavbarProps> = ({
     };
     const loadNotifs = () => {
       try {
-        const raw = localStorage.getItem(NOTIF_FINANCE_KEY);
-        const financial = raw ? JSON.parse(raw) : [];
         const system = [
           { id: 'sys-1', type: 'system', text: 'Exetat RDC : Inscriptions ouvertes', time: 'Il y a 20 min', icon: 'FileText', iconColor: '#6366f1' },
           { id: 'sys-2', type: 'system', text: 'Sauvegarde SQLite P2P réussie (0.4ms)', time: 'Il y a 1h', icon: 'CheckCircle2', iconColor: '#3b82f6' },
         ];
-        setNotifications([...financial, ...system]);
+
+        if (isFinanceAllowed) {
+          const raw = localStorage.getItem(NOTIF_FINANCE_KEY);
+          const financial = raw ? JSON.parse(raw) : [];
+          setNotifications([...financial, ...system]);
+        } else {
+          // Notifications pédagogiques adaptées aux enseignants
+          const pedagogical = [
+            { id: 'ped-1', type: 'pedagogy', text: 'Évaluations EPST : Clôture de l\'encodage des cotes en cours', time: 'Il y a 15 min', icon: 'ClipboardCheck', iconColor: '#6366f1' },
+            { id: 'ped-2', type: 'pedagogy', text: 'Assiduité : Pointage journalier des présences actif', time: 'Ce matin', icon: 'UserCheck', iconColor: '#10b981' },
+            { id: 'ped-3', type: 'pedagogy', text: 'Calendrier : Prochaine délibération pédagogique programmée', time: 'Hier', icon: 'Calendar', iconColor: '#8b5cf6' },
+          ];
+          setNotifications([...pedagogical, ...system]);
+        }
       } catch {
         setNotifications([]);
       }
@@ -264,7 +279,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     window.addEventListener('storage', onStorage);
     const timer = setInterval(() => { loadNotifs(); loadRead(); }, 5000);
     return () => { window.removeEventListener('storage', onStorage); clearInterval(timer); };
-  }, []);
+  }, [isFinanceAllowed]);
 
   const unreadNotifs = useMemo(() => notifications.filter(n => !readNotifIds.has(n.id)), [notifications, readNotifIds]);
 
@@ -280,19 +295,27 @@ export const Navbar: React.FC<NavbarProps> = ({
     FileText,
     CheckCircle2,
     AlertTriangle,
+    ClipboardCheck,
+    UserCheck,
+    Calendar,
+    BookOpen,
+    GraduationCap,
   };
 
   const filteredNotifs = notifications.filter((n) => {
     if (notifFilter === 'finance') return n.type === 'finance';
+    if (notifFilter === 'pedagogy') return n.type === 'pedagogy';
     if (notifFilter === 'system') return n.type === 'system';
     return true;
   });
 
   const financeCount = useMemo(() => notifications.filter(n => n.type === 'finance' && !readNotifIds.has(n.id)).length, [notifications, readNotifIds]);
+  const pedagogyCount = useMemo(() => notifications.filter(n => n.type === 'pedagogy' && !readNotifIds.has(n.id)).length, [notifications, readNotifIds]);
   const systemCount = useMemo(() => notifications.filter(n => n.type === 'system' && !readNotifIds.has(n.id)).length, [notifications, readNotifIds]);
 
   const currentUser = LocalDatabaseService.getCurrentUser();
   const userName = currentUser?.nom || 'Utilisateur ECOLISA';
+
   const userInitials = userName.split(' ').map(n => n.charAt(0)).join('').substring(0, 2).toUpperCase() || 'U';
 
   const filteredNavCategories = useMemo(() => {
@@ -514,11 +537,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                   {/* Filtres de notifications */}
                   <div className="flex items-center gap-1 p-2 border-b" style={{ borderColor: 'var(--border)' }}>
-                    {([
-                      { key: 'all', label: `Toutes (${notifications.length})` },
-                      { key: 'finance', label: `Finance (${financeCount})` },
-                      { key: 'system', label: `Système (${systemCount})` },
-                    ] as const).map(t => (
+                    {(isFinanceAllowed ? [
+                      { key: 'all' as const, label: `Toutes (${notifications.length})` },
+                      { key: 'finance' as const, label: `Finance (${financeCount})` },
+                      { key: 'system' as const, label: `Système (${systemCount})` },
+                    ] : [
+                      { key: 'all' as const, label: `Toutes (${notifications.length})` },
+                      { key: 'pedagogy' as const, label: `Pédagogie (${pedagogyCount})` },
+                      { key: 'system' as const, label: `Système (${systemCount})` },
+                    ]).map(t => (
                       <button
                         key={t.key}
                         onClick={() => setNotifFilter(t.key)}
@@ -535,7 +562,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                   <div className="divide-y divide-slate-500/10 max-h-72 overflow-y-auto">
                     {filteredNotifs.map((n) => {
-                      const NotifIcon = iconMap[n.icon] || (n.type === 'finance' ? AlertTriangle : Bell);
+                      const NotifIcon = iconMap[n.icon] || (n.type === 'finance' ? AlertTriangle : n.type === 'pedagogy' ? ClipboardCheck : Bell);
                       const isUnread = !readNotifIds.has(n.id);
                       return (
                         <div
@@ -571,7 +598,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <div className="p-6 text-center">
                         <CheckCircle2 className="w-6 h-6 mx-auto mb-2 opacity-40" style={{ color: 'var(--text-muted)' }} />
                         <p className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>
-                          Aucune notification {notifFilter !== 'all' ? `dans ${notifFilter === 'finance' ? 'Finance' : 'Système'}` : ''}.
+                          Aucune notification {notifFilter !== 'all' ? `dans ${notifFilter === 'finance' ? 'Finance' : notifFilter === 'pedagogy' ? 'Pédagogie' : 'Système'}` : ''}.
                         </p>
                       </div>
                     )}

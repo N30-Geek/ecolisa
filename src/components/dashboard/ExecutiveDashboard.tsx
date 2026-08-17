@@ -1002,35 +1002,46 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   userRole = 'PROMOTEUR_ADMIN',
 }) => {
   const { displayCurrency, currencies, format } = useSchoolConfig();
-  const [activeSubTab, setActiveSubTab] = useState<'executive' | 'calendar' | 'pedagogy' | 'finances' | 'viescolaire'>('executive');
+
+  // Les enseignants et titulaires ne voient que la pédagogie, pas les finances
+  const isTeacherRole = userRole === 'ENSEIGNANT' || userRole === 'TITULAIRE';
+
+  const [activeSubTab, setActiveSubTab] = useState<'executive' | 'calendar' | 'pedagogy' | 'finances' | 'viescolaire'>(
+    isTeacherRole ? 'pedagogy' : 'executive'
+  );
   const [chartMode, setChartMode] = useState<'BOTH' | 'COTES' | 'PRESENCE'>('BOTH');
 
   const availableSubTabs = useMemo(() => {
-    const tabs: Array<{ id: 'executive' | 'calendar' | 'pedagogy' | 'finances' | 'viescolaire'; label: string; icon: React.ElementType }> = [
-      { id: 'executive', label: 'Synthèse Exécutive', icon: Activity },
-      { id: 'calendar', label: 'Calendrier EPST 2026–2027', icon: Calendar },
-    ];
+    const tabs: Array<{ id: 'executive' | 'calendar' | 'pedagogy' | 'finances' | 'viescolaire'; label: string; icon: React.ElementType }> = [];
 
-    if (hasTabAccess(userRole, 'grades') || hasTabAccess(userRole, 'classes') || userRole === 'PROMOTEUR_ADMIN') {
-      tabs.push({ id: 'pedagogy', label: 'Pédagogie & Performances', icon: GraduationCap });
+    // Les enseignants n'ont pas accès à la synthèse exécutive (données financières globales)
+    if (!isTeacherRole) {
+      tabs.push({ id: 'executive', label: 'Synthèse Exécutive', icon: Activity });
     }
 
-    if (hasTabAccess(userRole, 'invoices') || hasTabAccess(userRole, 'cash') || userRole === 'PROMOTEUR_ADMIN') {
+    tabs.push({ id: 'calendar', label: 'Calendrier EPST 2026–2027', icon: Calendar });
+
+    if (hasTabAccess(userRole, 'grades') || hasTabAccess(userRole, 'classes') || userRole === 'PROMOTEUR_ADMIN') {
+      tabs.push({ id: 'pedagogy', label: isTeacherRole ? 'Mes Cours & Classes' : 'Pédagogie & Performances', icon: GraduationCap });
+    }
+
+    // Les enseignants n'ont PAS accès aux finances
+    if (!isTeacherRole && (hasTabAccess(userRole, 'invoices') || hasTabAccess(userRole, 'cash') || userRole === 'PROMOTEUR_ADMIN')) {
       tabs.push({ id: 'finances', label: 'Finances & Recouvrement', icon: DollarSign });
     }
 
-    if (hasTabAccess(userRole, 'discipline') || userRole === 'DIRECTEUR_DISCIPLINE' || userRole === 'PREFET_DIRECTEUR' || userRole === 'PROMOTEUR_ADMIN') {
+    if (!isTeacherRole && (hasTabAccess(userRole, 'discipline') || userRole === 'DIRECTEUR_DISCIPLINE' || userRole === 'PREFET_DIRECTEUR' || userRole === 'PROMOTEUR_ADMIN')) {
       tabs.push({ id: 'viescolaire', label: 'Vie Scolaire & Présences', icon: Scale });
     }
 
     return tabs;
-  }, [userRole]);
+  }, [userRole, isTeacherRole]);
 
   useEffect(() => {
     if (!availableSubTabs.some(t => t.id === activeSubTab)) {
-      setActiveSubTab('executive');
+      setActiveSubTab(isTeacherRole ? 'pedagogy' : 'executive');
     }
-  }, [availableSubTabs, activeSubTab]);
+  }, [availableSubTabs, activeSubTab, isTeacherRole]);
 
   const [data, setData] = useState<DashboardData>({
     loading: true,
@@ -1120,7 +1131,14 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
 
   const stats = useMemo<DashboardStats>(() => computeDashboardStats(filteredData, displayCurrency, currencies), [filteredData, displayCurrency, currencies]);
 
-  const { paginated: paginatedRecentActivity, ...recentActivityPagination } = usePagination(stats.recentActivity, { defaultPageSize: 5 });
+  const filteredRecentActivity = useMemo(() => {
+    if (!isTeacherRole) return stats.recentActivity;
+    // Les enseignants ne voient pas les transactions financières (paiements de minerval, etc.)
+    return stats.recentActivity.filter(a => !a.id.startsWith('pay-'));
+  }, [stats.recentActivity, isTeacherRole]);
+
+  const { paginated: paginatedRecentActivity, ...recentActivityPagination } = usePagination(filteredRecentActivity, { defaultPageSize: 5 });
+
   const { paginated: paginatedUpcomingEvents, ...upcomingEventsPagination } = usePagination(stats.upcomingEvents, { defaultPageSize: 5 });
   const { paginated: paginatedTopUnpaid, ...topUnpaidPagination } = usePagination(stats.topUnpaidInvoices, { defaultPageSize: 5 });
 
@@ -1758,11 +1776,13 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
           {!data.loading && (
             <div className="flex flex-wrap items-center gap-2 mt-1.5">
               {[
-                { label: `${stats.totalStudents} élève${stats.totalStudents > 1 ? 's' : ''}`, color: '#6366f1' },
-                { label: `${stats.totalClasses} classe${stats.totalClasses > 1 ? 's' : ''}`, color: '#10b981' },
-                { label: `${stats.totalStaff} personnel${stats.totalStaff > 1 ? 's' : ''}`, color: '#8b5cf6' },
-                { label: `${stats.recoveryRate}% recouvrement`, color: stats.recoveryRate > 50 ? '#10b981' : '#f59e0b' },
-              ].map((item) => (
+                { label: `${stats.totalStudents} élève${stats.totalStudents > 1 ? 's' : ''}`, color: '#6366f1', hidden: false },
+                { label: `${stats.totalClasses} classe${stats.totalClasses > 1 ? 's' : ''}`, color: '#10b981', hidden: false },
+                // Personnel non affiché aux enseignants
+                { label: `${stats.totalStaff} personnel${stats.totalStaff > 1 ? 's' : ''}`, color: '#8b5cf6', hidden: isTeacherRole },
+                // Taux de recouvrement financier masqué aux enseignants
+                { label: `${stats.recoveryRate}% recouvrement`, color: stats.recoveryRate > 50 ? '#10b981' : '#f59e0b', hidden: isTeacherRole },
+              ].filter(item => !item.hidden).map((item) => (
                 <span
                   key={item.label}
                   className="px-2 py-0.5 rounded-md text-[10px] font-bold border"
@@ -2126,7 +2146,8 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
               </div>
             </div>
 
-            {/* Droite : Synthèse Financière (4/12) */}
+            {/* Droite : Synthèse Financière — masquée aux enseignants */}
+            {!isTeacherRole && (
             <div
               className="lg:col-span-4 p-4 sm:p-5 rounded-2xl shadow-xs animate-fade-in flex flex-col justify-between border transition-colors"
               style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
@@ -2191,6 +2212,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
+            )}
           </div>
 
           {/* Section Inférieure : 3 Colonnes */}
@@ -2241,17 +2263,23 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                     <div className="w-7 h-7 rounded-lg bg-indigo-500/15 border border-indigo-500/25 flex items-center justify-center">
                       <Activity className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                     </div>
-                    <h3 className="font-bold text-[13.5px]" style={{ color: 'var(--text-primary)' }}>Activité Récente</h3>
+                    <h3 className="font-bold text-[13.5px]" style={{ color: 'var(--text-primary)' }}>
+                      {isTeacherRole ? 'Activité Pédagogique' : 'Activité Récente'}
+                    </h3>
                   </div>
                   <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
                     EN DIRECT
                   </span>
                 </div>
 
-                {stats.recentActivity.length === 0 ? (
+                {filteredRecentActivity.length === 0 ? (
                   <div className="p-4 rounded-xl border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucune Activité Récente</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Aucune activité enregistrée pour cette année scolaire.</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {isTeacherRole
+                        ? 'Aucune activité pédagogique enregistrée. Commencez par encoder des cotes ou faire l\'appel.'
+                        : 'Aucune activité enregistrée pour cette année scolaire.'}
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -2273,7 +2301,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                     ))}
                   </div>
                 )}
-                {stats.recentActivity.length > 0 && (
+                {filteredRecentActivity.length > 0 && (
                   <Pagination
                     currentPage={recentActivityPagination.page}
                     totalPages={recentActivityPagination.totalPages}
@@ -2292,7 +2320,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                 className="mt-3 pt-2.5 border-t w-full flex items-center justify-between text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline transition-colors cursor-pointer"
                 style={{ borderColor: 'var(--border)' }}
               >
-                <span>Journal d'activités complet</span>
+                <span>{isTeacherRole ? 'Mes activités pédagogiques' : 'Journal d\'activités complet'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -2378,6 +2406,211 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       {/* ===== ONGLET 3 : PÉDAGOGIE & PERFORMANCES ===== */}
       {activeSubTab === 'pedagogy' && (
         <div className="space-y-4 animate-fade-in">
+
+          {/* ── PANNEAU ENSEIGNANT : Espace Pédagogique Personnalisé ── */}
+          {isTeacherRole && (
+            <div className="space-y-4">
+              {/* Bannière Enseignant */}
+              <div
+                className="p-4 sm:p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(139,92,246,0.06) 100%)',
+                  borderColor: 'rgba(99,102,241,0.2)',
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-xs shrink-0">
+                    <GraduationCap className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                      Espace Pédagogique — Professeur
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Accès rapide à vos classes, cotes, appels et emplois du temps
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25 flex items-center gap-1.5">
+                    <BookOpen className="w-3 h-3" />
+                    {stats.totalClasses} classe{stats.totalClasses > 1 ? 's' : ''} assignée{stats.totalClasses > 1 ? 's' : ''}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 flex items-center gap-1.5">
+                    <UserCheck className="w-3 h-3" />
+                    {stats.totalStudents} élève{stats.totalStudents > 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+
+              {/* Actions Rapides Enseignant — 4 cartes */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  {
+                    icon: ClipboardCheck,
+                    iconBg: '#6366f1',
+                    title: 'Encoder les Cotes',
+                    desc: 'Interrogations, examens, travaux pratiques',
+                    action: () => onNavigate && onNavigate('grades'),
+                    badge: `${stats.averageScore}% moy.`,
+                    badgeColor: stats.averageScore >= 60 ? 'emerald' : 'amber',
+                  },
+                  {
+                    icon: UserCheck,
+                    iconBg: '#10b981',
+                    title: 'Faire l\'Appel',
+                    desc: 'Présences, absences et retards du jour',
+                    action: () => onNavigate && onNavigate('apprenants'),
+                    badge: `${stats.presenceRate}% assiduité`,
+                    badgeColor: stats.presenceRate >= 85 ? 'emerald' : 'amber',
+                  },
+                  {
+                    icon: Calendar,
+                    iconBg: '#8b5cf6',
+                    title: 'Emploi du Temps',
+                    desc: 'Horaires, salles et cours programmés',
+                    action: () => onNavigate && onNavigate('schedule'),
+                    badge: `${stats.upcomingEvents.length} événement${stats.upcomingEvents.length !== 1 ? 's' : ''}`,
+                    badgeColor: 'indigo',
+                  },
+                  {
+                    icon: Award,
+                    iconBg: '#f59e0b',
+                    title: 'Mes Évaluations',
+                    desc: 'Contrôles et examens à corriger',
+                    action: () => onNavigate && onNavigate('examens'),
+                    badge: 'Planification',
+                    badgeColor: 'amber',
+                  },
+                ].map((card) => {
+                  const CardIcon = card.icon;
+                  return (
+                    <button
+                      key={card.title}
+                      onClick={card.action}
+                      className="p-4 rounded-2xl border text-left flex flex-col gap-3 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer group"
+                      style={{
+                        background: 'var(--bg-surface)',
+                        borderColor: 'var(--border)',
+                        boxShadow: 'var(--elevation-1)',
+                      }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div
+                          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                          style={{ background: `${card.iconBg}20` }}
+                        >
+                          <CardIcon className="w-5 h-5" style={{ color: card.iconBg }} />
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black bg-${card.badgeColor}-500/15 text-${card.badgeColor}-700 dark:text-${card.badgeColor}-300 border border-${card.badgeColor}-500/25`}>
+                          {card.badge}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>{card.title}</p>
+                        <p className="text-[11px] mt-0.5 text-slate-500 dark:text-slate-400">{card.desc}</p>
+                      </div>
+                      <div className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 group-hover:gap-2 transition-all">
+                        <span>Accéder</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Palmarès Classes Assignées */}
+              <div
+                className="p-5 rounded-2xl border transition-all"
+                style={{
+                  background: 'var(--bg-surface)',
+                  borderColor: 'var(--border)',
+                  boxShadow: 'var(--elevation-1)',
+                }}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-extrabold text-base tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                      Mes Classes & Effectifs
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Classes sous votre responsabilité pédagogique
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
+                    {filteredData.classes.length} Classe(s)
+                  </span>
+                </div>
+
+                {filteredData.classes.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {filteredData.classes.slice(0, 8).map(cls => {
+                      const classStudents = filteredData.students.filter(s => s.classId === cls.id || s.nomClasse === cls.nom);
+                      const girls = classStudents.filter(s => s.sexe === 'F').length;
+                      const boys = classStudents.length - girls;
+                      return (
+                        <div
+                          key={cls.id}
+                          className="p-3 rounded-xl border flex items-center justify-between gap-3 transition-all hover:bg-indigo-500/5"
+                          style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-black text-xs shrink-0 border border-indigo-500/25">
+                              {cls.nom.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-black truncate" style={{ color: 'var(--text-primary)' }}>{cls.nom}</p>
+                              <p className="text-[10.5px] text-slate-400 font-medium">
+                                {cls.salle || 'Salle'} · {cls.optionCode || 'Tronc Commun'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <div className="text-right">
+                              <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 block">{classStudents.length} élève{classStudents.length > 1 ? 's' : ''}</span>
+                              <span className="text-[10px] text-slate-400 font-medium">{girls}F / {boys}M</span>
+                            </div>
+                            <button
+                              onClick={() => onNavigate && onNavigate('grades')}
+                              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold transition-all cursor-pointer"
+                            >
+                              Cotes
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-8 text-center space-y-2">
+                    <BookOpen className="w-8 h-8 text-slate-400 mx-auto" />
+                    <p className="text-xs font-bold text-slate-500">Aucune classe assignée pour le moment</p>
+                    <p className="text-[11px] text-slate-400">Contactez votre direction pour votre affectation de classes</p>
+                  </div>
+                )}
+
+                <div className="pt-3.5 mt-3 border-t flex items-center justify-between gap-3" style={{ borderColor: 'var(--border)' }}>
+                  <button
+                    onClick={() => onNavigate && onNavigate('classes')}
+                    className="text-xs font-black text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Voir toutes mes classes</span>
+                  </button>
+                  <button
+                    onClick={() => onNavigate && onNavigate('grades')}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                  >
+                    <ClipboardCheck className="w-3.5 h-3.5 text-white" />
+                    <span>Encoder des Cotes</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── VUE ADMIN/DIRECTION : Distribution par Cycle + Palmarès ── */}
+          {!isTeacherRole && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
 
             {/* Distribution des Élèves par Cycle EPST */}
@@ -2541,6 +2774,8 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             </div>
 
           </div>
+          )}
+
         </div>
       )}
 
