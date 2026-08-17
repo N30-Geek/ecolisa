@@ -159,19 +159,30 @@ export interface Eleve {
   dateInscription?: string;
 }
 
+export type GroupeActiviteMaternelle = 'GROUPE_I' | 'GROUPE_II' | 'GROUPE_III' | 'GROUPE_IV';
+export type AppreciationQualiteMaternelle = 'TB' | 'B' | 'M' | 'MAV'; // Très Bien, Bien, Moyen, Médiocre/À Veiller
+export type AppreciationCouleurMaternelle = 'VERT' | 'BLEU' | 'JAUNE' | 'ROUGE';
+
 export interface Discipline {
   id: string;
   nom: string;
   code: string;
   coefficient: number;
-  maxScore: number; // Max Période
+  maxScore: number; // Max Période (ou Max Trimestre pour la maternelle)
   maxExamen?: number; // Max Examen = Max Période * 2
   maxSemestre?: number; // Max Semestre = Max Période * 4
-  maxAnnuel?: number; // Max Annuel = Max Période * 8
-  isOptionMajora?: boolean;
-  categorie: 'SCIENCES' | 'LANGUES' | 'CULTURE_GENERALE' | 'PRATIQUE' | 'OPTION' | string;
-  cycleCode?: string;
-  optionCode?: string;
+  maxAnnuel?: number; // Max Annuel = Max Période * 8 (ou Max Trimestre * 3 pour Maternelle)
+  volumeHoraire?: number; // Volume horaire hebdomadaire en heures (ex: 2h, 4h, 8h)
+  isOptionMajora?: boolean; // Branche majeure de l'option (seuil minimum 50% obligatoire)
+  categorie: 'SCIENCES' | 'SCIENCES_EXACTES' | 'LANGUES' | 'SCIENCES_HUMAINES' | 'CULTURE_GENERALE' | 'TECHNIQUE_PROF' | 'EVEIL_ART' | 'PRATIQUE' | 'OPTION' | string;
+  cycleCode?: 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES' | string;
+  optionCode?: string; // ex: 'COMMERCIALE', 'SECRETARIAT', 'SCIENTIFIQUE', 'LATIN_PHILO', 'PEDAGOGIE', 'INFORMATIQUE', 'ELECTRICITE', 'COUPE_COUTURE', 'AGRICULTURE', 'TRONC_COMMUN'
+  groupeMaternelle?: GroupeActiviteMaternelle; // Groupe officiel pour les activités de maternelle (Groupe I à IV)
+  enseignantId?: string; // Professeur titulaire assigné au cours
+  enseignantNom?: string; // Nom d'affichage de l'enseignant
+  classeIds?: string[]; // Classes ciblées par ce cours
+  niveau?: string; // Ex: '7EME', '8EME', '1ERE_HUM', '2EME_HUM', '3EME_HUM', '4EME_HUM'
+  ordre?: number;
 }
 
 export type TypeEvaluation =

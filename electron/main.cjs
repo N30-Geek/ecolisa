@@ -558,6 +558,16 @@ const initDatabase = () => {
       { table: 'fee_types',    column: 'mode_paiement',       def: "TEXT DEFAULT 'UNIQUE'" },
       { table: 'fee_types',    column: 'nombre_tranches',     def: 'INTEGER DEFAULT 1' },
       { table: 'ecritures',    column: 'devise',              def: "TEXT DEFAULT 'USD'" },
+      { table: 'subjects',    column: 'max_examen',          def: 'INTEGER DEFAULT 40' },
+      { table: 'subjects',    column: 'max_semestre',        def: 'INTEGER DEFAULT 80' },
+      { table: 'subjects',    column: 'max_annuel',          def: 'INTEGER DEFAULT 160' },
+      { table: 'subjects',    column: 'cycle_code',          def: 'TEXT' },
+      { table: 'subjects',    column: 'option_code',         def: 'TEXT' },
+      { table: 'subjects',    column: 'volume_horaire',      def: 'INTEGER DEFAULT 2' },
+      { table: 'subjects',    column: 'groupe_maternelle',   def: 'TEXT' },
+      { table: 'subjects',    column: 'enseignant_id',       def: 'TEXT' },
+      { table: 'subjects',    column: 'enseignant_nom',      def: 'TEXT' },
+      { table: 'subjects',    column: 'data_json',           def: "TEXT DEFAULT '{}'" },
     ];
     for (const { table, column, def } of columnMigrations) {
       try {
@@ -720,6 +730,31 @@ function mapFichePaie(r) { const b={id:r.id,staffId:r.staff_id,staffName:r.staff
 function mapCote(r) { const b={id:r.id,eleveId:r.eleve_id,matiereId:r.matiere_id,classeId:r.classe_id,periode:r.periode,type:r.type,score:r.score,maxScore:r.max_score,dateCote:r.date_cote}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
 function mapPresence(r) { const b={id:r.id,eleveId:r.eleve_id,classeId:r.classe_id,dateJour:r.date_jour,statut:r.statut,motif:r.motif}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
 function mapSchoolEvent(r) { const b={id:r.id,titre:r.titre,subtitre:r.subtitre,dateDebut:r.date_debut,dateFin:r.date_fin,categorie:r.categorie,publicCible:r.public_cible,highlight:!!r.highlight}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
+function mapSubject(r) {
+  if (!r) return null;
+  const b = {
+    id: r.id,
+    code: r.code,
+    nom: r.nom,
+    coefficient: r.coefficient || 1,
+    maxScore: r.max_score || 20,
+    maxExamen: r.max_examen || ((r.max_score || 20) * 2),
+    maxSemestre: r.max_semestre || ((r.max_score || 20) * 4),
+    maxAnnuel: r.max_annuel || ((r.max_score || 20) * 8),
+    categorie: r.categorie || 'GENERAL',
+    cycleCode: r.cycle_code,
+    optionCode: r.option_code,
+    volumeHoraire: r.volume_horaire || 2,
+    groupeMaternelle: r.groupe_maternelle,
+    enseignantId: r.enseignant_id,
+    enseignantNom: r.enseignant_nom
+  };
+  try {
+    return { ...b, ...JSON.parse(r.data_json || '{}') };
+  } catch {
+    return b;
+  }
+}
 
 function mapFeeType(r) { const b={id:r.id,code:r.code,nom:r.nom,categorie:r.categorie,montant:r.montant,devise:r.devise||'USD',obligatoire:!!r.obligatoire,portee:r.portee,schoolYearId:r.school_year_id,modePaiement:r.mode_paiement||'UNIQUE',nombreTranches:r.nombre_tranches||1}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
 function mapCashOp(r) { const b={id:r.id,date:r.date_operation,libelle:r.libelle,description:r.description,montant:r.montant,devise:r.devise||'USD',type:r.type,categorie:r.categorie,modePaiement:r.mode_paiement,reference:r.reference,caissier:r.caissier,pieceJustificative:r.piece_justificative,schoolYearId:r.school_year_id,origine:r.origine,origineId:r.origine_id}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
@@ -1342,9 +1377,67 @@ function registerIpcHandlers() {
   ipcMain.handle('db-delete-salle', (_, id) => { if (!db) return false; db.prepare('DELETE FROM salles WHERE id=?').run(id); return true; });
 
   // Subjects
-  ipcMain.handle('db-get-subjects', () => { if (!db) return []; return db.prepare('SELECT * FROM subjects ORDER BY nom').all(); });
-  ipcMain.handle('db-add-subject', (_, s) => { if (!db) return null; db.prepare('INSERT OR REPLACE INTO subjects (id,code,nom,coefficient,max_score,categorie) VALUES (?,?,?,?,?,?)').run(s.id,s.code,s.nom,s.coefficient||1,s.maxScore||100,s.categorie||'GENERAL'); return db.prepare('SELECT * FROM subjects WHERE id=?').get(s.id); });
-  ipcMain.handle('db-delete-subject', (_, id) => { if (!db) return false; db.prepare('DELETE FROM subjects WHERE id=?').run(id); return true; });
+  ipcMain.handle('db-get-subjects', () => {
+    if (!db) return [];
+    return db.prepare('SELECT * FROM subjects ORDER BY nom').all().map(mapSubject);
+  });
+  ipcMain.handle('db-add-subject', (_, s) => {
+    if (!db) return null;
+    const dataJson = JSON.stringify(s);
+    db.prepare('INSERT OR REPLACE INTO subjects (id,code,nom,coefficient,max_score,categorie,max_examen,max_semestre,max_annuel,cycle_code,option_code,volume_horaire,groupe_maternelle,enseignant_id,enseignant_nom,data_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(
+        s.id,
+        s.code,
+        s.nom,
+        s.coefficient || 1,
+        s.maxScore || 20,
+        s.categorie || 'GENERAL',
+        s.maxExamen || ((s.maxScore || 20) * 2),
+        s.maxSemestre || ((s.maxScore || 20) * 4),
+        s.maxAnnuel || ((s.maxScore || 20) * 8),
+        s.cycleCode || null,
+        s.optionCode || null,
+        s.volumeHoraire || 2,
+        s.groupeMaternelle || null,
+        s.enseignantId || null,
+        s.enseignantNom || null,
+        dataJson
+      );
+    return mapSubject(db.prepare('SELECT * FROM subjects WHERE id=?').get(s.id));
+  });
+  ipcMain.handle('db-update-subject', (_, id, upd) => {
+    if (!db) return null;
+    const r = db.prepare('SELECT * FROM subjects WHERE id=?').get(id);
+    if (!r) return null;
+    const existingObj = mapSubject(r) || {};
+    const merged = { ...existingObj, ...upd, id };
+    const dataJson = JSON.stringify(merged);
+    db.prepare('INSERT OR REPLACE INTO subjects (id,code,nom,coefficient,max_score,categorie,max_examen,max_semestre,max_annuel,cycle_code,option_code,volume_horaire,groupe_maternelle,enseignant_id,enseignant_nom,data_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(
+        merged.id,
+        merged.code,
+        merged.nom,
+        merged.coefficient || 1,
+        merged.maxScore || 20,
+        merged.categorie || 'GENERAL',
+        merged.maxExamen || ((merged.maxScore || 20) * 2),
+        merged.maxSemestre || ((merged.maxScore || 20) * 4),
+        merged.maxAnnuel || ((merged.maxScore || 20) * 8),
+        merged.cycleCode || null,
+        merged.optionCode || null,
+        merged.volumeHoraire || 2,
+        merged.groupeMaternelle || null,
+        merged.enseignantId || null,
+        merged.enseignantNom || null,
+        dataJson
+      );
+    return mapSubject(db.prepare('SELECT * FROM subjects WHERE id=?').get(id));
+  });
+  ipcMain.handle('db-delete-subject', (_, id) => {
+    if (!db) return false;
+    db.prepare('DELETE FROM subjects WHERE id=?').run(id);
+    return true;
+  });
 
   // Eleves
   ipcMain.handle('db-get-eleves', (_, filters) => {

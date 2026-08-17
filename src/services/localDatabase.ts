@@ -40,6 +40,7 @@ import {
 import { isFeeTypeApplicable } from '../utils/feeFilters';
 import { getInvoicePaid, getInvoiceStatus } from '../utils/financeCalculations';
 import { normalizeRole } from '../utils/permissions';
+import { OFFICIAL_EPST_COURSES } from '../data/referentielEpstData';
 
 export type DepenseCaisse = OperationCaisse;
 
@@ -726,7 +727,40 @@ export class LocalDatabaseService {
 
   // ── MATIERES (SQLITE EXCLUSIF) ────────────────────────────────────────────
   public static async getSubjects(): Promise<Discipline[]> {
-    return safeElectronCall<Discipline[]>(() => api()?.getSubjects(), 'subjects');
+    const list = await safeElectronCall<Discipline[]>(() => api()?.getSubjects(), 'subjects');
+    if (!list || list.length === 0) {
+      return this.seedOfficialEPSTSubjects();
+    }
+    return list;
+  }
+
+  public static async seedOfficialEPSTSubjects(): Promise<Discipline[]> {
+    const existing = await safeElectronCall<Discipline[]>(() => api()?.getSubjects(), 'subjects') || [];
+    const existingCodes = new Set(existing.map((s) => s.code));
+
+    for (const item of OFFICIAL_EPST_COURSES) {
+      if (!existingCodes.has(item.code)) {
+        const sub: Discipline = {
+          id: `epst-${item.code.toLowerCase()}`,
+          code: item.code,
+          nom: item.nom,
+          categorie: item.categorie,
+          maxScore: item.maxScore,
+          maxExamen: item.maxExamen,
+          maxSemestre: item.maxSemestre,
+          maxAnnuel: item.maxAnnuel,
+          coefficient: item.coefficient,
+          volumeHoraire: item.volumeHoraire,
+          cycleCode: item.cycleCode,
+          optionCode: item.optionCode || 'TRONC_COMMUN',
+          groupeMaternelle: item.groupeMaternelle,
+          isOptionMajora: item.isOptionMajora,
+          ordre: item.ordre,
+        };
+        await this.addSubject(sub);
+      }
+    }
+    return safeElectronCall<Discipline[]>(() => api()?.getSubjects(), 'subjects') || [];
   }
 
   public static async addSubject(s: Discipline): Promise<Discipline | null> {
