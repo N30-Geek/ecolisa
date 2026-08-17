@@ -15,6 +15,7 @@ import { AuditLogViewer } from './components/administration/AuditLogViewer';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { AccountSwitcherModal } from './components/auth/AccountSwitcherModal';
 import { ToastContainer } from './components/common/ToastNotification';
+import { SplashScreen } from './components/common/SplashScreen';
 import { RôleSystème } from './types';
 import { OfflineStorageService } from './services/offlineStorage';
 import { LocalDatabaseService, UserSession } from './services/localDatabase';
@@ -80,6 +81,7 @@ export function App() {
   const [showOnboardingModal, setShowOnboardingModal] = useState<boolean>(false);
   const [isAccountSwitcherOpen, setIsAccountSwitcherOpen] = useState<boolean>(false);
   const [appLoading, setAppLoading] = useState<boolean>(true);
+  const [splashConfig, setSplashConfig] = useState<SchoolConfig | null>(null);
 
   // Le theme reste dans localStorage (preference UI seulement)
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -107,16 +109,17 @@ export function App() {
 
       // Restaurer l'année scolaire active depuis la config établissement
       const savedConfig = await LocalDatabaseService.getConfig('school_config');
-      if (savedConfig?.activeSchoolYear) {
-        setActiveSchoolYear(savedConfig.activeSchoolYear);
+      if (savedConfig) {
+        setSplashConfig(savedConfig);
+        if (savedConfig.activeSchoolYear) {
+          setActiveSchoolYear(savedConfig.activeSchoolYear);
+        }
       }
 
       // ⚠️ RE-AUTHENTIFICATION OBLIGATOIRE à chaque lancement.
       // La session précédente est effacée : l'utilisateur doit toujours
       // saisir son code PIN ou mot de passe au démarrage et après verrouillage.
       await LocalDatabaseService.logout();
-
-      setAppLoading(false);
     };
     initApp();
   }, []);
@@ -225,14 +228,16 @@ export function App() {
     }
   };
 
-  // Ecran de chargement pendant l'init SQLite
+  // Écran de chargement ultra-moderne au lancement de l'application
   if (appLoading) {
     return (
-      <div className={`h-screen w-screen flex items-center justify-center ${theme} bg-slate-50 dark:bg-slate-950`}>
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-600 animate-pulse" />
-          <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Chargement de la base de donnees...</p>
-        </div>
+      <div className={`h-screen w-screen overflow-hidden flex flex-col antialiased font-sans select-none ${theme}`}>
+        <TitleBar isOnline={isOnline} />
+        <SplashScreen
+          isDarkMode={theme === 'dark'}
+          schoolConfig={splashConfig}
+          onLoaded={() => setAppLoading(false)}
+        />
       </div>
     );
   }
