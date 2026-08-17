@@ -105,25 +105,58 @@ const memoryDb: Record<string, any[]> = {
   invoiceSendingHistory: [],
 };
 
-const memGet = <T>(key: string): T[] => memoryDb[key] as T[] || [];
+const loadFallbackStorage = (key: string): any[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem('ecolisa_db_' + key);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveFallbackStorage = (key: string, data: any[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem('ecolisa_db_' + key, JSON.stringify(data));
+  } catch {}
+};
+
+const memGet = <T>(key: string): T[] => {
+  if (!memoryDb[key] || memoryDb[key].length === 0) {
+    memoryDb[key] = loadFallbackStorage(key);
+  }
+  return (memoryDb[key] as T[]) || [];
+};
+
 const memAdd = <T extends { id: string }>(key: string, item: T): T => {
-  if (!memoryDb[key]) memoryDb[key] = [];
+  if (!memoryDb[key] || memoryDb[key].length === 0) {
+    memoryDb[key] = loadFallbackStorage(key);
+  }
   const idx = memoryDb[key].findIndex((i) => i.id === item.id);
   if (idx === -1) memoryDb[key].push(item);
   else memoryDb[key][idx] = item;
+  saveFallbackStorage(key, memoryDb[key]);
   return item;
 };
+
 const memUpdate = <T extends { id: string }>(key: string, id: string, updates: Partial<T>): T | null => {
-  if (!memoryDb[key]) return null;
+  if (!memoryDb[key] || memoryDb[key].length === 0) {
+    memoryDb[key] = loadFallbackStorage(key);
+  }
   const idx = memoryDb[key].findIndex((i) => i.id === id);
   if (idx === -1) return null;
   memoryDb[key][idx] = { ...memoryDb[key][idx], ...updates };
+  saveFallbackStorage(key, memoryDb[key]);
   return memoryDb[key][idx];
 };
+
 const memDelete = (key: string, id: string): void => {
-  if (memoryDb[key]) {
-    memoryDb[key] = memoryDb[key].filter((i) => i.id !== id);
+  if (!memoryDb[key] || memoryDb[key].length === 0) {
+    memoryDb[key] = loadFallbackStorage(key);
   }
+  memoryDb[key] = memoryDb[key].filter((i) => i.id !== id);
+  saveFallbackStorage(key, memoryDb[key]);
 };
 
 const memFilter = <T>(items: T[], filters?: Record<string, any>): T[] => {
@@ -141,12 +174,25 @@ const safeElectronCall = async <T>(call: (() => any) | undefined, fallbackKey?: 
   if (isElectron() && call) {
     try {
       const res = await call();
-      if (res !== undefined && res !== null) return res as T;
+      if (res !== undefined && res !== null) {
+        if (fallbackKey && Array.isArray(res)) {
+          memoryDb[fallbackKey] = res;
+          saveFallbackStorage(fallbackKey, res);
+        }
+        return res as T;
+      }
     } catch (e) {
       console.warn('[DB SQLite] Échec IPC Electron :', e);
     }
   }
-  return (fallbackKey ? (memoryDb[fallbackKey] || []) : null) as unknown as T;
+
+  if (fallbackKey) {
+    if (!memoryDb[fallbackKey] || memoryDb[fallbackKey].length === 0) {
+      memoryDb[fallbackKey] = loadFallbackStorage(fallbackKey);
+    }
+    return (memoryDb[fallbackKey] || []) as unknown as T;
+  }
+  return null as unknown as T;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

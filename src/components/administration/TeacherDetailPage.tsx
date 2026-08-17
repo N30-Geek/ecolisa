@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Pencil, FileText, QrCode, User, BookOpen, Clock, DollarSign,
   Folder, Phone, Mail, MapPin, Calendar, Hash, Award, Check, RotateCw, Eye, EyeOff, ShieldCheck, Download, School, Printer, Lock, Key, ZoomIn, ZoomOut, X,
-  UserPlus, MessageSquare, KeyRound, AlertCircle, ShieldAlert, Briefcase, Users, UserCheck, GraduationCap, Baby, Layers
+  UserPlus, MessageSquare, KeyRound, AlertCircle, ShieldAlert, Briefcase, Users, UserCheck, GraduationCap, Baby, Layers, Zap, CheckCircle2, TrendingUp
 } from 'lucide-react';
-import { MembrePersonnel, DocumentScolaire, UserAccount } from '../../types';
+import { MembrePersonnel, DocumentScolaire, UserAccount, FichePaie } from '../../types';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { formatCurrency } from '../../utils/currency';
@@ -77,7 +77,9 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
   const [docsModalOpen, setDocsModalOpen] = useState(false);
   const [fullFileModalOpen, setFullFileModalOpen] = useState(false);
   const [affectationModalOpen, setAffectationModalOpen] = useState(false);
+  // États Documents & Fiches de Paie
   const [staffDocs, setStaffDocs] = useState<DocumentScolaire[]>([]);
+  const [staffFiches, setStaffFiches] = useState<FichePaie[]>([]);
   
   // États Compte Utilisateur Lié
   const [userAccount, setUserAccount] = useState<UserAccount | null>(null);
@@ -96,24 +98,36 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
   const [adminAuthSubmitting, setAdminAuthSubmitting] = useState(false);
   const [showTypedAdminPassword, setShowTypedAdminPassword] = useState(false);
 
-  const loadUserAccount = async () => {
+  // Synchronisation avec les props
+  useEffect(() => {
+    setTeacher(initialTeacher);
+  }, [initialTeacher]);
+
+  const loadData = async () => {
     setUserAccountLoading(true);
-    const [acc, users, staff] = await Promise.all([
-      LocalDatabaseService.getUserByStaff(teacher),
-      LocalDatabaseService.getUsers(),
-      LocalDatabaseService.getStaff().catch(() => []),
-    ]);
-    setUserAccount(acc);
-    setAllUsers(users);
-    setAllStaff(staff);
-    setUserAccountLoading(false);
+    try {
+      const [acc, users, staff, docs, fiches] = await Promise.all([
+        LocalDatabaseService.getUserByStaff(teacher),
+        LocalDatabaseService.getUsers(),
+        LocalDatabaseService.getStaff().catch(() => []),
+        LocalDatabaseService.getStaffDocuments(teacher.id).catch(() => []),
+        LocalDatabaseService.getFichesPaie({ staffId: teacher.id }).catch(() => []),
+      ]);
+      setUserAccount(acc);
+      setAllUsers(users);
+      setAllStaff(staff);
+      setStaffDocs(docs || []);
+      setStaffFiches(fiches || []);
+      
+      const fresh = staff.find(s => s.id === teacher.id);
+      if (fresh) setTeacher(fresh);
+    } finally {
+      setUserAccountLoading(false);
+    }
   };
 
   useEffect(() => {
-    LocalDatabaseService.getStaffDocuments(teacher.id)
-      .then(docs => setStaffDocs(docs || []))
-      .catch(() => setStaffDocs([]));
-    loadUserAccount();
+    loadData();
   }, [teacher.id, docsModalOpen, activeTab]);
 
   const handleVerifyAdminPassword = async (e: React.FormEvent) => {
@@ -771,90 +785,193 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
           {/* TAB 3 : TAUX HORAIRE & FICHE DE PAIE */}
           {activeTab === 'payroll' && (
             <div className="space-y-5 animate-fade-in">
-              <div className="rounded-2xl border p-6 space-y-4" style={cardStyle}>
-                <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                    <Clock className="w-4 h-4" /> Formule de Paie & Grille au Taux Horaire
-                  </h3>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                    {isTauxHoraire ? 'Rémunération par Heures Prestées' : 'Salaire Fixe Mensuel'}
+              {/* Synthèse Rémunération & Montant Net à Payer */}
+              <div className="rounded-2xl border p-6 space-y-4 shadow-xs" style={cardStyle}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3" style={{ borderColor: 'var(--border)' }}>
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-emerald-500" /> Rémunération & Conditions Salariales
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                      {isTauxHoraire
+                        ? 'Contrat prestataire calculé selon les heures de cours effectivement prestées'
+                        : 'Contrat permanent à rémunération mensuelle fixe garantie'}
+                    </p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-black border self-start sm:self-auto ${
+                    isTauxHoraire
+                      ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                      : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                  }`}>
+                    {isTauxHoraire ? '⏱️ Taux Horaire Presté' : '💼 Salaire Fixe Mensuel CDI'}
                   </span>
                 </div>
 
-                {/* Synthèse Tarifaire */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="p-4 rounded-xl border bg-indigo-500/5 border-indigo-500/20">
-                    <p className="text-[10px] font-black uppercase text-indigo-500">TAUX DE BASE / HEURE</p>
-                    <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">{formatCurrency(tauxBase, currency, teacher.devise)}</p>
-                    <p className="text-[10px] font-semibold text-slate-400 mt-0.5">Par heure d'enseignement prestée</p>
+                {/* Synthèse Tarifaire - 3 Grands Blocs */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                  {/* Bloc 1 : Taux / Base */}
+                  <div className="p-4 rounded-xl border bg-indigo-500/5 border-indigo-500/20 space-y-1">
+                    <p className="text-[10px] font-black uppercase text-indigo-500">
+                      {isTauxHoraire ? 'TAUX HORAIRE DE BASE' : 'SALAIRE DE BASE CONTRACTUEL'}
+                    </p>
+                    <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+                      {isTauxHoraire
+                        ? `${formatCurrency(tauxBase, currency, teacher.devise)} / h`
+                        : formatCurrency(teacher.salaireBase || 0, currency, teacher.devise)}
+                    </p>
+                    <p className="text-[10.5px] font-medium text-slate-400">
+                      {isTauxHoraire ? 'Tarif par heure de cours' : 'Montant mensuel brut garanti'}
+                    </p>
                   </div>
-                  <div className="p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/20">
-                    <p className="text-[10px] font-black uppercase text-emerald-500">HEURES PRESTÉES</p>
-                    <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{heuresMois} Heures</p>
-                    <p className="text-[10px] font-semibold text-slate-400 mt-0.5">Mois en cours (Cumul)</p>
+
+                  {/* Bloc 2 : Volume / Périodicité */}
+                  <div className="p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/20 space-y-1">
+                    <p className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400">
+                      {isTauxHoraire ? 'HEURES PRESTÉES DU MOIS' : 'PÉRIODICITÉ DE PAIEMENT'}
+                    </p>
+                    <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                      {isTauxHoraire ? `${heuresMois} Heures` : 'Mensuel (30 jours)'}
+                    </p>
+                    <p className="text-[10.5px] font-medium text-slate-400">
+                      {isTauxHoraire ? `Quota : ${volumeHebdo}h / semaine` : 'Règlement en fin de mois'}
+                    </p>
                   </div>
-                  <div className="p-4 rounded-xl border bg-amber-500/5 border-amber-500/20">
-                    <p className="text-[10px] font-black uppercase text-amber-500">TOTAL ESTIMÉ PAIE</p>
-                    <p className="text-2xl font-black text-amber-500 mt-1">{formatCurrency(salaireEstime, currency, teacher.devise)}</p>
-                    <p className="text-[10px] font-semibold text-slate-400 mt-0.5">Calculé automatiquement</p>
+
+                  {/* Bloc 3 : TOTAL NET À PAYER (Mis en valeur) */}
+                  <div className="p-4 rounded-xl border bg-emerald-500/10 border-emerald-500/30 space-y-1 shadow-xs">
+                    <p className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-emerald-500" /> MONTANT NET À PAYER
+                    </p>
+                    <p className="text-2xl font-black text-emerald-700 dark:text-emerald-300 font-mono">
+                      {formatCurrency(salaireEstime, currency, teacher.devise)}
+                    </p>
+                    <p className="text-[10.5px] font-bold text-emerald-600/80 dark:text-emerald-400/80">
+                      Rémunération totale due à l'agent
+                    </p>
                   </div>
                 </div>
 
-                {/* Grille par Niveau de Classe */}
-                <div className="space-y-3 pt-2">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                    <Award className="w-4 h-4 text-indigo-500" /> Variation du Taux Horaire selon le Niveau de Classe (7è CTEB ➔ 4è Humanités)
-                  </h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {Object.entries(defaultTauxParNiveau).map(([niveau, tx]) => (
-                      <div key={niveau} className="p-3 rounded-xl border flex items-center justify-between" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                        <div>
-                          <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{niveau}</p>
-                          <p className="text-[10.5px] font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">{formatCurrency(tx, currency, teacher.devise)} / h</p>
+                {/* Grille par niveau si taux horaire au secondaire */}
+                {isTauxHoraire && (
+                  <div className="space-y-3 pt-2">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                      <Award className="w-4 h-4 text-indigo-500" /> Grille de Taux selon le Niveau d'Enseignement
+                    </h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {Object.entries(defaultTauxParNiveau).map(([niveau, tx]) => (
+                        <div key={niveau} className="p-3 rounded-xl border flex items-center justify-between" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                          <div>
+                            <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{niveau}</p>
+                            <p className="text-[10.5px] font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">{formatCurrency(tx, currency, teacher.devise)} / h</p>
+                          </div>
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
                         </div>
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Coordonnées de Versement Bancaire & Mobile Money */}
-              <div className="rounded-2xl border p-6 space-y-4" style={cardStyle}>
-                <h3 className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 border-b pb-3 flex items-center gap-2" style={{ borderColor: 'var(--border)' }}>
+              <div className="rounded-2xl border p-6 space-y-4 shadow-xs" style={cardStyle}>
+                <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 border-b pb-3 flex items-center gap-2" style={{ borderColor: 'var(--border)' }}>
                   <DollarSign className="w-4 h-4" /> Canal de Versement & Coordonnées Bancaires
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                  <div>
-                    <p className="font-bold text-slate-400 text-[10.5px]">MODE DE VERSEMENT</p>
-                    <p className="font-black text-sm text-emerald-600 dark:text-emerald-400 mt-0.5">
-                      {teacher.modeVersementSalaire === 'BANQUE' ? 'Virement Bancaire' : teacher.modeVersementSalaire === 'MOBILE_MONEY' ? 'Mobile Money' : 'Caisse Établissement'}
+                  <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <p className="font-bold text-slate-400 text-[10.5px] uppercase">MODE DE VERSEMENT</p>
+                    <p className="font-black text-sm text-indigo-600 dark:text-indigo-400 mt-0.5">
+                      {teacher.modeVersementSalaire === 'BANQUE' ? '🏦 Virement Bancaire' : teacher.modeVersementSalaire === 'MOBILE_MONEY' ? '📱 Mobile Money' : '💵 Caisse Établissement'}
                     </p>
                   </div>
+
                   {teacher.modeVersementSalaire === 'MOBILE_MONEY' ? (
                     <>
-                      <div>
-                        <p className="font-bold text-slate-400 text-[10.5px]">OPÉRATEUR MOBILE</p>
-                        <p className="font-bold mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.mobileMoneyOperateur || 'M-Pesa'}</p>
+                      <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                        <p className="font-bold text-slate-400 text-[10.5px] uppercase">OPÉRATEUR MOBILE</p>
+                        <p className="font-black text-sm mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.mobileMoneyOperateur || 'M-Pesa / Vodacom'}</p>
                       </div>
-                      <div>
-                        <p className="font-bold text-slate-400 text-[10.5px]">NUMÉRO MOBILE MONEY</p>
-                        <p className="font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">{teacher.mobileMoneyNumero || teacher.telephone}</p>
+                      <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                        <p className="font-bold text-slate-400 text-[10.5px] uppercase">NUMÉRO MOBILE MONEY</p>
+                        <p className="font-black text-sm font-mono text-indigo-600 dark:text-indigo-400 mt-0.5">{teacher.mobileMoneyNumero || teacher.telephone || 'Non renseigné'}</p>
                       </div>
                     </>
                   ) : (
                     <>
-                      <div>
-                        <p className="font-bold text-slate-400 text-[10.5px]">BANQUE D'AFFECTATION</p>
-                        <p className="font-bold mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.banqueNom || 'Equity BCDC'}</p>
+                      <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                        <p className="font-bold text-slate-400 text-[10.5px] uppercase">BANQUE PARTENAIRE</p>
+                        <p className="font-black text-sm mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.banqueNom || 'Rawbank RDC'}</p>
                       </div>
-                      <div>
-                        <p className="font-bold text-slate-400 text-[10.5px]">N° COMPTE BANCAIRE</p>
-                        <p className="font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">{teacher.numeroCompteBancaire || 'Non renseigné'}</p>
+                      <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                        <p className="font-bold text-slate-400 text-[10.5px] uppercase">NUMÉRO DE COMPTE (RIB)</p>
+                        <p className="font-black text-sm font-mono text-indigo-600 dark:text-indigo-400 mt-0.5">{teacher.numeroCompteBancaire || 'Non renseigné'}</p>
                       </div>
                     </>
                   )}
                 </div>
+              </div>
+
+              {/* Historique des Règlements & Fiches de Paie Réalisées */}
+              <div className="rounded-2xl border p-6 space-y-4 shadow-xs" style={cardStyle}>
+                <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
+                    <FileText className="w-4 h-4" /> Historique des Fiches de Paie & Règlements ({staffFiches.length})
+                  </h3>
+                  <span className="text-[10px] text-slate-400 font-semibold">Enregistrements SQLite</span>
+                </div>
+
+                {staffFiches.length > 0 ? (
+                  <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--border)' }}>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr style={{ background: 'var(--bg-sunken)' }}>
+                          <th className="text-left px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Période</th>
+                          <th className="text-left px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Date Règlement</th>
+                          <th className="text-right px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Salaire Brut</th>
+                          <th className="text-right px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Net Payé</th>
+                          <th className="text-center px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Canal</th>
+                          <th className="text-center px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Statut</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {staffFiches.map(f => (
+                          <tr key={f.id} className="border-t" style={{ borderColor: 'var(--border)' }}>
+                            <td className="px-4 py-3 font-bold" style={{ color: 'var(--text-primary)' }}>
+                              {f.periode || f.anneeScolaire || '—'}
+                            </td>
+                            <td className="px-4 py-3 text-slate-400 font-medium">{f.datePaiement || '—'}</td>
+                            <td className="px-4 py-3 text-right font-mono text-slate-500">
+                              {formatCurrency(f.salaireBrut || f.salaireBase || 0, currency, f.devise)}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">
+                              {formatCurrency(f.salaireNet || f.salaireBase || 0, currency, f.devise)}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-500/10 text-slate-500">
+                                {f.modePaiement || 'CASH'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
+                                f.statut === 'PAYE'
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                              }`}>
+                                {f.statut === 'PAYE' ? 'Payé' : f.statut || 'En attente'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-6 rounded-xl border border-dashed text-center space-y-2" style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}>
+                    <DollarSign className="w-8 h-8 text-slate-400 mx-auto" />
+                    <p className="text-xs font-bold text-slate-400">Aucune fiche de paie clôturée enregistrée pour cet agent pour le moment.</p>
+                    <p className="text-[11px] text-slate-500">Les fiches de paie générées depuis le module Finances & Salaires s'afficheront automatiquement ici.</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1367,7 +1484,7 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
               await LocalDatabaseService.addUser(u);
             }
             setUserModalOpen(false);
-            await loadUserAccount();
+            await loadData();
           }}
         />
       )}
