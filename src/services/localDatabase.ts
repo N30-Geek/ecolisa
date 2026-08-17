@@ -430,18 +430,17 @@ export class LocalDatabaseService {
     });
   }
 
-  // ── UTILISATEURS (CRUD SQLITE + MEMORY FALLBACK + AUTO-SYNC RH) ───────────
+  // ── UTILISATEURS (CRUD SQLITE + ENRICHISSEMENT RH) ───────────────────────
   public static async getUsers(): Promise<UserAccount[]> {
     const [rawUsers, staffList] = await Promise.all([
       safeElectronCall<UserAccount[]>(() => api()?.getUsers(), 'users'),
       this.getStaff().catch(() => []),
     ]);
 
-    // Map canonique indexée par ID uniquement (pas par email)
-    // pour éviter les entrées en double.
+    // Map canonique indexée par ID uniquement (source de vérité : table users)
     const usersById = new Map<string, UserAccount>();
 
-    // 1. Charger d'abord les comptes de la table users (source de vérité)
+    // 1. Charger UNIQUEMENT les vrais comptes créés dans la table users
     (rawUsers || []).forEach((u) => {
       usersById.set(u.id, {
         ...u,
@@ -449,73 +448,42 @@ export class LocalDatabaseService {
       });
     });
 
-    // Index email → id pour les lookups rapides du personnel
-    const emailToId = new Map<string, string>();
-    usersById.forEach((u) => {
-      if (u.email) emailToId.set(u.email.toLowerCase().trim(), u.id);
-    });
+    // 2. Enrichir les comptes existants avec les photos/avatars et matricules RH correspondants
+    usersById.forEach((u, uid) => {
+      const emailLower = (u.email || '').toLowerCase().trim();
+      const staffMatch = (staffList || []).find((s) =>
+        (s.id && (s.id === u.id || `usr_${s.id}` === u.id)) ||
+        (s.email && emailLower && s.email.toLowerCase().trim() === emailLower) ||
+        (s.nom && u.nom && s.nom.toLowerCase() === u.nom.toLowerCase() &&
+         s.prenom && u.prenom && s.prenom.toLowerCase() === u.prenom.toLowerCase())
+      );
 
-    // 2. Enrichir avec les données RH (avatarUrl, photo, téléphone)
-    //    Si un compte UserAccount correspond déjà (par email ou nom+prénom),
-    //    on enrichit cet objet existant. Sinon on crée une nouvelle entrée.
-    (staffList || []).forEach((s) => {
-      const emailLower = (s.email || '').toLowerCase().trim();
-
-      // Recherche de correspondance : email en priorité, puis id direct
-      let existingId = emailLower ? emailToId.get(emailLower) : undefined;
-      if (!existingId) existingId = usersById.has(s.id) ? s.id : undefined;
-      // Fallback : chercher par nom + prénom
-      if (!existingId && s.nom) {
-        usersById.forEach((u, uid) => {
-          if (!existingId &&
-              u.nom?.toLowerCase() === s.nom?.toLowerCase() &&
-              u.prenom?.toLowerCase() === (s.prenom || '').toLowerCase()) {
-            existingId = uid;
-          }
+      if (staffMatch) {
+        usersById.set(uid, {
+          ...u,
+          avatarUrl: u.avatarUrl || staffMatch.avatarUrl || staffMatch.photoUrl,
+          telephone: u.telephone || staffMatch.telephone || '',
+          usernameGenerated: u.usernameGenerated || (staffMatch.matricule ? staffMatch.matricule.toLowerCase() : undefined),
         });
-      }
-
-      if (existingId) {
-        // Enrichir le compte existant avec les données RH manquantes
-        const existing = usersById.get(existingId)!;
-        usersById.set(existingId, {
-          ...existing,
-          avatarUrl: existing.avatarUrl || s.avatarUrl || s.photoUrl,
-          telephone: existing.telephone || s.telephone || '',
-          usernameGenerated: existing.usernameGenerated || (s.matricule ? s.matricule.toLowerCase() : undefined),
-        });
-      } else {
-        // Créer une entrée pour le membre du personnel sans compte UserAccount
-        const newId = `usr_${s.id}`;
-        if (!usersById.has(newId)) {
-          const generatedEmail = emailLower ||
-            `${(s.prenom || 'staff').toLowerCase()}.${(s.nom || 'user').toLowerCase()}@ecolisa.cd`;
-          const newUser: UserAccount = {
-            id: newId,
-            email: generatedEmail,
-            nom: s.nom || 'Utilisateur',
-            prenom: s.prenom || '',
-            role: normalizeRole(s.role || 'ENSEIGNANT'),
-            pinCode: (s as any).pinCode || '1234',
-            avatarUrl: s.avatarUrl || s.photoUrl,
-            statut: s.statut === 'SUSPENDU' ? 'SUSPENDU' : 'ACTIF',
-            telephone: s.telephone || '',
-            creeLe: (s as any).createdAt || (s as any).dateCreation || new Date().toISOString(),
-            usernameGenerated: s.matricule ? s.matricule.toLowerCase() : undefined,
-            generatedPassword: 'ecolisa2026',
-          };
-          usersById.set(newId, newUser);
-          if (generatedEmail) emailToId.set(generatedEmail.toLowerCase(), newId);
-        }
       }
     });
 
-    const uniqueUsers = Array.from(usersById.values());
+    return Array.from(usersById.values());
+  }
 
-    // Si aucun compte PROMOTEUR_ADMIN n'existe en base de données,
-    // NE PAS en créer un fictif automatiquement. L'onboarding doit être
-    // complété pour que l'administrateur configure son compte.
-    return uniqueUsers;
+  public static async getUserByStaff(staff: { id?: string; email?: string; nom?: string; prenom?: string }): Promise<UserAccount | null> {
+    if (!staff) return null;
+    const users = await this.getUsers();
+    const emailClean = (staff.email || '').toLowerCase().trim();
+    const nomClean = (staff.nom || '').toLowerCase().trim();
+    const prenomClean = (staff.prenom || '').toLowerCase().trim();
+
+    return users.find((u) =>
+      (staff.id && (u.id === staff.id || u.id === `usr_${staff.id}`)) ||
+      (emailClean && u.email && u.email.toLowerCase().trim() === emailClean) ||
+      (nomClean && u.nom && u.nom.toLowerCase().trim() === nomClean &&
+       prenomClean && u.prenom && u.prenom.toLowerCase().trim() === prenomClean)
+    ) || null;
   }
 
   public static async getUserByEmail(email: string): Promise<UserAccount | null> {

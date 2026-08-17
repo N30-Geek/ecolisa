@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Pencil, FileText, QrCode, User, BookOpen, Clock, DollarSign,
-  Folder, Phone, Mail, MapPin, Calendar, Hash, Award, Check, RotateCw, Eye, EyeOff, ShieldCheck, Download, School, Printer, Lock, Key, ZoomIn, ZoomOut, X
+  Folder, Phone, Mail, MapPin, Calendar, Hash, Award, Check, RotateCw, Eye, EyeOff, ShieldCheck, Download, School, Printer, Lock, Key, ZoomIn, ZoomOut, X,
+  UserPlus, MessageSquare, KeyRound, AlertCircle, ShieldAlert
 } from 'lucide-react';
-import { MembrePersonnel, DocumentScolaire } from '../../types';
+import { MembrePersonnel, DocumentScolaire, UserAccount } from '../../types';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { formatCurrency } from '../../utils/currency';
@@ -12,6 +13,7 @@ import { TeacherIdCardRenderer } from './TeacherIdCardRenderer';
 import { StaffDocumentsModal } from './StaffDocumentsModal';
 import { TeacherFullFileModal } from './TeacherFullFileModal';
 import { TeacherAffectationModal } from './TeacherAffectationModal';
+import { UserFormModal, getRoleInfo } from './UsersManager';
 
 const formatBytes = (bytes = 0) => {
   if (bytes === 0) return '0 o';
@@ -77,6 +79,13 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
   const [affectationModalOpen, setAffectationModalOpen] = useState(false);
   const [staffDocs, setStaffDocs] = useState<DocumentScolaire[]>([]);
   
+  // États Compte Utilisateur Lié
+  const [userAccount, setUserAccount] = useState<UserAccount | null>(null);
+  const [userAccountLoading, setUserAccountLoading] = useState(true);
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [allUsers, setAllUsers] = useState<UserAccount[]>([]);
+  const [allStaff, setAllStaff] = useState<MembrePersonnel[]>([]);
+
   // États Zoom Avatar Lightbox & Authentification Mot de passe
   const [zoomAvatarOpen, setZoomAvatarOpen] = useState(false);
   const [avatarZoomScale, setAvatarZoomScale] = useState(1);
@@ -87,10 +96,24 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
   const [adminAuthSubmitting, setAdminAuthSubmitting] = useState(false);
   const [showTypedAdminPassword, setShowTypedAdminPassword] = useState(false);
 
+  const loadUserAccount = async () => {
+    setUserAccountLoading(true);
+    const [acc, users, staff] = await Promise.all([
+      LocalDatabaseService.getUserByStaff(teacher),
+      LocalDatabaseService.getUsers(),
+      LocalDatabaseService.getStaff().catch(() => []),
+    ]);
+    setUserAccount(acc);
+    setAllUsers(users);
+    setAllStaff(staff);
+    setUserAccountLoading(false);
+  };
+
   useEffect(() => {
     LocalDatabaseService.getStaffDocuments(teacher.id)
       .then(docs => setStaffDocs(docs || []))
       .catch(() => setStaffDocs([]));
+    loadUserAccount();
   }, [teacher.id, docsModalOpen, activeTab]);
 
   const handleVerifyAdminPassword = async (e: React.FormEvent) => {
@@ -870,52 +893,120 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
           </div>
 
           {/* 3. Identifiants de Connexion & Rôle Système (Pour Administrateurs) */}
-          <div className="rounded-2xl border p-5 space-y-3 shadow-md bg-gradient-to-br from-indigo-500/5 via-slate-900/5 to-transparent" style={cardStyle}>
+          <div className="rounded-2xl border p-5 space-y-3.5 shadow-md bg-gradient-to-br from-indigo-500/5 via-slate-900/5 to-transparent" style={cardStyle}>
             <div className="flex items-center justify-between border-b pb-2.5" style={{ borderColor: 'var(--border)' }}>
               <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-500" /> IDENTIFIANTS COMPTE SYSTÈME
+                <ShieldCheck className="w-4 h-4 text-emerald-500" /> COMPTE D'ACCÈS SYSTÈME & IDENTIFIANTS
               </h3>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                Accès Actif
-              </span>
+              {userAccount ? (
+                <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
+                  userAccount.statut === 'ACTIF' 
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' 
+                    : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                }`}>
+                  {userAccount.statut === 'ACTIF' ? 'Compte Actif' : 'Compte Suspendu'}
+                </span>
+              ) : (
+                <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-slate-500/15 text-slate-500 border border-slate-500/30">
+                  Aucun Compte
+                </span>
+              )}
             </div>
 
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between p-2.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                <span className="text-slate-400 font-bold text-[10.5px]">Identifiant / E-mail :</span>
-                <span className="font-mono font-black text-indigo-600 dark:text-indigo-400">{teacher.email || `${(teacher.prenom?.[0] || 'a').toLowerCase()}.${(teacher.nom || 'user').toLowerCase()}@ecolisa.cd`}</span>
-              </div>
-              <div className="flex items-center justify-between p-2.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                <span className="text-slate-400 font-bold text-[10.5px]">Rôle Système Attribué :</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">{roleLabel[teacher.role] || teacher.role}</span>
-              </div>
-              <div className="flex items-center justify-between p-2.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                <span className="text-slate-400 font-bold text-[10.5px]">Mot de Passe :</span>
-                <div className="flex items-center gap-2">
-                  <span className={`font-mono font-bold ${isPasswordRevealed ? 'text-amber-600 dark:text-amber-400 font-black' : 'text-slate-500'}`}>
-                    {isPasswordRevealed ? (teacher.motDePasse || (teacher as any).password || 'Ecolisa2026!') : '•••••••• (Protégé)'}
-                  </span>
+            {userAccount ? (
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center justify-between p-2.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <span className="text-slate-400 font-bold text-[10.5px]">Identifiant / E-mail :</span>
+                  <span className="font-mono font-black text-indigo-600 dark:text-indigo-400">{userAccount.email}</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <span className="text-slate-400 font-bold text-[10.5px]">Rôle Système :</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">{getRoleInfo(userAccount.role).label}</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <span className="text-slate-400 font-bold text-[10.5px]">Code PIN Système :</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`font-mono font-bold ${isPasswordRevealed ? 'text-amber-600 dark:text-amber-400 font-black tracking-widest' : 'text-slate-500'}`}>
+                      {isPasswordRevealed ? (userAccount.pinCode || 'Non défini') : '••••••'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isPasswordRevealed) {
+                          setIsPasswordRevealed(false);
+                        } else {
+                          setAdminPasswordInput('');
+                          setAdminAuthError(null);
+                          setAuthAdminModalOpen(true);
+                        }
+                      }}
+                      className="p-1 rounded-lg hover:bg-slate-500/10 text-indigo-500 transition-colors cursor-pointer"
+                      title={isPasswordRevealed ? "Masquer le PIN" : "Afficher le PIN (Vérification admin)"}
+                    >
+                      {isPasswordRevealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4 text-indigo-500" />}
+                    </button>
+                  </div>
+                </div>
+
+                {userAccount.derniereConnexion && (
+                  <div className="flex items-center justify-between p-2 rounded-xl text-[10.5px] text-slate-400">
+                    <span>Dernière connexion :</span>
+                    <span className="font-semibold text-slate-300">
+                      {new Date(userAccount.derniereConnexion).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </span>
+                  </div>
+                )}
+
+                {/* Boutons d'action pour le compte existant */}
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setUserModalOpen(true)}
+                    className="py-2 px-3 rounded-xl bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    <span>Modifier Accès</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {
-                      if (isPasswordRevealed) {
-                        setIsPasswordRevealed(false);
-                      } else {
-                        setAdminPasswordInput('');
-                        setAdminAuthError(null);
-                        setAuthAdminModalOpen(true);
-                      }
+                      const role = getRoleInfo(userAccount.role);
+                      const msg = `Bonjour ${userAccount.prenom || ''} ${userAccount.nom},\n\nVos accès officiels ECOLISA :\n• E-mail : ${userAccount.email}\n• Rôle : ${role.label}${userAccount.pinCode ? `\n• Code PIN : ${userAccount.pinCode}` : ''}\n\nVeuillez conserver ces informations en lieu sûr.`;
+                      const rawPhone = (userAccount.telephone || teacher.telephone || '').replace(/[^0-9]/g, '');
+                      const phone = rawPhone.startsWith('243') ? rawPhone : (rawPhone ? `243${rawPhone.replace(/^0/, '')}` : '');
+                      const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+                      window.open(url, '_blank');
                     }}
-                    className="p-1 rounded-lg hover:bg-slate-500/10 text-indigo-500 transition-colors cursor-pointer"
-                    title={isPasswordRevealed ? "Masquer le mot de passe" : "Afficher le mot de passe (Authentification requise)"}
+                    className="py-2 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    {isPasswordRevealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4 text-indigo-500" />}
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Envoyer WhatsApp</span>
                   </button>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-3 p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                    Cet enseignant ne dispose pas encore de compte d'accès pour se connecter au portail ECOLISA.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setUserModalOpen(true)}
+                  className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer border border-indigo-500/30"
+                >
+                  <UserPlus className="w-4 h-4 text-white" />
+                  <span>Créer un Compte d'Accès pour cet Enseignant</span>
+                </button>
+              </div>
+            )}
 
-            <div className="flex flex-col gap-2 pt-1">
+            <div className="flex flex-col gap-2 pt-2 border-t border-slate-700/40">
               <button
                 type="button"
                 onClick={() => setAffectationModalOpen(true)}
@@ -1113,6 +1204,26 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modal Création / Modification Compte Utilisateur */}
+      {userModalOpen && (
+        <UserFormModal
+          user={userAccount}
+          initialStaff={userAccount ? null : teacher}
+          existingUsers={allUsers}
+          staffList={allStaff}
+          onClose={() => setUserModalOpen(false)}
+          onSave={async (u) => {
+            if (u.id && allUsers.some(ex => ex.id === u.id)) {
+              await LocalDatabaseService.updateUser(u.id, u);
+            } else {
+              await LocalDatabaseService.addUser(u);
+            }
+            setUserModalOpen(false);
+            await loadUserAccount();
+          }}
+        />
       )}
     </div>
   );

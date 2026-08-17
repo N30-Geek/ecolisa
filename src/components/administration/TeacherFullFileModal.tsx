@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Printer, FileText } from 'lucide-react';
-import { MembrePersonnel } from '../../types';
+import { X, Printer, FileText, ShieldCheck } from 'lucide-react';
+import { MembrePersonnel, UserAccount } from '../../types';
+import { LocalDatabaseService } from '../../services/localDatabase';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { formatCurrency } from '../../utils/currency';
+import { getRoleInfo } from './UsersManager';
 
 interface TeacherFullFileModalProps {
   isOpen: boolean;
@@ -17,6 +19,15 @@ export const TeacherFullFileModal: React.FC<TeacherFullFileModalProps> = ({
   teacher
 }) => {
   const { config, currency, exchangeRate } = useSchoolConfig();
+  const [userAccount, setUserAccount] = useState<UserAccount | null>(null);
+
+  useEffect(() => {
+    if (isOpen && teacher) {
+      LocalDatabaseService.getUserByStaff(teacher)
+        .then(acc => setUserAccount(acc))
+        .catch(() => setUserAccount(null));
+    }
+  }, [isOpen, teacher]);
 
   if (!isOpen) return null;
 
@@ -380,6 +391,44 @@ export const TeacherFullFileModal: React.FC<TeacherFullFileModalProps> = ({
                 <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Téléphone & Lien de Parenté</span>
                 <span className="text-xs sm:text-sm font-extrabold text-slate-900">
                   {teacher.contactUrgenceTelephone || '—'} {teacher.contactUrgenceLien ? `(${teacher.contactUrgenceLien})` : ''}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-b border-slate-200"></div>
+
+          {/* SECTION VI : COMPTE D'ACCÈS SYSTÈME & HABILITATIONS NUMÉRIQUES */}
+          <div className="space-y-3">
+            <div className="bg-slate-100/90 border-l-4 border-indigo-600 px-3.5 py-1.5 rounded-r-md">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                SECTION VI : COMPTE D'ACCÈS SYSTÈME & HABILITATIONS NUMÉRIQUES
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-3.5 gap-x-4 pt-1">
+              <div>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Statut du Compte</span>
+                <span className="text-xs sm:text-sm font-black">
+                  {userAccount ? (
+                    <span className={userAccount.statut === 'ACTIF' ? 'text-emerald-700' : 'text-amber-700'}>
+                      {userAccount.statut === 'ACTIF' ? 'Compte Actif' : 'Compte Suspendu'}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 italic">Non configuré</span>
+                  )}
+                </span>
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Identifiant / E-mail de Connexion</span>
+                <span className="text-xs sm:text-sm font-mono font-black text-indigo-900">
+                  {userAccount?.email || '—'}
+                </span>
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Rôle Système Attribué</span>
+                <span className="text-xs sm:text-sm font-extrabold text-slate-900">
+                  {userAccount ? getRoleInfo(userAccount.role).label : (roleLabel[teacher.role] || teacher.role)}
                 </span>
               </div>
             </div>
