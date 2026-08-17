@@ -344,26 +344,30 @@ export const UsersManager: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Colonne Code PIN */}
+                    {/* Colonne Mot de passe & PIN */}
                     <td className="px-4 py-3.5">
-                      {user.pinCode ? (
-                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                          <KeyRound className="w-3 h-3 text-amber-500" />
-                          <span className="font-mono text-xs font-black tracking-widest text-slate-800 dark:text-slate-200">
-                            {isPinVisible ? user.pinCode : '••••••'}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => togglePinReveal(user.id)}
-                            className="text-slate-400 hover:text-indigo-500 p-0.5 transition-colors cursor-pointer"
-                            title={isPinVisible ? "Masquer le PIN" : "Afficher le PIN"}
-                          >
-                            {isPinVisible ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                          </button>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-slate-700 dark:text-slate-200">
+                          <Lock className="w-3 h-3 text-indigo-500 shrink-0" />
+                          <span>{(user as any).password || (user as any).generatedPassword ? '••••••••' : 'Protégé'}</span>
                         </div>
-                      ) : (
-                        <span className="text-slate-400 italic text-[11px]">Non défini</span>
-                      )}
+                        {user.pinCode && (
+                          <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[10px]">
+                            <KeyRound className="w-2.5 h-2.5 text-amber-500" />
+                            <span className="font-mono font-bold tracking-widest text-slate-600 dark:text-slate-300">
+                              {isPinVisible ? user.pinCode : '••••••'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => togglePinReveal(user.id)}
+                              className="text-slate-400 hover:text-indigo-500 p-0.5 transition-colors cursor-pointer"
+                              title={isPinVisible ? "Masquer le PIN" : "Afficher le PIN"}
+                            >
+                              {isPinVisible ? <EyeOff className="w-2.5 h-2.5" /> : <Eye className="w-2.5 h-2.5" />}
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </td>
 
                     {/* Colonne Statut */}
@@ -389,7 +393,8 @@ export const UsersManager: React.FC = () => {
                         {/* Envoi WhatsApp */}
                         <button
                           onClick={() => {
-                            const msg = `Bonjour ${user.prenom || ''} ${user.nom},\n\nVos accès officiels ECOLISA :\n• E-mail : ${user.email}\n• Rôle : ${role.label}${user.pinCode ? `\n• Code PIN : ${user.pinCode}` : ''}\n\nVeuillez conserver ces informations en lieu sûr.`;
+                            const pwd = (user as any).password || (user as any).generatedPassword || (user as any).motDePasse || '';
+                            const msg = `Bonjour ${user.prenom || ''} ${user.nom},\n\nVos accès officiels ECOLISA :\n• E-mail : ${user.email}\n• Mot de passe : ${pwd || '[Mot de passe configuré]'}\n• Code PIN : ${user.pinCode || 'Non configuré'}\n• Rôle : ${role.label}\n\nVeuillez conserver ces informations en lieu sûr.`;
                             const rawPhone = (user.telephone || '').replace(/[^0-9]/g, '');
                             const phone = rawPhone.startsWith('243') ? rawPhone : (rawPhone ? `243${rawPhone.replace(/^0/, '')}` : '');
                             const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;

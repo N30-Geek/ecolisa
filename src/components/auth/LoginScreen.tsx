@@ -8,7 +8,6 @@ import {
 import { RôleSystème, UserAccount } from '../../types';
 import { LocalDatabaseService, UserSession } from '../../services/localDatabase';
 import { SchoolConfig } from '../onboarding/OnboardingWizard';
-import { roleRequiresPin } from '../../utils/permissions';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: UserSession) => void;
@@ -60,8 +59,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [adminUser, setAdminUser]               = useState<UserAccount | null>(null);
   const [loadingProfiles, setLoadingProfiles]   = useState(true);
 
-  // Mode "Verrouillage Rapide": affiche directement l'écran de déverrouillage
-  // du dernier utilisateur au lieu de la grille complète.
+  // Mode "Verrouillage Rapide"
   const isLockScreen = !!lockedUser;
 
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>('ALL');
@@ -71,16 +69,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [identifier, setIdentifier]     = useState('');
   const [password, setPassword]         = useState('');
   const [pinCode, setPinCode]           = useState('');
+  const [authMethod, setAuthMethod]     = useState<'PASSWORD' | 'PIN'>('PASSWORD');
   const [isAdminMode, setIsAdminMode]   = useState(false);
 
   const [showPassword, setShowPassword] = useState(false);
   const [showPinCode, setShowPinCode]   = useState(false);
   const [errorMsg, setErrorMsg]         = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // En mode lock-screen, ouvrir directement le formulaire
   const [showForm, setShowForm]         = useState(isLockScreen);
 
-  const GENERIC_AUTH_ERROR = 'Identifiants incorrects. Vérifiez votre e-mail, identifiant ou mot de passe / PIN.';
+  const GENERIC_AUTH_ERROR = 'Identifiants incorrects. Vérifiez votre identifiant et votre mot de passe.';
 
   useEffect(() => {
     // Charger config école
@@ -92,8 +90,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       });
     }
 
-    // getUsers() fusionne déjà le personnel RH en interne (avatarUrl inclus).
-    // Ne pas rappeler getStaff() séparément — cela crée des doublons.
+    // Charger les comptes utilisateurs réels
     LocalDatabaseService.getUsers().then((users) => {
       const activeUsers = (users || []).filter(u => u.statut !== 'SUSPENDU');
       const admin = activeUsers.find(u => u.role === 'PROMOTEUR_ADMIN') || null;
@@ -111,23 +108,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           setSelectedUser(match);
           setIdentifier(match.email || match.usernameGenerated || match.id);
         } else {
-          // Fallback: pré-remplir l'email depuis la session verrouillée
           setIdentifier(lockedUser.email || '');
         }
       }
 
       setLoadingProfiles(false);
     }).catch(() => setLoadingProfiles(false));
-  }, []);
-
-  // PIN Requis uniquement pour les rôles financiers/admin (Comptable, Intendant, Promoteur)
-  const needsPinCode = selectedUser ? roleRequiresPin(selectedUser.role) : isAdminMode;
+  }, [lockedUser]);
 
   const handleSelectStandardUser = useCallback((profile: UserAccount) => {
     setSelectedUser(profile);
     setIdentifier(profile.email || profile.usernameGenerated || profile.id);
     setPassword('');
     setPinCode('');
+    setAuthMethod('PASSWORD');
     setIsAdminMode(false);
     setShowForm(true);
     setErrorMsg(null);
@@ -138,6 +132,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     setIdentifier(adminUser?.email || 'admin@ecolisa.cd');
     setPassword('');
     setPinCode('');
+    setAuthMethod('PASSWORD');
     setIsAdminMode(true);
     setShowForm(true);
     setErrorMsg(null);
@@ -148,6 +143,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     setIdentifier('');
     setPassword('');
     setPinCode('');
+    setAuthMethod('PASSWORD');
     setIsAdminMode(false);
     setShowForm(true);
     setErrorMsg(null);
@@ -163,20 +159,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       return;
     }
 
-    const effectivePassword = (needsPinCode && pinCode ? pinCode : password).trim();
-    if (!effectivePassword && !password) {
-      setErrorMsg(needsPinCode ? 'Veuillez saisir votre code PIN ou mot de passe.' : 'Veuillez saisir votre mot de passe.');
+    const credentialToVerify = authMethod === 'PIN' ? pinCode.trim() : password.trim();
+    if (!credentialToVerify) {
+      setErrorMsg(authMethod === 'PIN' ? 'Veuillez saisir votre code PIN.' : 'Veuillez saisir votre mot de passe.');
       return;
     }
 
     setIsSubmitting(true);
-    await new Promise(res => setTimeout(res, 250));
+    await new Promise(res => setTimeout(res, 200));
 
     try {
-      // 1. Authentifier via verifyCredentials
+      // Authentifier avec le mot de passe (ou code PIN de secours)
       const existingUser = await LocalDatabaseService.verifyCredentials(
         targetIdentifier,
-        effectivePassword || password
+        credentialToVerify
       );
 
       if (!existingUser) {
@@ -185,14 +181,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         return;
       }
 
-      // 2. Consigner la connexion dans le journal d'audit
+      // Consigner la connexion dans le journal d'audit
       await LocalDatabaseService.logAction('CONNEXION', 'SYSTEME', 'UserAccount', existingUser.id, {
         email: existingUser.email,
         role: existingUser.role,
+        authMethod,
         timestamp: new Date().toISOString(),
       });
 
-      // 3. Préparer la session utilisateur
+      // Préparer la session utilisateur
       const userSession: UserSession = {
         id:      existingUser.id,
         email:   existingUser.email,
@@ -248,136 +245,105 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const innerBg   = isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white border-slate-200';
   const inputBg   = isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-900';
   const textPri   = isDarkMode ? 'text-slate-100' : 'text-slate-900';
-  const textSec   = isDarkMode ? 'text-slate-400' : 'text-slate-500';
-  const textMut   = isDarkMode ? 'text-slate-300' : 'text-slate-600';
+  const textSec   = isDarkMode ? 'text-slate-400' : 'text-slate-600';
+  const textMut   = isDarkMode ? 'text-slate-500' : 'text-slate-400';
   const divider   = isDarkMode ? 'border-slate-800' : 'border-slate-200';
-  const itemHover = isDarkMode
-    ? 'border-slate-800 bg-slate-900/60 hover:bg-slate-900 hover:border-indigo-500/50'
-    : 'border-slate-200 bg-white hover:bg-slate-50 hover:border-indigo-400';
-  const neonA     = isDarkMode ? 'bg-indigo-600/20' : 'bg-indigo-500/10';
-  const neonB     = isDarkMode ? 'bg-violet-600/20' : 'bg-violet-400/10';
-  const badgePill = isDarkMode ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-indigo-100 text-indigo-700 border-indigo-200';
-  const badgeBox  = isDarkMode ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-indigo-50 border-indigo-200';
-  const errorBox  = isDarkMode ? 'bg-rose-500/20 border-rose-500/40 text-rose-300' : 'bg-rose-50 border-rose-300 text-rose-700';
+  const badgePill = isDarkMode ? 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30' : 'bg-indigo-50 text-indigo-700 border-indigo-200';
+  const badgeBox  = isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200';
+  const errorBox  = isDarkMode ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' : 'bg-rose-50 border-rose-200 text-rose-700';
+  const itemHover = isDarkMode ? 'hover:bg-slate-800/80 border-slate-800/80 hover:border-indigo-500/40' : 'hover:bg-indigo-50/50 border-slate-200 hover:border-indigo-300';
 
   return (
-    <div className={`min-h-screen w-full flex flex-col items-center justify-center p-3 sm:p-6 animate-fade-in select-none relative overflow-hidden ${bg}`}>
-
-      {/* Background Watermark */}
-      <div className="fixed inset-0 pointer-events-none flex items-center justify-center z-0 opacity-5">
-        {schoolConfig?.logoUrl ? (
-          <img src={schoolConfig.logoUrl} alt="Watermark" className="w-full h-full object-contain filter grayscale" style={{ transform: 'scale(1.1)' }} />
-        ) : (
-          <School style={{ width: '80vmin', height: '80vmin', color: isDarkMode ? '#818cf8' : '#6366f1' }} />
-        )}
-      </div>
-
-      {/* Ambient Lighting */}
-      <div className={`fixed -top-40 -left-40 w-96 h-96 rounded-full blur-3xl pointer-events-none z-0 ${neonA}`} />
-      <div className={`fixed -bottom-40 -right-40 w-96 h-96 rounded-full blur-3xl pointer-events-none z-0 ${neonB}`} />
-
-      {/* Theme Toggle */}
+    <div className={`min-h-screen w-full flex items-center justify-center p-3 sm:p-6 select-none font-sans relative overflow-hidden transition-colors duration-200 ${bg}`}>
+      
+      {/* BOUTON THÈME */}
       {toggleTheme && (
-        <div className="absolute top-4 right-4 z-20">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className={`p-2.5 rounded-xl border backdrop-blur-md shadow-xs transition-all cursor-pointer ${
-              isDarkMode ? 'border-slate-700 bg-slate-900/80 text-slate-200 hover:text-indigo-400' : 'border-slate-200 bg-white/80 text-slate-700 hover:text-indigo-600'
-            }`}
-            title={isDarkMode ? 'Mode Clair' : 'Mode Sombre'}
-          >
-            {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-500" />}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="fixed top-4 right-4 z-50 p-2.5 rounded-2xl border bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 backdrop-blur-md shadow-xs transition-all cursor-pointer"
+          title={isDarkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}
+        >
+          {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+        </button>
       )}
 
-      {/* Main Container Card */}
-      <div className={`w-full max-w-5xl rounded-2xl overflow-hidden flex flex-col lg:flex-row border backdrop-blur-xl shadow-xl relative z-10 ${cardBg}`}>
+      {/* FOND DÉCORATIF SUBTIL */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-30 dark:opacity-20">
+        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-indigo-500/20 blur-3xl" />
+        <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-violet-500/20 blur-3xl" />
+      </div>
 
-        {/* LEFT PANEL : IDENTITÉ ÉTABLISSEMENT */}
-        <div className={`w-full lg:w-5/12 p-6 sm:p-8 border-b lg:border-b-0 lg:border-r flex flex-col justify-between gap-6 ${panelBg}`}>
-          <div className="space-y-5">
-            <div className={`flex flex-col items-center text-center space-y-4 p-6 rounded-2xl border ${innerBg}`}>
-              <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 flex items-center justify-center shrink-0 overflow-hidden shadow-md border border-indigo-400/30">
-                {schoolConfig?.logoUrl ? (
-                  <img src={schoolConfig.logoUrl} alt="Logo" className="w-full h-full object-cover rounded-2xl" />
-                ) : (
-                  <School className="w-12 h-12 text-white" />
-                )}
-              </div>
-              <div className="space-y-1">
-                <h1 className={`text-xl font-black tracking-tight leading-snug ${textPri}`}>
-                  {schoolConfig?.schoolName || 'ECOLISA Enterprise'}
+      {/* CONTENEUR PRINCIPAL */}
+      <div className={`w-full max-w-4xl rounded-3xl border shadow-2xl backdrop-blur-xl overflow-hidden grid grid-cols-1 lg:grid-cols-12 relative z-10 transition-all ${cardBg}`}>
+        
+        {/* COLONNE GAUCHE (5 COLS) : BRANDING & ÉTABLISSEMENT */}
+        <div className="lg:col-span-5 p-6 sm:p-8 bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-950 text-white flex flex-col justify-between relative overflow-hidden border-b lg:border-b-0 lg:border-r border-indigo-800/40">
+          <div className="space-y-6 relative z-10">
+            {/* LOGO ÉCOLE / ÉCOLISA */}
+            <div className="flex items-center gap-3.5">
+              {schoolConfig?.logoUrl ? (
+                <img
+                  src={schoolConfig.logoUrl}
+                  alt="Logo"
+                  className="w-12 h-12 rounded-2xl object-cover border-2 border-white/20 shadow-md bg-white/10"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-2xl bg-indigo-600 border border-white/20 flex items-center justify-center shadow-md">
+                  <School className="w-6 h-6 text-white" />
+                </div>
+              )}
+              <div>
+                <h1 className="text-base font-black tracking-tight uppercase leading-tight line-clamp-1">
+                  {schoolConfig?.schoolName || 'ÉCOLISA ENTERPRISE'}
                 </h1>
-                {schoolConfig?.secopeCode && (
-                  <p className="text-xs font-black text-indigo-500">SECOPE : {schoolConfig.secopeCode}</p>
-                )}
-                {schoolConfig?.province && (
-                  <p className={`text-[11px] font-medium ${textSec}`}>
-                    {schoolConfig.province}{schoolConfig.subDivision ? ` • ${schoolConfig.subDivision}` : ''}
-                  </p>
-                )}
-                {!schoolConfig && (
-                  <p className="text-xs text-indigo-500 font-bold">Système ERP Scolaire Certifié · RDC</p>
-                )}
+                <p className="text-[10px] font-bold text-indigo-300 tracking-wider uppercase">
+                  {schoolConfig?.province ? `${schoolConfig.province} · RDC` : 'Système de Gestion Scolaire EPST'}
+                </p>
               </div>
             </div>
 
-            <div className={`flex items-center gap-3 p-3.5 rounded-xl border ${panelBg}`}>
-              <div className="p-2 rounded-lg shrink-0 bg-indigo-500/15 text-indigo-500"><Sparkles className="w-4 h-4" /></div>
-              <div>
-                <p className={`text-xs font-black ${textPri}`}>Portail Multi-Comptes & Rôles Dédiés</p>
-                <p className={`text-[10.5px] ${textSec}`}>Chaque utilisateur accède à son espace exclusif</p>
-              </div>
-            </div>
-
-            <div className={`flex items-center gap-3 p-3.5 rounded-xl border ${panelBg}`}>
-              <div className="p-2 rounded-lg shrink-0 bg-emerald-500/15 text-emerald-500"><Shield className="w-4 h-4" /></div>
-              <div>
-                <p className={`text-xs font-black ${textPri}`}>Protection SQLite Locale & Offline-First</p>
-                <p className={`text-[10.5px] ${textSec}`}>Traçabilité de session et sécurité 512-bit scrypt</p>
-              </div>
+            <div className="space-y-3 pt-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-indigo-200 text-[10px] font-black border border-white/10">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Authentification Sécurisée par Mot de Passe</span>
+              </span>
+              <p className="text-xs text-indigo-200/90 leading-relaxed font-medium">
+                Accédez à votre espace pédagogique, administratif ou financier avec vos identifiants protégés.
+              </p>
             </div>
           </div>
 
-          <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400 space-y-1.5">
-            <div className="flex items-center gap-2 font-black text-xs">
-              <KeyRound className="w-4 h-4 shrink-0" />
-              <span>Assistance & Connexion</span>
+          <div className="pt-6 relative z-10">
+            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md space-y-1">
+              <p className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider">Sécurité des Données</p>
+              <p className="text-[11px] text-slate-300 font-medium">
+                Mots de passe hachés scrypt, contrôle d'accès strict par rôle et traçabilité complète.
+              </p>
             </div>
-            <p className={`text-[11px] leading-relaxed font-medium ${textMut}`}>
-              Utilisez votre mot de passe ou code PIN à 4-6 chiffres pour ouvrir votre session de travail.
-            </p>
           </div>
         </div>
 
-        {/* RIGHT PANEL : SÉLECTION COMPTE OU FORMULAIRE */}
-        <div className="w-full lg:w-7/12 flex flex-col justify-between min-h-[520px]">
-
-          {/* VUE 1 : GRILLE MULTI-COMPTES */}
+        {/* COLONNE DROITE (7 COLS) : FORMULAIRE OU GRILLE */}
+        <div className="lg:col-span-7 flex flex-col justify-between min-h-[460px]">
+          
+          {/* VUE 1 : GRILLE DES PROFILS & ACCÈS */}
           {!showForm && (
-            <div className="p-6 sm:p-8 flex-1 flex flex-col justify-between">
+            <div className="p-6 sm:p-8 flex flex-col justify-between flex-1 space-y-5 animate-fade-in">
               <div className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className={`px-3 py-1 rounded-full font-black text-[9.5px] border uppercase tracking-widest ${badgePill}`}>
-                      ESPACE AUTHENTIFICATION
-                    </span>
-                    <button
-                      onClick={handleOpenManualLogin}
-                      className="text-xs font-bold text-indigo-500 hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <User className="w-3.5 h-3.5" /> Autre compte
-                    </button>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className={`text-lg font-black tracking-tight ${textPri}`}>Choisir votre Profil</h2>
+                    <p className={`text-xs ${textSec}`}>Cliquez sur votre compte pour saisir votre mot de passe</p>
                   </div>
-
-                  <h2 className={`text-xl font-black tracking-tight mt-2 ${textPri}`}>
-                    Choisissez votre Profil
-                  </h2>
-                  <p className={`text-xs mt-0.5 ${textSec}`}>
-                    Sélectionnez votre compte pour vous connecter à votre interface dédiée.
-                  </p>
+                  <button
+                    type="button"
+                    onClick={handleOpenManualLogin}
+                    className="text-xs font-black text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Saisie Libre</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
 
                 {/* FILTRES PAR CATÉGORIES */}
@@ -417,7 +383,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Filtrer par nom, rôle, e-mail ou téléphone..."
-                    className={`w-full pl-9 pr-3.5 py-2 rounded-xl border text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all ${inputBg}`}
+                    className={`w-full pl-9 pr-3.5 py-2 rounded-xl border text-xs font-bold focus:outline-hidden focus:ring-2 focus:ring-indigo-500/40 transition-all ${inputBg}`}
                   />
                 </div>
 
@@ -432,7 +398,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     <Users className="w-8 h-8 mx-auto text-slate-400" />
                     <p className={`text-xs font-bold ${textPri}`}>Aucun profil trouvé</p>
                     <p className="text-[11px] text-slate-400">
-                      {searchQuery ? 'Essayez un autre mot-clé ou' : 'Connectez-vous via l\'accès manuel ou administrateur.'}
+                      {searchQuery ? 'Essayez un autre mot-clé ou' : 'Connectez-vous via la saisie manuelle.'}
                     </p>
                     <button
                       onClick={handleOpenManualLogin}
@@ -478,7 +444,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 <button
                   type="button"
                   onClick={handleOpenAdminLogin}
-                  className={`w-full py-3 rounded-xl border text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer bg-gradient-to-r from-violet-600/20 to-purple-600/20 hover:from-violet-600/30 hover:to-purple-600/30 border-violet-500/40 text-violet-600 dark:text-violet-300`}
+                  className="w-full py-3 rounded-xl border text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer bg-gradient-to-r from-violet-600/20 to-purple-600/20 hover:from-violet-600/30 hover:to-purple-600/30 border-violet-500/40 text-violet-600 dark:text-violet-300"
                 >
                   <Crown className="w-4 h-4 text-amber-500" />
                   <span>Accès Administrateur Général (Promoteur / Admin)</span>
@@ -488,7 +454,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             </div>
           )}
 
-          {/* VUE 2 : FORMULAIRE FOCUS D'AUTHENTIFICATION */}
+          {/* VUE 2 : FORMULAIRE FOCUS D'AUTHENTIFICATION AVEC MOT DE PASSE */}
           {showForm && (
             <div className="p-6 sm:p-8 flex flex-col justify-between flex-1 animate-fade-in">
               <div>
@@ -505,7 +471,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-black">Session Verrouillée</p>
                       <p className="text-[11px] font-medium opacity-80 mt-0.5">
-                        Votre session a été verrouillée. Saisissez votre code PIN ou mot de passe pour reprendre.
+                        Votre session a été verrouillée. Saisissez votre mot de passe pour reprendre.
                       </p>
                     </div>
                     <ShieldCheck className="w-5 h-5 text-amber-500 shrink-0" />
@@ -514,7 +480,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    {/* En mode lock-screen, le bouton Retour amène à la grille complète */}
                     <button
                       type="button"
                       onClick={() => { setShowForm(false); setSelectedUser(null); setErrorMsg(null); }}
@@ -552,7 +517,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     </div>
                   )}
 
-                  {/* IDENTIFIANT (Affiché si non pré-sélectionné ou mode manuel) */}
+                  {/* IDENTIFIANT */}
                   {(!selectedUser || !selectedUser.id) && (
                     <div className="space-y-1">
                       <label className={`text-xs font-extrabold uppercase tracking-wide flex items-center gap-1.5 ${textMut}`}>
@@ -566,7 +531,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         placeholder="Ex: jean.dupont@ecolisa.cd ou 0812345678"
                         required
                         autoFocus
-                        className={`w-full px-3.5 py-2.5 rounded-lg border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all ${inputBg}`}
+                        className={`w-full px-3.5 py-2.5 rounded-lg border font-bold text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500/40 transition-all ${inputBg}`}
                       />
                     </div>
                   )}
@@ -586,48 +551,32 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     </div>
                   )}
 
-                  {/* MOT DE PASSE OU CODE PIN */}
-                  {needsPinCode ? (
-                    <div className="space-y-1 animate-fade-in">
-                      <label className="text-xs font-extrabold uppercase text-indigo-500 tracking-wide flex items-center gap-1.5">
-                        <KeyRound className="w-3.5 h-3.5" />
-                        Code PIN de Sécurité (4 chiffres) *
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showPinCode ? 'text' : 'password'}
-                          maxLength={6}
-                          value={pinCode}
-                          onChange={(e) => setPinCode(e.target.value)}
-                          placeholder="Code PIN à 4 chiffres"
-                          autoFocus
-                          required
-                          className={`w-full pl-3.5 pr-10 py-2.5 rounded-lg border font-mono font-black text-center text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500/40 ${inputBg}`}
-                        />
+                  {/* MOT DE PASSE (MÉTHODE PRINCIPALE ET PAR DÉFAUT) */}
+                  {authMethod === 'PASSWORD' ? (
+                    <div className="space-y-1.5 animate-fade-in">
+                      <div className="flex items-center justify-between">
+                        <label className={`text-xs font-extrabold uppercase tracking-wide flex items-center gap-1.5 ${textMut}`}>
+                          <Lock className="w-3.5 h-3.5 text-indigo-500" />
+                          Mot de Passe de Connexion *
+                        </label>
                         <button
                           type="button"
-                          onClick={() => setShowPinCode((v) => !v)}
-                          className={`absolute right-3 top-1/2 -translate-y-1/2 transition-colors cursor-pointer ${textSec} hover:text-indigo-500`}
+                          onClick={() => setAuthMethod('PIN')}
+                          className="text-[10px] font-black text-indigo-500 hover:underline cursor-pointer flex items-center gap-1"
                         >
-                          {showPinCode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          <KeyRound className="w-3 h-3" />
+                          <span>Utiliser le code PIN</span>
                         </button>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <label className={`text-xs font-extrabold uppercase tracking-wide flex items-center gap-1.5 ${textMut}`}>
-                        <Lock className="w-3.5 h-3.5 text-indigo-500" />
-                        Mot de Passe ou Code PIN *
-                      </label>
                       <div className="relative">
                         <input
                           type={showPassword ? 'text' : 'password'}
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          placeholder="••••••••••••"
+                          placeholder="Saisissez votre mot de passe..."
                           required
                           autoFocus
-                          className={`w-full pl-3.5 pr-10 py-2.5 rounded-lg border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all ${inputBg}`}
+                          className={`w-full pl-3.5 pr-10 py-2.5 rounded-lg border font-bold text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500/40 transition-all ${inputBg}`}
                         />
                         <button
                           type="button"
@@ -635,6 +584,43 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                           className={`absolute right-3 top-1/2 -translate-y-1/2 transition-colors cursor-pointer ${textSec} hover:text-indigo-500`}
                         >
                           {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* CODE PIN RAPIDE (MÉTHODE ALTERNATIVE) */
+                    <div className="space-y-1.5 animate-fade-in">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-extrabold uppercase text-indigo-500 tracking-wide flex items-center gap-1.5">
+                          <KeyRound className="w-3.5 h-3.5" />
+                          Code PIN Rapide (4 à 6 chiffres) *
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setAuthMethod('PASSWORD')}
+                          className="text-[10px] font-black text-indigo-500 hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <Lock className="w-3 h-3" />
+                          <span>Utiliser le Mot de passe</span>
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type={showPinCode ? 'text' : 'password'}
+                          maxLength={6}
+                          value={pinCode}
+                          onChange={(e) => setPinCode(e.target.value.replace(/[^0-9]/g, ''))}
+                          placeholder="Code PIN"
+                          autoFocus
+                          required
+                          className={`w-full pl-3.5 pr-10 py-2.5 rounded-lg border font-mono font-black text-center text-sm tracking-widest focus:outline-hidden focus:ring-2 focus:ring-indigo-500/40 ${inputBg}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPinCode((v) => !v)}
+                          className={`absolute right-3 top-1/2 -translate-y-1/2 transition-colors cursor-pointer ${textSec} hover:text-indigo-500`}
+                        >
+                          {showPinCode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
                     </div>
@@ -678,20 +664,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         </div>
       </div>
 
-      {/* FOOTER GENERAL */}
-      <div className="mt-4 flex items-center justify-between w-full max-w-5xl px-2">
-        <span className="text-[11px] font-semibold text-slate-400">
-          Système Scolaire Sécurisé · EPST RDC
-        </span>
-        <button
-          type="button"
-          onClick={onResetAndReconfigure}
-          className="text-[11px] font-black text-amber-500 hover:text-amber-600 transition-colors flex items-center gap-1 cursor-pointer"
-        >
-          <RefreshCw className="w-3 h-3" />
-          Réinitialiser Configuration
-        </button>
-      </div>
     </div>
   );
 };

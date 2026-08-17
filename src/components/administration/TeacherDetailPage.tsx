@@ -926,10 +926,10 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
                 </div>
 
                 <div className="flex items-center justify-between p-2.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <span className="text-slate-400 font-bold text-[10.5px]">Code PIN Système :</span>
+                  <span className="text-slate-400 font-bold text-[10.5px]">Mot de Passe Sécurisé :</span>
                   <div className="flex items-center gap-2">
-                    <span className={`font-mono font-bold ${isPasswordRevealed ? 'text-amber-600 dark:text-amber-400 font-black tracking-widest' : 'text-slate-500'}`}>
-                      {isPasswordRevealed ? (userAccount.pinCode || 'Non défini') : '••••••'}
+                    <span className={`font-mono font-bold ${isPasswordRevealed ? 'text-amber-600 dark:text-amber-400 font-black' : 'text-slate-500'}`}>
+                      {isPasswordRevealed ? ((userAccount as any).password || (userAccount as any).generatedPassword || (userAccount as any).motDePasse || 'Mot de passe configuré') : '•••••••• (Protégé)'}
                     </span>
                     <button
                       type="button"
@@ -943,11 +943,18 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
                         }
                       }}
                       className="p-1 rounded-lg hover:bg-slate-500/10 text-indigo-500 transition-colors cursor-pointer"
-                      title={isPasswordRevealed ? "Masquer le PIN" : "Afficher le PIN (Vérification admin)"}
+                      title={isPasswordRevealed ? "Masquer le mot de passe" : "Afficher le mot de passe (Vérification admin)"}
                     >
                       {isPasswordRevealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4 text-indigo-500" />}
                     </button>
                   </div>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <span className="text-slate-400 font-bold text-[10.5px]">Code PIN de Secours :</span>
+                  <span className="font-mono font-bold text-slate-400 tracking-widest">
+                    {userAccount.pinCode ? (isPasswordRevealed ? userAccount.pinCode : '••••••') : 'Non configuré'}
+                  </span>
                 </div>
 
                 {userAccount.derniereConnexion && (
@@ -974,7 +981,8 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
                     type="button"
                     onClick={() => {
                       const role = getRoleInfo(userAccount.role);
-                      const msg = `Bonjour ${userAccount.prenom || ''} ${userAccount.nom},\n\nVos accès officiels ECOLISA :\n• E-mail : ${userAccount.email}\n• Rôle : ${role.label}${userAccount.pinCode ? `\n• Code PIN : ${userAccount.pinCode}` : ''}\n\nVeuillez conserver ces informations en lieu sûr.`;
+                      const pwd = (userAccount as any).password || (userAccount as any).generatedPassword || (userAccount as any).motDePasse || '';
+                      const msg = `Bonjour ${userAccount.prenom || ''} ${userAccount.nom},\n\nVos accès officiels ECOLISA :\n• E-mail : ${userAccount.email}\n• Mot de passe : ${pwd || '[Mot de passe configuré]'}\n• Code PIN : ${userAccount.pinCode || 'Non configuré'}\n• Rôle : ${role.label}\n\nVeuillez conserver ces informations en lieu sûr.`;
                       const rawPhone = (userAccount.telephone || teacher.telephone || '').replace(/[^0-9]/g, '');
                       const phone = rawPhone.startsWith('243') ? rawPhone : (rawPhone ? `243${rawPhone.replace(/^0/, '')}` : '');
                       const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;

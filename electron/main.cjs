@@ -1270,7 +1270,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle('db-delete-user', (_, id) => { if (!db) return false; db.prepare('DELETE FROM users WHERE id=?').run(id); return true; });
 
-  // Verification des identifiants — multi-identifiant & temps constant
+  // Verification des identifiants — Mot de passe prioritaire & PIN de secours
   ipcMain.handle('db-verify-credentials', (_, identifier, password) => {
     if (!db) return null;
     const cleanId = String(identifier || '').trim();
@@ -1283,22 +1283,42 @@ function registerIpcHandlers() {
     }
 
     if (!r) {
-      // Faire un travail fictif pour égaliser le temps de réponse (anti-enumeration)
-      scryptSync(cleanPwd + 'fake_work', randomBytes(32).toString('hex'), 64);
+      // Égaliser le temps de réponse (anti-enumeration)
+      try { scryptSync(cleanPwd + 'fake_work', randomBytes(32).toString('hex'), 64); } catch {}
       return null;
     }
 
-    const masterPins = ['1234', '0000', 'admin', 'admin123', 'ecolisa2026', '8888'];
-    const isPinMatch = r.pin_code && (r.pin_code === cleanPwd || masterPins.includes(cleanPwd.toLowerCase()));
-    const isPassMatch = r.password_hash && verifyPassword(cleanPwd, r.password_hash);
-    const isMasterMatch = masterPins.includes(cleanPwd.toLowerCase());
+    // 1. Vérification par mot de passe sécurisé (Hash scrypt)
+    let isPassMatch = false;
+    if (r.password_hash) {
+      try {
+        isPassMatch = verifyPassword(cleanPwd, r.password_hash);
+      } catch {
+        isPassMatch = false;
+      }
+    }
 
-    if (!isPinMatch && !isPassMatch && !isMasterMatch) {
+    // 2. Vérification par code PIN (secours / accès rapide)
+    const isPinMatch = r.pin_code && (r.pin_code === cleanPwd);
+
+    // 3. Cas de migration : si le compte n'avait pas encore de mot de passe haché
+    //    et que l'utilisateur saisit son PIN ou son mot de passe initial, on met à jour son hash
+    if (!isPassMatch && !r.password_hash && isPinMatch) {
+      isPassMatch = true;
+      try {
+        db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(hashPassword(cleanPwd), r.id);
+      } catch {}
+    }
+
+    if (!isPassMatch && !isPinMatch) {
       return null;
     }
 
     // Mise à jour de la dernière connexion
-    db.prepare("UPDATE users SET derniere_connexion=datetime('now') WHERE id=?").run(r.id);
+    try {
+      db.prepare("UPDATE users SET derniere_connexion=datetime('now') WHERE id=?").run(r.id);
+    } catch {}
+
     return mapUser(r);
   });
 

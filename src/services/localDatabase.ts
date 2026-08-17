@@ -517,7 +517,7 @@ export class LocalDatabaseService {
       }
     }
 
-    // 2. Recherche multi-critères dans le registre unifié
+    // 2. Recherche multi-critères dans le registre unifié (Web / fallback)
     const users = await this.getUsers();
     const cleanIdLower = cleanId.toLowerCase();
     const cleanIdDigits = cleanId.replace(/[^0-9]/g, '');
@@ -541,18 +541,20 @@ export class LocalDatabaseService {
 
     if (!matchedUser) return null;
 
-    // 3. Vérification stricte du mot de passe / code PIN
-    //    Pas de master PINs universels — chaque compte est protégé par ses propres identifiants.
-    const userPass = (matchedUser as any).password || (matchedUser as any).generatedPassword || '';
+    // 3. Vérification sécurisée du mot de passe / code PIN
+    const userPass = (matchedUser as any).password || (matchedUser as any).generatedPassword || (matchedUser as any).motDePasse || '';
     const userPin = matchedUser.pinCode || '';
 
     const isMatch =
-      (cleanPwd !== '' && (userPass === cleanPwd || userPin === cleanPwd));
+      cleanPwd !== '' && (userPass === cleanPwd || userPin === cleanPwd || (userPass === '' && userPin === cleanPwd));
 
     if (isMatch) {
+      const nowIso = new Date().toISOString();
+      memUpdate<UserAccount>('users', matchedUser.id, { derniereConnexion: nowIso });
       return {
         ...matchedUser,
         role: normalizeRole(matchedUser.role),
+        derniereConnexion: nowIso,
       };
     }
 
@@ -566,7 +568,7 @@ export class LocalDatabaseService {
     return memAdd('users', fromDb || toSave);
   }
 
-  public static async updateUser(id: string, updates: Partial<UserAccount>): Promise<UserAccount | null> {
+  public static async updateUser(id: string, updates: Partial<UserAccount & { password?: string }>): Promise<UserAccount | null> {
     const normalizedUpdates = updates.role ? { ...updates, role: normalizeRole(updates.role) } : updates;
     const fromDb = await safeElectronCall<UserAccount | null>(() => api()?.updateUser(id, normalizedUpdates));
     if (fromDb) return memUpdate<UserAccount>('users', id, fromDb);
@@ -578,12 +580,9 @@ export class LocalDatabaseService {
     memDelete('users', id);
   }
 
-  public static async authenticateUser(email: string, pinCode?: string): Promise<UserAccount | null> {
-    const user = await this.getUserByEmail(email);
-    if (!user) return null;
-    // Vérification stricte du PIN — plus de passe-partout
-    if (user.pinCode && pinCode && user.pinCode !== pinCode) return null;
-    return user;
+  public static async authenticateUser(email: string, credential?: string): Promise<UserAccount | null> {
+    if (!email) return null;
+    return this.verifyCredentials(email, credential || '');
   }
 
   // ── ANNEES SCOLAIRES (SQLITE EXCLUSIF) ────────────────────────────────────
