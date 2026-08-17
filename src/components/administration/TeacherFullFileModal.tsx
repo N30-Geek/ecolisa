@@ -282,40 +282,80 @@ export const TeacherFullFileModal: React.FC<TeacherFullFileModalProps> = ({
 
           <div className="border-b border-slate-200"></div>
 
-          {/* SECTION III : CHARGES PÉDAGOGIQUES & AFFECTATIONS */}
+          {/* SECTION III : CHARGES PÉDAGOGIQUES OU RESPONSABILITÉS ADMINISTRATIVES */}
           <div className="space-y-3">
             <div className="bg-slate-100/90 border-l-4 border-indigo-600 px-3.5 py-1.5 rounded-r-md">
               <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                SECTION III : CHARGE PÉDAGOGIQUE, TITULARISATION & AFFECTATIONS
+                {['PREFET', 'DE', 'SURVEILLANT', 'COMPTABLE', 'ADMIN', 'PROMOTEUR_ADMIN', 'PREFET_DIRECTEUR', 'DIRECTEUR_ETUDES', 'DIRECTEUR_DISCIPLINE', 'SECRETAIRE', 'INTENDANT'].includes(teacher.role || '')
+                  ? 'SECTION III : ATTRIBUTIONS, DÉPARTEMENT & RESPONSABILITÉS ADMINISTRATIVES'
+                  : 'SECTION III : CHARGE PÉDAGOGIQUE, TITULARISATION & AFFECTATIONS'}
               </h3>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3.5 gap-x-6 pt-1">
-              <div>
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Cycle d'Enseignement Principal</span>
-                <span className="text-xs sm:text-sm font-black text-indigo-900">{teacher.cyclePrincipal || 'SECONDAIRE'}</span>
+            {['PREFET', 'DE', 'SURVEILLANT', 'COMPTABLE', 'ADMIN', 'PROMOTEUR_ADMIN', 'PREFET_DIRECTEUR', 'DIRECTEUR_ETUDES', 'DIRECTEUR_DISCIPLINE', 'SECRETAIRE', 'INTENDANT'].includes(teacher.role || '') ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3.5 gap-x-6 pt-1">
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Corps Administratif</span>
+                  <span className="text-xs sm:text-sm font-black text-indigo-900">Personnel Administratif & Direction EPST</span>
+                </div>
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Département / Service Rattaché</span>
+                  <span className="text-xs sm:text-sm font-black text-slate-900">{teacher.personnelEnCharge || 'Direction Générale'}</span>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Missions & Responsabilités</span>
+                  <span className="text-xs sm:text-sm font-semibold text-slate-800 leading-relaxed">
+                    {teacher.notesBiographiques || 'Supervision administrative, conformité institutionnelle et gestion des opérations scolaires.'}
+                  </span>
+                </div>
               </div>
-              <div>
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Titularisation de Classe / Promotion</span>
-                <span className="text-xs sm:text-sm font-black text-amber-800">
-                  {titularsList.length > 0 ? titularsList.join(', ') : 'Aucune titularisation de classe'}
-                </span>
+            ) : teacher.cyclePrincipal === 'MATERNELLE' || teacher.cyclePrincipal === 'PRIMAIRE' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3.5 gap-x-6 pt-1">
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Cycle d'Enseignement</span>
+                  <span className="text-xs sm:text-sm font-black text-emerald-800">Cycle {teacher.cyclePrincipal === 'MATERNELLE' ? 'Maternelle (Éveil)' : 'Primaire (Éducation de Base)'}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Salle Titularisée (Titulaire Exclusif)</span>
+                  <span className="text-xs sm:text-sm font-black text-emerald-900">{teacher.salleUniqueId || teacher.classeTitulaireId || 'Salle assignée'}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Régime d'Enseignement</span>
+                  <span className="text-xs sm:text-sm font-extrabold text-slate-900">Toutes les disciplines de la classe (Enseignant unique)</span>
+                </div>
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Volume Horaire Hebdomadaire</span>
+                  <span className="text-xs sm:text-sm font-black text-slate-900">{teacher.volumeHoraireHebdo || 25} Heures / semaine</span>
+                </div>
               </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3.5 gap-x-6 pt-1">
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Cycle d'Enseignement Principal</span>
+                  <span className="text-xs sm:text-sm font-black text-indigo-900">Secondaire (7è CTEB à 4è Humanités)</span>
+                </div>
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Titularisation de Promotion</span>
+                  <span className="text-xs sm:text-sm font-black text-amber-800">
+                    {titularsList.length > 0 ? titularsList.join(', ') : 'Enseignant Intervenant'}
+                  </span>
+                </div>
 
-              <div>
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Promotions d'Intervention Assignées</span>
-                <span className="text-xs sm:text-sm font-extrabold text-slate-900">{assignedClassesList}</span>
-              </div>
-              <div>
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Matières / Cours Attribués</span>
-                <span className="text-xs sm:text-sm font-extrabold text-slate-900">{coursesList}</span>
-              </div>
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Promotions d'Intervention</span>
+                  <span className="text-xs sm:text-sm font-extrabold text-slate-900">{assignedClassesList}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Matières & Cours Attribués</span>
+                  <span className="text-xs sm:text-sm font-extrabold text-slate-900">{coursesList}</span>
+                </div>
 
-              <div>
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Volume Horaire Hebdomadaire</span>
-                <span className="text-xs sm:text-sm font-black text-slate-900">{teacher.volumeHoraireHebdo || 18} Heures / semaine</span>
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Volume Horaire Hebdomadaire</span>
+                  <span className="text-xs sm:text-sm font-black text-slate-900">{teacher.volumeHoraireHebdo || 18} Heures / semaine</span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="border-b border-slate-200"></div>

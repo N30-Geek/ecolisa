@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Pencil, FileText, QrCode, User, BookOpen, Clock, DollarSign,
   Folder, Phone, Mail, MapPin, Calendar, Hash, Award, Check, RotateCw, Eye, EyeOff, ShieldCheck, Download, School, Printer, Lock, Key, ZoomIn, ZoomOut, X,
-  UserPlus, MessageSquare, KeyRound, AlertCircle, ShieldAlert
+  UserPlus, MessageSquare, KeyRound, AlertCircle, ShieldAlert, Briefcase, Users, UserCheck, GraduationCap, Baby, Layers
 } from 'lucide-react';
 import { MembrePersonnel, DocumentScolaire, UserAccount } from '../../types';
 import { LocalDatabaseService } from '../../services/localDatabase';
@@ -328,7 +328,7 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
           <div className="rounded-2xl p-1.5 border flex items-center gap-1 overflow-x-auto shadow-xs" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
             {[
               { id: 'identity', label: 'Identité & Origine RDC', icon: User },
-              { id: 'classes', label: 'Affectations & Charges', icon: BookOpen },
+              { id: 'classes', label: 'Contrat & Affectations', icon: BookOpen },
               { id: 'payroll', label: 'Taux Horaire & Paie', icon: Clock },
               { id: 'documents', label: 'Dossier & Documents', icon: Folder },
             ].map(t => {
@@ -490,145 +490,283 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
             </div>
           )}
 
-          {/* TAB 2 : AFFECTATIONS & CHARGES HORAIRES */}
-          {activeTab === 'classes' && (
-            <div className="space-y-5 animate-fade-in">
-              {/* Carte Titularisation & Responsabilité Principale */}
-              <div className="rounded-2xl border p-6 space-y-4" style={cardStyle}>
-                <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                    <Award className="w-4 h-4 text-amber-500" /> Responsabilité Pédagogique & Titularisation
-                  </h3>
-                  <span className={`px-3 py-1 rounded-full text-xs font-black border ${teacher.estTitulaire ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30' : 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
-                    {teacher.estTitulaire ? '★ Titulaire de Classe / Option' : 'Enseignant Intervenant'}
-                  </span>
-                </div>
+          {/* TAB 2 : CONTRAT & AFFECTATIONS (adaptatif selon rôle/cycle) */}
+          {activeTab === 'classes' && (() => {
+            const isAdminPersonnel = ['PREFET', 'DE', 'SURVEILLANT', 'COMPTABLE', 'ADMIN', 'PROMOTEUR_ADMIN',
+              'PREFET_DIRECTEUR', 'DIRECTEUR_ETUDES', 'DIRECTEUR_DISCIPLINE', 'SECRETAIRE', 'INTENDANT'].includes(teacher.role || '');
+            const isPrimMat = teacher.cyclePrincipal === 'MATERNELLE' || teacher.cyclePrincipal === 'PRIMAIRE';
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                  <div className="p-3.5 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <p className="text-[10px] font-black uppercase text-slate-400">CYCLE PRINCIPAL</p>
-                    <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 mt-1">
-                      {teacher.cyclePrincipal === 'MATERNELLE' ? 'Maternelle (Cycle d’Éveil)'
-                        : teacher.cyclePrincipal === 'PRIMAIRE' ? 'Primaire (Éducation de Base)'
-                        : 'Secondaire (CTEB & Humanités EPST)'}
-                    </p>
-                  </div>
-                  <div className="p-3.5 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <p className="text-[10px] font-black uppercase text-slate-400">TITULARISATION DE CLASSE / OPTION</p>
-                    <div className="text-sm font-black text-amber-500 mt-1 flex flex-wrap gap-1">
-                      {((teacher.classesTitularisees && teacher.classesTitularisees.length > 0)
-                        ? teacher.classesTitularisees
-                        : [teacher.salleUniqueId || teacher.classeTitulaireId || teacher.optionTitulaireCode].filter(Boolean)
-                      ).length > 0 ? (
-                        ((teacher.classesTitularisees && teacher.classesTitularisees.length > 0)
-                          ? teacher.classesTitularisees
-                          : [teacher.salleUniqueId || teacher.classeTitulaireId || teacher.optionTitulaireCode].filter(Boolean) as string[]
-                        ).map(t => (
-                          <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-black border border-amber-500/30">
-                            ★ {t}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-slate-400">— Aucun —</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="p-3.5 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <p className="text-[10px] font-black uppercase text-slate-400">VOLUME HORAIRE TOTAL</p>
-                    <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-1">{volumeHebdo} Heures / semaine</p>
-                  </div>
-                </div>
-              </div>
+            // ── Restructurer les cours en tableau { matiere, classe } ──
+            const courseEntries: { matiere: string; classe: string }[] = (teacher.coursAttribues || teacher.disciplines || []).map(c => {
+              const match = c.match(/^(.+?)\s+\((.+?)\)$/);
+              return match ? { matiere: match[1].trim(), classe: match[2].trim() } : { matiere: c.trim(), classe: 'TOUTES' };
+            });
 
-              {/* Disciplines & Matières Attribuées */}
-              <div className="rounded-2xl border p-6 space-y-4" style={cardStyle}>
-                <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 border-b pb-3 flex items-center gap-2" style={{ borderColor: 'var(--border)' }}>
-                  <BookOpen className="w-4 h-4" /> Matières & Cours Attribués (Disciplines EPST)
-                </h3>
+            // Grouper par classe
+            const byClasse: Record<string, string[]> = {};
+            courseEntries.forEach(({ matiere, classe }) => {
+              if (!byClasse[classe]) byClasse[classe] = [];
+              byClasse[classe].push(matiere);
+            });
 
-                {teacher.cyclePrincipal === 'MATERNELLE' || teacher.cyclePrincipal === 'PRIMAIRE' ? (
-                  <div className="p-4 rounded-xl border bg-indigo-500/10 border-indigo-500/30 text-xs space-y-1">
-                    <p className="font-black text-indigo-600 dark:text-indigo-400">Enseignant Unique Titulaire (Cycle Maternelle/Primaire)</p>
-                    <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-                      Conformément au régime EPST, l'enseignant titulaire de Maternelle / Primaire prend en charge l'intégralité des matières et activités pédagogiques de sa salle de classe ({teacher.salleUniqueId || teacher.classeTitulaireId || 'Classe Titularisée'}).
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-xs font-black uppercase text-slate-400 mb-2.5">Cours Dispensés au Secondaire / Humanités :</p>
-                    {((teacher.coursAttribues && teacher.coursAttribues.length > 0)
-                      ? teacher.coursAttribues
-                      : (teacher.disciplines && teacher.disciplines.length > 0)
-                        ? teacher.disciplines
-                        : []).length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {((teacher.coursAttribues && teacher.coursAttribues.length > 0)
-                          ? teacher.coursAttribues
-                          : (teacher.disciplines && teacher.disciplines.length > 0)
-                            ? teacher.disciplines
-                            : []).map(d => (
-                          <span key={d} className="px-3 py-1.5 rounded-xl text-xs font-black bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center gap-1.5">
-                            <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
-                            {d}
-                          </span>
-                        ))}
+            return (
+              <div className="space-y-5 animate-fade-in">
+
+                {/* ── CAS ADMIN ── */}
+                {isAdminPersonnel && (
+                  <>
+                    {/* Carte Rôle Officiel */}
+                    <div className="rounded-2xl border p-6 space-y-4 bg-gradient-to-br from-violet-500/5 to-transparent border-violet-500/20" style={cardStyle}>
+                      <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
+                        <h3 className="text-xs font-black uppercase tracking-wider text-violet-600 dark:text-violet-400 flex items-center gap-2">
+                          <Briefcase className="w-4 h-4" /> Poste & Rôle Officiel EPST
+                        </h3>
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/25">
+                          Personnel Administratif
+                        </span>
                       </div>
-                    ) : (
-                      <div className="p-4 rounded-xl border text-center space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                        <p className="text-xs font-semibold text-slate-400">Aucun cours spécifique attribué pour le moment.</p>
-                        <button
-                          type="button"
-                          onClick={() => setAffectationModalOpen(true)}
-                          className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md shadow-indigo-500/20 transition-all cursor-pointer"
-                        >
-                          + Affecter des Cours & Disciplines
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                        <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                          <p className="text-[10px] font-black uppercase text-slate-400">RÔLE OFFICIEL</p>
+                          <p className="text-base font-black text-violet-600 dark:text-violet-400 mt-1">
+                            {roleLabel[teacher.role] || teacher.role}
+                          </p>
+                        </div>
+                        <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                          <p className="text-[10px] font-black uppercase text-slate-400">DÉPARTEMENT / SERVICE</p>
+                          <p className="font-bold mt-1" style={{ color: 'var(--text-primary)' }}>
+                            {teacher.personnelEnCharge || 'Direction Générale'}
+                          </p>
+                        </div>
+                        <div className="p-4 rounded-xl border space-y-1 sm:col-span-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                          <p className="text-[10px] font-black uppercase text-slate-400">RESPONSABILITÉS & MISSIONS</p>
+                          <p className="font-semibold mt-1 leading-relaxed" style={{ color: 'var(--text-primary)' }}>
+                            {teacher.notesBiographiques || 'Aucune description de responsabilités enregistrée.'}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAffectationModalOpen(true)}
+                        className="mt-2 w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-black shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        <Briefcase className="w-4 h-4" /> Modifier Rôle & Responsabilités
+                      </button>
+                    </div>
+
+                    {/* Informations contrat admin */}
+                    <div className="rounded-2xl border p-6 space-y-4" style={cardStyle}>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 border-b pb-3 flex items-center gap-2" style={{ borderColor: 'var(--border)' }}>
+                        <FileText className="w-4 h-4" /> Informations Contractuelles
+                      </h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
+                        <div>
+                          <p className="font-bold text-slate-400 text-[10.5px]">TYPE DE CONTRAT</p>
+                          <p className="font-black mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.typeContrat || 'PERMANENT'}</p>
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-400 text-[10.5px]">DATE D'EMBAUCHE</p>
+                          <p className="font-bold mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.dateEmbauche || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-400 text-[10.5px]">N° INSS</p>
+                          <p className="font-bold font-mono mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.numeroINSS || 'Non renseigné'}</p>
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-400 text-[10.5px]">MATRICULE INTERNE</p>
+                          <p className="font-bold font-mono mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.matricule || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-400 text-[10.5px]">MATRICULE EPST</p>
+                          <p className="font-bold font-mono mt-0.5 text-indigo-600 dark:text-indigo-400">{teacher.numeroMatriculeEPST || '—'}</p>
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-400 text-[10.5px]">STATUT</p>
+                          <div className="mt-0.5">{statusBadge(teacher.statut)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* ── CAS MATERNELLE / PRIMAIRE ── */}
+                {!isAdminPersonnel && isPrimMat && (
+                  <>
+                    <div className="rounded-2xl border p-6 space-y-4 bg-gradient-to-br from-emerald-500/5 to-transparent border-emerald-500/20" style={cardStyle}>
+                      <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
+                        <h3 className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                          {teacher.cyclePrincipal === 'MATERNELLE' ? <Baby className="w-4 h-4" /> : <School className="w-4 h-4" />}
+                          Titularisation — Cycle {teacher.cyclePrincipal === 'MATERNELLE' ? 'Maternelle' : 'Primaire'}
+                        </h3>
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                          ★ Titulaire Exclusif de Salle
+                        </span>
+                      </div>
+
+                      {/* Salle titularisée */}
+                      <div className="p-5 rounded-xl border space-y-3 bg-emerald-500/10 border-emerald-500/25">
+                        <p className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400">SALLE DE CLASSE TITULARISÉE</p>
+                        <p className="text-xl font-black" style={{ color: 'var(--text-primary)' }}>
+                          {teacher.salleUniqueId || teacher.classeTitulaireId || <span className="text-slate-400 text-sm">Non renseignée</span>}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+                          Conformément au régime EPST, cet enseignant prend en charge <strong>toutes les matières</strong> de sa salle et en est le <strong>seul titulaire exclusif</strong>. Volume : <strong>{volumeHebdo} h/semaine</strong>.
+                        </p>
+                      </div>
+
+                      {/* Matières incluses */}
+                      <div>
+                        <p className="text-[10.5px] font-black uppercase text-slate-400 mb-2.5">
+                          Matières Pédagogiques du Cycle {teacher.cyclePrincipal === 'MATERNELLE' ? 'Maternelle' : 'Primaire'} :
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {(teacher.coursAttribues || teacher.disciplines || (
+                            teacher.cyclePrincipal === 'PRIMAIRE'
+                              ? ['Français (Lecture & Écriture)', 'Mathématiques / Calcul', 'Éveil Scientifique & Milieu', 'Éducation Civique & Morale', 'Calligraphie & Travaux Manuels', 'Éducation Physique']
+                              : ['Activités d\'Éveil & Psychomotricité', 'Langage & Communication Oral', 'Sensorialité & Formes', 'Dessin, Coloriage & Découpage', 'Chants & Rondes']
+                          )).map(m => (
+                            <span key={m} className="px-3 py-1.5 rounded-xl text-xs font-black bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 flex items-center gap-1.5">
+                              <Check className="w-3 h-3" /> {m}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button type="button" onClick={() => setAffectationModalOpen(true)}
+                        className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all">
+                        <UserCheck className="w-4 h-4" /> Modifier la Titularisation de Salle
+                      </button>
+                    </div>
+
+                    {/* Contrat */}
+                    <div className="rounded-2xl border p-6 space-y-4" style={cardStyle}>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 border-b pb-3 flex items-center gap-2" style={{ borderColor: 'var(--border)' }}>
+                        <FileText className="w-4 h-4" /> Informations Contractuelles
+                      </h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
+                        <div><p className="font-bold text-slate-400 text-[10.5px]">TYPE CONTRAT</p><p className="font-black mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.typeContrat || 'PERMANENT'}</p></div>
+                        <div><p className="font-bold text-slate-400 text-[10.5px]">DATE EMBAUCHE</p><p className="font-bold mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.dateEmbauche || '—'}</p></div>
+                        <div><p className="font-bold text-slate-400 text-[10.5px]">N° INSS</p><p className="font-bold font-mono mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.numeroINSS || '—'}</p></div>
+                        <div><p className="font-bold text-slate-400 text-[10.5px]">GRADE</p><p className="font-bold mt-0.5" style={{ color: 'var(--text-primary)' }}>{(teacher.grade ? gradeLabel[teacher.grade] : undefined) || teacher.grade || '—'}</p></div>
+                        <div><p className="font-bold text-slate-400 text-[10.5px]">SPÉCIALITÉ</p><p className="font-bold mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.specialite || '—'}</p></div>
+                        <div><p className="font-bold text-slate-400 text-[10.5px]">DIPLÔME</p><p className="font-bold mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.diplome || teacher.qualification || '—'}</p></div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* ── CAS SECONDAIRE ── */}
+                {!isAdminPersonnel && !isPrimMat && (
+                  <>
+                    {/* Titularisation */}
+                    <div className="rounded-2xl border p-6 space-y-4" style={cardStyle}>
+                      <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
+                        <h3 className="text-xs font-black uppercase tracking-wider text-amber-500 flex items-center gap-2">
+                          <Award className="w-4 h-4" /> Titularisation de Classe (Secondaire EPST)
+                        </h3>
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black border ${
+                          teacher.estTitulaire
+                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                            : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                        }`}>
+                          {teacher.estTitulaire ? `★ ${(teacher.classesTitularisees || []).length} Classe(s) Titularisée(s)` : 'Enseignant Intervenant'}
+                        </span>
+                      </div>
+
+                      {(teacher.classesTitularisees && teacher.classesTitularisees.length > 0) ? (
+                        <div className="flex flex-wrap gap-2">
+                          {teacher.classesTitularisees.map(cls => (
+                            <div key={cls} className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs font-black">
+                              <Award className="w-3.5 h-3.5 text-amber-500" /> {cls}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 font-medium italic">Aucune classe titularisée — Enseignant intervenant.</p>
+                      )}
+
+                      <div className="grid grid-cols-3 gap-3 pt-1">
+                        <div className="p-3 rounded-xl border text-center" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                          <p className="text-[10px] font-black uppercase text-slate-400">VOLUME / SEMAINE</p>
+                          <p className="text-base font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{volumeHebdo}h</p>
+                        </div>
+                        <div className="p-3 rounded-xl border text-center" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                          <p className="text-[10px] font-black uppercase text-slate-400">CLASSES INTERVENUES</p>
+                          <p className="text-base font-black text-indigo-600 dark:text-indigo-400 mt-0.5">{Object.keys(byClasse).filter(c => c !== 'TOUTES').length}</p>
+                        </div>
+                        <div className="p-3 rounded-xl border text-center" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                          <p className="text-[10px] font-black uppercase text-slate-400">MATIÈRES TOTAL</p>
+                          <p className="text-base font-black text-violet-600 dark:text-violet-400 mt-0.5">{courseEntries.length}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tableau Matières × Classe */}
+                    <div className="rounded-2xl border p-6 space-y-4" style={cardStyle}>
+                      <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
+                        <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
+                          <BookOpen className="w-4 h-4" /> Affectations Matières × Classes (Régime Secondaire)
+                        </h3>
+                        <button type="button" onClick={() => setAffectationModalOpen(true)}
+                          className="px-3 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-xs font-extrabold hover:bg-indigo-500/20 cursor-pointer">
+                          Modifier
                         </button>
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
 
-              {/* Assignation aux Classes */}
-              <div className="rounded-2xl border p-6 space-y-4" style={cardStyle}>
-                <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
-                  <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
-                    <School className="w-4 h-4" /> Promotions & Classes Assignées
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setAffectationModalOpen(true)}
-                    className="px-3 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-xs font-extrabold hover:bg-indigo-500/20 transition-colors cursor-pointer"
-                  >
-                    Gérer les Affectations
-                  </button>
-                </div>
-                {(teacher.classesAssignees || []).length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {(teacher.classesAssignees || []).map(cls => (
-                      <div key={cls} className="p-3 rounded-xl border flex items-center justify-between" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                        <span className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>{cls}</span>
-                        <Check className="w-4 h-4 text-emerald-500" />
+                      {courseEntries.length > 0 ? (
+                        <div className="space-y-4">
+                          {Object.entries(byClasse).map(([classe, matieres]) => (
+                            <div key={classe}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="px-3 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/25 text-indigo-600 dark:text-indigo-400 text-xs font-black flex items-center gap-1.5">
+                                  <School className="w-3 h-3" />
+                                  {classe === 'TOUTES' ? 'Toutes les classes' : classe}
+                                </div>
+                                <span className="text-[10px] text-slate-400 font-semibold">{matieres.length} matière(s)</span>
+                              </div>
+                              <div className="flex flex-wrap gap-2 pl-2">
+                                {matieres.map(m => (
+                                  <span key={m} className="px-3 py-1.5 rounded-xl text-xs font-black bg-slate-500/10 border flex items-center gap-1.5" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+                                    <BookOpen className="w-3 h-3 text-indigo-500" /> {m}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-5 rounded-xl border text-center space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                          <GraduationCap className="w-10 h-10 text-slate-400 mx-auto" />
+                          <p className="text-xs font-bold text-slate-400">Aucune affectation de cours enregistrée.</p>
+                          <button type="button" onClick={() => setAffectationModalOpen(true)}
+                            className="mt-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-xs cursor-pointer">
+                            + Affecter des Matières par Classe
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Contrat secondaire */}
+                    <div className="rounded-2xl border p-6 space-y-4" style={cardStyle}>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 border-b pb-3 flex items-center gap-2" style={{ borderColor: 'var(--border)' }}>
+                        <FileText className="w-4 h-4" /> Informations Contractuelles
+                      </h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
+                        <div><p className="font-bold text-slate-400 text-[10.5px]">TYPE CONTRAT</p><p className="font-black mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.typeContrat || 'PERMANENT'}</p></div>
+                        <div><p className="font-bold text-slate-400 text-[10.5px]">DATE EMBAUCHE</p><p className="font-bold mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.dateEmbauche || '—'}</p></div>
+                        <div><p className="font-bold text-slate-400 text-[10.5px]">N° INSS</p><p className="font-bold font-mono mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.numeroINSS || '—'}</p></div>
+                        <div><p className="font-bold text-slate-400 text-[10.5px]">GRADE ACADÉMIQUE</p><p className="font-bold mt-0.5" style={{ color: 'var(--text-primary)' }}>{(teacher.grade ? gradeLabel[teacher.grade] : undefined) || teacher.grade || '—'}</p></div>
+                        <div><p className="font-bold text-slate-400 text-[10.5px]">SPÉCIALITÉ</p><p className="font-bold mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.specialite || '—'}</p></div>
+                        <div><p className="font-bold text-slate-400 text-[10.5px]">DIPLÔME</p><p className="font-bold mt-0.5" style={{ color: 'var(--text-primary)' }}>{teacher.diplome || teacher.qualification || '—'}</p></div>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-4 rounded-xl border text-center space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <p className="text-xs text-slate-400 font-medium">
-                      {teacher.salleUniqueId ? `Classe Titulaire : ${teacher.salleUniqueId}` : "Aucune classe spécifique sélectionnée."}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setAffectationModalOpen(true)}
-                      className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-extrabold hover:bg-indigo-700 transition-colors cursor-pointer"
-                    >
-                      + Attribuer des Classes
-                    </button>
-                  </div>
+                    </div>
+                  </>
                 )}
+
               </div>
-            </div>
-          )}
+            );
+          })()}
+
 
           {/* TAB 3 : TAUX HORAIRE & FICHE DE PAIE */}
           {activeTab === 'payroll' && (
