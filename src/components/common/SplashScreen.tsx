@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   School, 
-  ShieldCheck, 
-  Database, 
-  HardDrive, 
-  Cpu, 
-  CheckCircle2, 
   Sparkles, 
-  Lock,
+  Database, 
+  ShieldCheck, 
+  GraduationCap, 
+  Wallet, 
+  FileSpreadsheet, 
   Layers,
   Award
 } from 'lucide-react';
@@ -19,43 +18,42 @@ interface SplashScreenProps {
   schoolConfig?: SchoolConfig | null;
 }
 
-interface InitStep {
-  id: string;
-  label: string;
-  sublabel: string;
+interface Slide {
+  id: number;
+  tag: string;
+  title: string;
+  subtitle: string;
   icon: React.ElementType;
 }
 
-const INIT_STEPS: InitStep[] = [
+const SLIDES: Slide[] = [
   {
-    id: 'db',
-    label: 'Connexion SQLite relationnelle',
-    sublabel: 'Mode WAL haute performance activé',
-    icon: Database,
+    id: 1,
+    tag: 'OFFLINE-FIRST RDC',
+    title: 'ECOLISA Enterprise ERP',
+    subtitle: 'La suite logicielle complète pour la gestion scolaire d’excellence',
+    icon: School,
   },
   {
-    id: 'security',
-    label: 'Vérification de sécurité & chiffrement',
-    sublabel: 'Hachage scrypt 512-bit & conformité locale',
+    id: 2,
+    tag: 'SÉCURITÉ & DONNÉES LOCALES',
+    title: 'Moteur SQLite & 512-bit scrypt',
+    subtitle: 'Vos données restent 100% sous votre contrôle et sécurisées sur votre machine',
     icon: ShieldCheck,
   },
   {
-    id: 'epst',
-    label: 'Chargement des référentiels EPST',
-    sublabel: 'Grilles horaires, cycles & options nationales',
-    icon: Award,
+    id: 3,
+    tag: 'CONFORMITÉ NATIONALE EPST',
+    title: 'Pédagogie, Bulletins & Palmarès',
+    subtitle: 'Gestion des cotes, présences, grilles horaires et référentiels officiels',
+    icon: GraduationCap,
   },
   {
-    id: 'offline',
-    label: 'Moteur Offline-First & Caisse',
-    sublabel: 'Plan comptable OHADA & stockage local',
-    icon: HardDrive,
-  },
-  {
-    id: 'auth',
-    label: 'Initialisation du portail d\'accès',
-    sublabel: 'Prêt pour l\'authentification multi-profils',
-    icon: Lock,
+    id: 4,
+    tag: 'COMPTABILITÉ & TRÉSORERIE',
+    title: 'Caisse, Frais & Rapprochements',
+    subtitle: 'Suivi des paiements, reçus thermiques, plan comptable et gestion des dépenses',
+    icon: Wallet,
   },
 ];
 
@@ -64,183 +62,167 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
   isDarkMode = true,
   schoolConfig,
 }) => {
-  const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
-  const [progress, setProgress] = useState<number>(10);
+  const [activeSlide, setActiveSlide] = useState<number>(0);
+  const [progress, setProgress] = useState<number>(8);
   const [isFinishing, setIsFinishing] = useState<boolean>(false);
-  const [hwid, setHwid] = useState<string>('HWID-ED25519-RDC-LOCAL');
+  const [statusText, setStatusText] = useState<string>('Démarrage des services locaux...');
 
+  // Diapositives automatiques
   useEffect(() => {
-    if ((window as any).electronAPI?.getHwid) {
-      (window as any).electronAPI.getHwid().then((h: string) => {
-        if (h) setHwid(h);
-      });
-    }
+    const slideInterval = setInterval(() => {
+      setActiveSlide((prev) => (prev + 1) % SLIDES.length);
+    }, 1800);
+    return () => clearInterval(slideInterval);
   }, []);
 
+  // Progression fluide du chargement
   useEffect(() => {
-    const totalSteps = INIT_STEPS.length;
-    const stepDuration = 320; // ms par étape pour une transition fluide et professionnelle
+    const steps = [
+      { at: 20, text: 'Vérification du stockage SQLite...' },
+      { at: 45, text: 'Chargement des référentiels EPST & Devises...' },
+      { at: 70, text: 'Synchronisation du plan comptable & Caisse...' },
+      { at: 90, text: 'Préparation du portail d’accès multi-comptes...' },
+      { at: 100, text: 'Prêt ! Lancement de votre espace...' },
+    ];
 
-    const interval = setInterval(() => {
-      setCurrentStepIndex((prev) => {
-        const next = prev + 1;
-        if (next < totalSteps) {
-          setProgress(Math.round(((next + 1) / totalSteps) * 90));
-          return next;
-        } else {
-          clearInterval(interval);
-          setProgress(100);
-          setIsFinishing(true);
-          setTimeout(() => {
-            if (onLoaded) onLoaded();
-          }, 350);
-          return prev;
-        }
-      });
-    }, stepDuration);
+    let stepIdx = 0;
+    const progressInterval = setInterval(() => {
+      if (stepIdx < steps.length) {
+        setProgress(steps[stepIdx].at);
+        setStatusText(steps[stepIdx].text);
+        stepIdx++;
+      } else {
+        clearInterval(progressInterval);
+        setIsFinishing(true);
+        setTimeout(() => {
+          if (onLoaded) onLoaded();
+        }, 400);
+      }
+    }, 600);
 
-    return () => clearInterval(interval);
+    return () => clearInterval(progressInterval);
   }, [onLoaded]);
 
-  const currentStep = INIT_STEPS[Math.min(currentStepIndex, INIT_STEPS.length - 1)];
+  const slide = SLIDES[activeSlide];
+  const SlideIcon = slide.icon;
 
   return (
     <div 
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-center select-none overflow-hidden transition-opacity duration-300 ${
-        isFinishing ? 'opacity-0 scale-98' : 'opacity-100 scale-100'
+      className={`fixed inset-0 z-50 flex items-center justify-center select-none overflow-hidden transition-all duration-500 ${
+        isFinishing ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
       } ${
-        isDarkMode 
-          ? 'bg-slate-950 text-slate-100' 
-          : 'bg-slate-50 text-slate-900'
-      }`}
-      style={{
-        background: isDarkMode 
-          ? 'radial-gradient(ellipse 80% 80% at 50% -20%, rgba(99, 102, 241, 0.15), rgba(2, 6, 23, 1))'
-          : 'radial-gradient(ellipse 80% 80% at 50% -20%, rgba(99, 102, 241, 0.08), rgba(248, 250, 252, 1))'
-      }}
+        isDarkMode ? 'bg-slate-950/90 text-slate-100' : 'bg-slate-900/60 text-slate-900'
+      } backdrop-blur-xl`}
     >
-      {/* Halo lumineux d'ambiance */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-600/10 blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-violet-600/10 blur-3xl pointer-events-none" />
+      {/* Halo lumineux d'ambiance en arrière-plan */}
+      <div className="absolute w-[500px] h-[500px] rounded-full bg-indigo-600/20 blur-[120px] pointer-events-none" />
 
-      {/* Conteneur principal Splash */}
-      <div className="w-full max-w-md px-6 flex flex-col items-center text-center relative z-10">
-        
-        {/* LOGO AVEC ANNEAU LUMINEUX PULSANT */}
-        <div className="relative mb-6">
-          <div className="absolute inset-0 rounded-3xl bg-indigo-500/20 blur-xl animate-pulse" />
-          <div className="relative w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 p-0.5 shadow-2xl flex items-center justify-center border border-indigo-400/30">
-            {schoolConfig?.logoUrl ? (
-              <img 
-                src={schoolConfig.logoUrl} 
-                alt="Logo" 
-                className="w-full h-full object-cover rounded-[22px]" 
-              />
-            ) : (
-              <div className="w-full h-full rounded-[22px] bg-slate-950/40 backdrop-blur-xs flex items-center justify-center">
-                <School className="w-10 h-10 text-white animate-bounce-subtle" />
-              </div>
-            )}
-          </div>
+      {/* POPUP / MODAL FLOTTANT MINIMALISTE & PROFESSIONNEL */}
+      <div 
+        className={`w-full max-w-[460px] mx-4 rounded-3xl border shadow-2xl overflow-hidden relative flex flex-col transition-all duration-300 ${
+          isDarkMode 
+            ? 'bg-slate-900/95 border-slate-800 text-slate-100 shadow-indigo-950/50' 
+            : 'bg-white/95 border-slate-200 text-slate-900 shadow-slate-900/20'
+        }`}
+        style={{ backdropFilter: 'blur(24px)' }}
+      >
+        {/* Contenu supérieur centré */}
+        <div className="px-8 pt-9 pb-6 flex flex-col items-center text-center">
           
-          <div className="absolute -bottom-2 -right-2 p-1.5 rounded-xl bg-emerald-500 text-white shadow-md border-2 border-slate-950">
-            <Sparkles className="w-3.5 h-3.5" />
+          {/* GRAND LOGO MAJESTUEUX CENTRÉ AVEC ÉCLAT */}
+          <div className="relative mb-6">
+            <div className="absolute inset-0 rounded-3xl bg-indigo-500/25 blur-xl animate-pulse" />
+            <div className="relative w-24 h-24 rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 p-1 shadow-xl flex items-center justify-center border border-indigo-400/40">
+              {schoolConfig?.logoUrl ? (
+                <img 
+                  src={schoolConfig.logoUrl} 
+                  alt="Logo Établissement" 
+                  className="w-full h-full object-cover rounded-[20px]" 
+                />
+              ) : (
+                <div className="w-full h-full rounded-[20px] bg-slate-950/30 backdrop-blur-xs flex items-center justify-center">
+                  <School className="w-12 h-12 text-white drop-shadow-md animate-bounce-subtle" />
+                </div>
+              )}
+            </div>
+            
+            <div className="absolute -bottom-1.5 -right-1.5 p-1.5 rounded-xl bg-emerald-500 text-white shadow-md border-2 border-slate-900">
+              <Sparkles className="w-3.5 h-3.5" />
+            </div>
           </div>
-        </div>
 
-        {/* TITRE & BADGE D'IDENTITÉ */}
-        <div className="space-y-1.5 mb-8">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
-            <span>OFFLINE-FIRST ERP SCOLAIRE</span>
-            <span className="w-1 h-1 rounded-full bg-indigo-400" />
-            <span>RDC</span>
-          </div>
-
-          <h1 className="text-2xl font-black tracking-tight mt-2 bg-gradient-to-r from-indigo-400 via-violet-300 to-indigo-200 bg-clip-text text-transparent">
+          {/* TITRE ÉCOLE OU NOM DE L'APPLICATION */}
+          <h1 className="text-xl font-black tracking-tight mb-1">
             {schoolConfig?.schoolName || 'ECOLISA Enterprise'}
           </h1>
-          
-          <p className="text-xs font-semibold text-slate-400">
-            Système Intégré de Gestion Pédagogique & Financière
+          <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-400 mb-6">
+            {schoolConfig?.secopeCode ? `SECOPE : ${schoolConfig.secopeCode}` : 'ERP Scolaire Certifié · RDC'}
           </p>
+
+          {/* ZONE DIAPOSITIVES (SLIDES DE PRÉSENTATION ANIMÉES) */}
+          <div className={`w-full min-h-[100px] p-4 rounded-2xl border transition-all duration-300 flex flex-col items-center justify-center text-center ${
+            isDarkMode 
+              ? 'bg-slate-950/50 border-slate-800/80' 
+              : 'bg-slate-50 border-slate-200'
+          }`}>
+            <div key={slide.id} className="animate-fade-in flex flex-col items-center">
+              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-black tracking-widest bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 mb-2">
+                <SlideIcon className="w-3 h-3" />
+                <span>{slide.tag}</span>
+              </div>
+              <h2 className="text-sm font-extrabold tracking-tight text-slate-100 dark:text-slate-100">
+                {slide.title}
+              </h2>
+              <p className="text-xs text-slate-400 dark:text-slate-400 mt-1 max-w-xs leading-relaxed font-medium">
+                {slide.subtitle}
+              </p>
+            </div>
+          </div>
+
+          {/* INDICATEURS POINTS DES DIAPOS */}
+          <div className="flex items-center justify-center gap-1.5 mt-4 mb-2">
+            {SLIDES.map((s, idx) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setActiveSlide(idx)}
+                className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                  idx === activeSlide 
+                    ? 'w-6 bg-indigo-500 shadow-xs shadow-indigo-500/50' 
+                    : 'w-1.5 bg-slate-700/60 hover:bg-slate-600'
+                }`}
+                aria-label={`Diapo ${idx + 1}`}
+              />
+            ))}
+          </div>
+
         </div>
 
-        {/* CARTE DE DIAGNOSTIC & INITIALISATION */}
-        <div className={`w-full p-4 rounded-2xl border backdrop-blur-md mb-6 transition-all ${
-          isDarkMode 
-            ? 'bg-slate-900/70 border-slate-800 shadow-xl' 
-            : 'bg-white/80 border-slate-200 shadow-lg'
+        {/* PIED DE PAGE : STATUT & BARRE DE CHARGEMENT ÉPURÉE TOUT EN BAS */}
+        <div className={`px-8 pt-3 pb-6 border-t ${
+          isDarkMode ? 'bg-slate-950/60 border-slate-800/80' : 'bg-slate-50/80 border-slate-200'
         }`}>
-          {/* Étape courante */}
-          <div className="flex items-center gap-3.5 mb-3.5">
-            <div className="p-2.5 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 shrink-0">
-              <currentStep.icon className="w-4 h-4 animate-spin-slow" />
-            </div>
-            <div className="flex-1 text-left min-w-0">
-              <p className="text-xs font-black text-slate-200 truncate">
-                {currentStep.label}
-              </p>
-              <p className="text-[10.5px] font-medium text-slate-400 truncate">
-                {currentStep.sublabel}
-              </p>
-            </div>
-            <span className="text-xs font-black text-indigo-400 shrink-0">
+          {/* Label de statut & pourcentage */}
+          <div className="flex items-center justify-between text-xs font-semibold mb-2.5">
+            <span className="text-slate-400 text-[11.5px] truncate max-w-[280px]">
+              {statusText}
+            </span>
+            <span className="font-black text-indigo-400">
               {progress}%
             </span>
           </div>
 
-          {/* BARRE DE PROGRESSION ULTRA-MODERNE */}
-          <div className="w-full h-2 rounded-full bg-slate-800/80 overflow-hidden p-0.5 border border-slate-700/50 relative">
+          {/* BARRE DE CHARGEMENT FLUIDE TOUT EN BAS */}
+          <div className="w-full h-2 rounded-full bg-slate-800/80 overflow-hidden p-0.5 border border-slate-700/40 relative shadow-inner">
             <div 
-              className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-400 transition-all duration-300 relative shadow-sm"
+              className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-400 transition-all duration-500 relative"
               style={{ width: `${progress}%` }}
             >
-              <div className="absolute inset-0 bg-white/20 animate-shimmer" />
+              <div className="absolute inset-0 bg-white/25 animate-shimmer" />
             </div>
           </div>
-
-          {/* LISTE DES MICRO-ÉTAPES TERMINÉES */}
-          <div className="grid grid-cols-5 gap-1 mt-3 pt-2.5 border-t border-slate-800/60">
-            {INIT_STEPS.map((step, idx) => {
-              const isDone = idx < currentStepIndex;
-              const isCurrent = idx === currentStepIndex;
-              return (
-                <div 
-                  key={step.id} 
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
-                    isDone 
-                      ? 'bg-emerald-500 shadow-xs shadow-emerald-500/50' 
-                      : isCurrent 
-                      ? 'bg-indigo-500 animate-pulse' 
-                      : 'bg-slate-800'
-                  }`}
-                  title={step.label}
-                />
-              );
-            })}
-          </div>
         </div>
 
-        {/* BADGES CERTIFICATIFS EN BAS */}
-        <div className="flex items-center justify-center flex-wrap gap-2 text-[10px] font-bold text-slate-500">
-          <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900/60 border border-slate-800/80">
-            <Database className="w-3 h-3 text-indigo-400" />
-            <span>SQLite WAL</span>
-          </div>
-          <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900/60 border border-slate-800/80">
-            <Lock className="w-3 h-3 text-emerald-400" />
-            <span>512-bit scrypt</span>
-          </div>
-          <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900/60 border border-slate-800/80">
-            <Cpu className="w-3 h-3 text-amber-400" />
-            <span>v1.0 Enterprise</span>
-          </div>
-        </div>
-
-        {/* HWID Hardware Tag discret */}
-        <p className="text-[9.5px] font-mono text-slate-600 dark:text-slate-500 mt-4 tracking-tight">
-          ID MACHINE : {hwid.slice(0, 24)}...
-        </p>
       </div>
     </div>
   );
