@@ -27,14 +27,29 @@ import {
   Scale,
   Bell,
   Check,
+  CheckCircle,
   X,
   Filter,
   RotateCcw,
   AlertCircle,
+  AlertTriangle,
   Search,
   FileText,
   Flag,
-  Banknote
+  Banknote,
+  Plus,
+  Wallet,
+  Receipt,
+  Settings,
+  FileSpreadsheet,
+  Briefcase,
+  CalendarDays,
+  CalendarCheck,
+  ClipboardList,
+  BookMarked,
+  Bus,
+  Utensils,
+  Lock
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -66,11 +81,13 @@ import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { formatCurrency } from '../../utils/currency';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { SchoolCalendar } from './SchoolCalendar';
+import { CalendarExportModal } from './CalendarExportModal';
+import { CalendarEventData } from '../../utils/calendarHelpers';
 import { Pagination } from '../common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
 
 import { RôleSystème } from '../../types';
-import { hasTabAccess, ROLE_DETAILS } from '../../utils/permissions';
+import { hasTabAccess, ROLE_DETAILS, normalizeAccessCycle } from '../../utils/permissions';
 
 // ── Props du Dashboard Exécutif ────────────────────────────────────────────
 interface ExecutiveDashboardProps {
@@ -82,8 +99,8 @@ interface ExecutiveDashboardProps {
 
 // ── Tooltip personnalisé Recharts 100% Adaptatif Mode Clair & Sombre ───────
 const CustomTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
   const { format } = useSchoolConfig();
+  if (!active || !payload?.length) return null;
   return (
     <div
       className="rounded-xl p-3 text-xs font-semibold shadow-xl border backdrop-blur-md"
@@ -150,121 +167,72 @@ const KpiCard: React.FC<KpiCardProps> = ({
   delay = 0,
   onViewDetails,
 }) => {
-  const colorThemes: Record<string, { gradient: string; shadow: string; glow: string; text: string; bgSoft: string; borderSoft: string }> = {
-    indigo: {
-      gradient: 'bg-gradient-to-br from-indigo-500 to-indigo-600',
-      shadow: 'shadow-indigo-500/25',
-      glow: 'rgba(99, 102, 241, 0.08)',
-      text: 'text-indigo-600 dark:text-indigo-400',
-      bgSoft: 'bg-indigo-500/10',
-      borderSoft: 'border-indigo-500/20',
-    },
-    emerald: {
-      gradient: 'bg-gradient-to-br from-emerald-500 to-emerald-600',
-      shadow: 'shadow-emerald-500/25',
-      glow: 'rgba(16, 185, 129, 0.08)',
-      text: 'text-emerald-600 dark:text-emerald-400',
-      bgSoft: 'bg-emerald-500/10',
-      borderSoft: 'border-emerald-500/20',
-    },
-    amber: {
-      gradient: 'bg-gradient-to-br from-amber-500 to-amber-600',
-      shadow: 'shadow-amber-500/25',
-      glow: 'rgba(245, 158, 11, 0.08)',
-      text: 'text-amber-600 dark:text-amber-400',
-      bgSoft: 'bg-amber-500/10',
-      borderSoft: 'border-amber-500/20',
-    },
-    rose: {
-      gradient: 'bg-gradient-to-br from-rose-500 to-rose-600',
-      shadow: 'shadow-rose-500/25',
-      glow: 'rgba(239, 68, 68, 0.08)',
-      text: 'text-rose-600 dark:text-rose-400',
-      bgSoft: 'bg-rose-500/10',
-      borderSoft: 'border-rose-500/20',
-    },
-    violet: {
-      gradient: 'bg-gradient-to-br from-purple-500 to-indigo-600',
-      shadow: 'shadow-purple-500/25',
-      glow: 'rgba(168, 85, 247, 0.08)',
-      text: 'text-purple-600 dark:text-purple-400',
-      bgSoft: 'bg-purple-500/10',
-      borderSoft: 'border-purple-500/20',
-    },
-    sky: {
-      gradient: 'bg-gradient-to-br from-cyan-500 to-blue-600',
-      shadow: 'shadow-cyan-500/25',
-      glow: 'rgba(6, 182, 212, 0.08)',
-      text: 'text-cyan-600 dark:text-cyan-400',
-      bgSoft: 'bg-cyan-500/10',
-      borderSoft: 'border-cyan-500/20',
-    },
+  const colorMap: Record<string, string> = {
+    indigo: '#6366f1',
+    emerald: '#10b981',
+    amber: '#f59e0b',
+    rose: '#f43f5e',
+    violet: '#8b5cf6',
+    sky: '#0ea5e9',
   };
-
-  const theme = colorThemes[iconColor] || colorThemes.indigo;
+  const color = colorMap[iconColor] || colorMap.indigo;
 
   return (
     <div
-      className="animate-fade-in p-5 rounded-2xl border transition-all duration-300 relative overflow-hidden group flex flex-col justify-between cursor-default"
+      className="animate-fade-in p-4 rounded-2xl border transition-all duration-250 relative overflow-hidden group flex flex-col justify-between cursor-default"
       style={{
         animationDelay: `${delay}ms`,
         background: 'var(--bg-surface)',
         borderColor: 'var(--border)',
-        boxShadow: 'var(--elevation-1)',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
       }}
       onMouseEnter={(e) => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--elevation-3)';
-        (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(99,102,241,0.35)';
+        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 24px -6px rgba(0,0,0,0.08), 0 4px 12px -4px rgba(0,0,0,0.04)';
+        (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(99,102,241,0.25)';
         (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
       }}
       onMouseLeave={(e) => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--elevation-1)';
+        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)';
         (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)';
         (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
       }}
     >
-      {/* Soft background aura */}
-      <div
-        className="absolute -top-12 -right-12 w-32 h-32 rounded-full pointer-events-none blur-2xl transition-opacity duration-300 opacity-60 group-hover:opacity-100"
-        style={{ background: theme.glow }}
-      />
-
       <div className="relative z-10">
         {/* Header: Label & Icon */}
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1 space-y-1">
-            <span className="text-[11px] font-black uppercase tracking-wider block text-slate-500 dark:text-slate-400 truncate">
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <span className="text-[10px] font-semibold tracking-wide block text-slate-500 dark:text-slate-400 truncate">
               {label}
             </span>
-            <span className="text-xs font-semibold block text-slate-400 dark:text-slate-500 truncate">
+            <span className="text-[11px] font-medium block text-slate-400 dark:text-slate-500 truncate">
               {sublabel}
             </span>
           </div>
 
           <div
-            className={`w-11 h-11 rounded-2xl flex items-center justify-center text-white shadow-md transition-all duration-300 group-hover:scale-110 shrink-0 ${theme.gradient} ${theme.shadow}`}
+            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-250 group-hover:scale-105"
+            style={{ background: `${color}10`, color }}
           >
-            <Icon className="w-5 h-5 text-white" />
+            <Icon className="w-[18px] h-[18px]" />
           </div>
         </div>
 
         {/* Value and Trend */}
-        <div className="mt-4">
-          <div className="text-3xl font-black tracking-tight leading-none tabular-nums" style={{ color: 'var(--text-primary)' }}>
+        <div className="mt-3">
+          <div className="text-2xl font-bold tracking-tight leading-none tabular-nums" style={{ color: 'var(--text-primary)' }}>
             {value}
           </div>
 
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-2.5 flex items-center gap-2">
             <span
-              className={`inline-flex items-center gap-1.5 text-xs font-black px-2.5 py-1 rounded-lg border ${
-                trendNeutral
-                  ? 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20'
-                  : trendUp
-                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
-                  : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30'
-              }`}
+              className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-md border"
+              style={{
+                background: trendNeutral ? 'rgba(100,116,139,0.08)' : trendUp ? 'rgba(16,185,129,0.08)' : 'rgba(244,63,94,0.08)',
+                borderColor: trendNeutral ? 'rgba(100,116,139,0.18)' : trendUp ? 'rgba(16,185,129,0.18)' : 'rgba(244,63,94,0.18)',
+                color: trendNeutral ? '#64748b' : trendUp ? '#059669' : '#e11d48',
+              }}
             >
-              {!trendNeutral && (trendUp ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />)}
+              {!trendNeutral && (trendUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />)}
               {trend}
             </span>
           </div>
@@ -276,15 +244,13 @@ const KpiCard: React.FC<KpiCardProps> = ({
         <button
           type="button"
           onClick={onViewDetails}
-          className="relative z-10 mt-4 pt-3 border-t w-full flex items-center justify-between text-xs font-black transition-all duration-200 cursor-pointer group/btn select-none"
+          className="relative z-10 mt-3 pt-2.5 border-t w-full flex items-center justify-between text-[11px] font-medium transition-all duration-200 cursor-pointer group/btn select-none"
           style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
         >
           <span className="group-hover/btn:text-indigo-600 dark:group-hover/btn:text-indigo-400 transition-colors">
-            Consulter les détails
+            Détails
           </span>
-          <div className="w-6 h-6 rounded-lg bg-slate-500/10 group-hover/btn:bg-indigo-600 group-hover/btn:text-white flex items-center justify-center transition-all duration-200 text-slate-500 dark:text-slate-400">
-            <ArrowRight className="w-3.5 h-3.5 group-hover/btn:translate-x-0.5 transition-transform" />
-          </div>
+          <ArrowRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover/btn:translate-x-0.5" style={{ color: 'var(--text-muted)' }} />
         </button>
       )}
     </div>
@@ -292,17 +258,6 @@ const KpiCard: React.FC<KpiCardProps> = ({
 };
 
 // ── COMPOSANT CALENDRIER SCOLAIRE OFFICIEL RDC 2026-2027 (MINEDU-NC) ──────────
-interface CalendarEventData {
-  id: string;
-  titre: string;
-  subtitre?: string;
-  dateDebut: string;
-  dateFin?: string;
-  categorie: 'RENTRÉE_CLÔTURE' | 'EXAMENS_JURY' | 'VACANCES' | 'FÉRIÉ';
-  publicCible: 'TOUS' | 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_EXETAT';
-  highlight?: boolean;
-}
-
 const OFFICIAL_RDC_EVENTS: CalendarEventData[] = [
   {
     id: 'rdc-1',
@@ -442,31 +397,8 @@ const RdcOfficialSchoolCalendar: React.FC<{ events?: CalendarEventData[] }> = ({
     return (events && events.length > 0) ? events : OFFICIAL_RDC_EVENTS;
   }, [events]);
 
-  const handleExportPDF = () => {
-    const element = document.getElementById('rdc-official-calendar-print-section');
-    if (!element) {
-      window.print();
-      return;
-    }
-
-    try {
-      import('html2pdf.js').then((html2pdfModule) => {
-        const html2pdf = html2pdfModule.default || html2pdfModule;
-        const opt = {
-          margin: 8,
-          filename: `Calendrier_Scolaire_Officiel_RDC_2026_2027_MINEDU.pdf`,
-          image: { type: 'jpeg' as const, quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
-          jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
-        };
-        html2pdf().set(opt).from(element).save();
-      }).catch(() => {
-        window.print();
-      });
-    } catch (e) {
-      window.print();
-    }
-  };
+  const [showExportModal, setShowExportModal] = useState(false);
+  const handleExportPDF = () => setShowExportModal(true);
 
   const filteredEvents = useMemo(() => {
     return allEvents.filter(ev => {
@@ -592,7 +524,7 @@ const RdcOfficialSchoolCalendar: React.FC<{ events?: CalendarEventData[] }> = ({
                   <span className={`px-2 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border ${badgeColor}`}>
                     {ev.categorie.replace('_', ' ')}
                   </span>
-                  {ev.publicCible !== 'TOUS' && (
+                  {ev.publicCible && ev.publicCible !== 'TOUS' && (
                     <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20">
                       {ev.publicCible.replace('_', ' ')}
                     </span>
@@ -630,6 +562,16 @@ const RdcOfficialSchoolCalendar: React.FC<{ events?: CalendarEventData[] }> = ({
           end={eventsPagination.end}
           onPageChange={eventsPagination.setPage}
           onPageSizeChange={eventsPagination.setPageSize}
+        />
+      )}
+
+      {showExportModal && (
+        <CalendarExportModal
+          events={allEvents}
+          title="Calendrier Scolaire Officiel RDC"
+          subtitle="MINEDU-NC / Programme national 2026-2027"
+          anneeScolaire="2026-2027"
+          onClose={() => setShowExportModal(false)}
         />
       )}
     </div>
@@ -692,239 +634,6 @@ const mockDailyAttendance: CycleAttendanceData[] = [
     garconsPresents: 0,
   },
 ];
-
-const DailyAttendanceByCategory: React.FC<{ selectedCycleFilter: string; data?: DashboardStats['attendanceByCycle'] }> = ({ selectedCycleFilter, data }) => {
-  const cycleData = useMemo(() => {
-    return data && data.length > 0 ? data : [];
-  }, [data]);
-
-  const activeCycles = useMemo(() => {
-    const secondaire = new Set(['CTEB', 'HUMANITES']);
-    return cycleData.filter(c => {
-      if (!c.isPresentInSchool) return false;
-      if (selectedCycleFilter === 'ALL') return true;
-      if (selectedCycleFilter === 'SECONDAIRE') return secondaire.has(c.code);
-      return c.code === selectedCycleFilter;
-    });
-  }, [cycleData, selectedCycleFilter]);
-
-  const { paginated: paginatedActiveCycles, ...activeCyclesPagination } = usePagination(activeCycles, { defaultPageSize: 6 });
-
-  const totals = useMemo(() => {
-    return activeCycles.reduce(
-      (acc, c) => ({
-        effectifTotal: acc.effectifTotal + c.effectifTotal,
-        presentsTotal: acc.presentsTotal + c.presentsTotal,
-        fillesTotal: acc.fillesTotal + c.fillesTotal,
-        fillesPresents: acc.fillesPresents + c.fillesPresents,
-        garconsTotal: acc.garconsTotal + c.garconsTotal,
-        garconsPresents: acc.garconsPresents + c.garconsPresents,
-      }),
-      { effectifTotal: 0, presentsTotal: 0, fillesTotal: 0, fillesPresents: 0, garconsTotal: 0, garconsPresents: 0 }
-    );
-  }, [activeCycles]);
-
-  const hasAnyPointage = activeCycles.some(c => c.hasPointage);
-
-  const pctGlobal = totals.effectifTotal > 0 ? Math.round((totals.presentsTotal / totals.effectifTotal) * 1000) / 10 : 0;
-  const pctFilles = totals.fillesTotal > 0 ? Math.round((totals.fillesPresents / totals.fillesTotal) * 1000) / 10 : 0;
-  const pctGarcons = totals.garconsTotal > 0 ? Math.round((totals.garconsPresents / totals.garconsTotal) * 1000) / 10 : 0;
-
-  return (
-    <div
-      className="p-5 rounded-2xl border shadow-xs animate-fade-in space-y-4 transition-colors"
-      style={{
-        background: 'var(--bg-surface)',
-        borderColor: 'var(--border)',
-      }}
-    >
-      {/* En-tête de section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b" style={{ borderColor: 'var(--border)' }}>
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shrink-0">
-            <UserCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-              Présence du Jour par Catégorie & Cycle Scolaire
-            </h3>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              Assiduité en temps réel répertoriée par genre et filtrée par cycles actifs
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          {hasAnyPointage ? (
-            <span className="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Assiduité Globale: {pctGlobal}% ({totals.presentsTotal.toLocaleString()} / {totals.effectifTotal.toLocaleString()})
-            </span>
-          ) : (
-            <span className="px-3 py-1 rounded-lg text-xs font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              Pointage en attente aujourd'hui (0 / {totals.effectifTotal.toLocaleString()})
-            </span>
-          )}
-        </div>
-      </div>
-
-      {totals.effectifTotal === 0 ? (
-        <div className="p-6 rounded-xl border text-center space-y-2" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-          <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucune Donnée d'Assiduité Enregistrée</p>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-            Le registre de présence quotidienne par cycle est vierge. Inscrivez des élèves et commencez l'enregistrement de l'assiduité.
-          </p>
-        </div>
-      ) : (
-        <>
-          {/* Cartes Synthèse par Catégorie (Filles vs Garçons) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* CARTE FILLES */}
-        <div
-          className="p-4 rounded-xl border space-y-2.5 transition-colors"
-          style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 shrink-0">
-                <Users className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider block" style={{ color: 'var(--text-primary)' }}>Élèves Filles Présentes</span>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Parité & Assiduité Féminine</span>
-              </div>
-            </div>
-            <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">{hasAnyPointage ? `${pctFilles}%` : '—'}</span>
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
-              <span>{totals.fillesPresents.toLocaleString()} présente{totals.fillesPresents > 1 ? 's' : ''}</span>
-              <span>sur {totals.fillesTotal.toLocaleString()} inscrite{totals.fillesTotal > 1 ? 's' : ''}</span>
-            </div>
-            <div className="w-full h-2 rounded-full bg-slate-500/15 overflow-hidden">
-              <div
-                className="h-full bg-indigo-600 rounded-full transition-all duration-500"
-                style={{ width: `${pctFilles}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* CARTE GARÇONS */}
-        <div
-          className="p-4 rounded-xl border space-y-2.5 transition-colors"
-          style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 shrink-0">
-                <UserCheck className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider block" style={{ color: 'var(--text-primary)' }}>Élèves Garçons Présents</span>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Assiduité Masculine</span>
-              </div>
-            </div>
-            <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">{hasAnyPointage ? `${pctGarcons}%` : '—'}</span>
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
-              <span>{totals.garconsPresents.toLocaleString()} présent{totals.garconsPresents > 1 ? 's' : ''}</span>
-              <span>sur {totals.garconsTotal.toLocaleString()} inscrit{totals.garconsTotal > 1 ? 's' : ''}</span>
-            </div>
-            <div className="w-full h-2 rounded-full bg-slate-500/15 overflow-hidden">
-              <div
-                className="h-full bg-indigo-600 rounded-full transition-all duration-500"
-                style={{ width: `${pctGarcons}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Détail par Cycle Scolaire Actif */}
-      <div className="pt-2">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
-          Répartition par Cycle Présent dans l'Établissement ({activeCycles.length} cycle{activeCycles.length > 1 ? 's' : ''})
-        </h4>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {paginatedActiveCycles.map((c) => {
-            const pctCycle = c.effectifTotal > 0 ? Math.round((c.presentsTotal / c.effectifTotal) * 1000) / 10 : 0;
-            const pctF = c.fillesTotal > 0 ? Math.round((c.fillesPresents / c.fillesTotal) * 1000) / 10 : 0;
-            const pctG = c.garconsTotal > 0 ? Math.round((c.garconsPresents / c.garconsTotal) * 1000) / 10 : 0;
-
-            return (
-              <div
-                key={c.id}
-                className="p-3.5 rounded-xl border shadow-xs space-y-3 transition-colors"
-                style={{
-                  background: 'var(--bg-sunken)',
-                  borderColor: 'var(--border)',
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <School className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                    <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{c.nom}</span>
-                  </div>
-                  {c.hasPointage ? (
-                    <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                      {pctCycle}%
-                    </span>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                      Non pointé
-                    </span>
-                  )}
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                    <span>Présents aujourd'hui</span>
-                    <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{c.presentsTotal.toLocaleString()} / {c.effectifTotal.toLocaleString()}</span>
-                  </div>
-                  <div className="w-full h-1.5 rounded-full bg-slate-500/15 overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pctCycle}%` }} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
-                  <div className="p-2 rounded-lg border border-slate-500/15 bg-slate-500/5">
-                    <p className="font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400">Filles</p>
-                    <p className="font-bold text-xs mt-0.5" style={{ color: 'var(--text-primary)' }}>{c.fillesPresents.toLocaleString()} <span className="text-[10px] text-indigo-600 dark:text-indigo-400">({c.hasPointage ? `${pctF}%` : '—'})</span></p>
-                  </div>
-
-                  <div className="p-2 rounded-lg border border-slate-500/15 bg-slate-500/5">
-                    <p className="font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400">Garçons</p>
-                    <p className="font-bold text-xs mt-0.5" style={{ color: 'var(--text-primary)' }}>{c.garconsPresents.toLocaleString()} <span className="text-[10px] text-indigo-600 dark:text-indigo-400">({c.hasPointage ? `${pctG}%` : '—'})</span></p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        {activeCycles.length > 0 && (
-          <Pagination
-            currentPage={activeCyclesPagination.page}
-            totalPages={activeCyclesPagination.totalPages}
-            total={activeCyclesPagination.total}
-            pageSize={activeCyclesPagination.pageSize}
-            start={activeCyclesPagination.start}
-            end={activeCyclesPagination.end}
-            onPageChange={activeCyclesPagination.setPage}
-            onPageSizeChange={activeCyclesPagination.setPageSize}
-          />
-        )}
-      </div>
-      </>
-      )}
-    </div>
-  );
-};
 
 // ── Composant d'Alerte Guidée ───────────────────────────────────────────────
 interface AlertItemProps {
@@ -1006,13 +715,41 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   // Les enseignants et titulaires ne voient que la pédagogie, pas les finances
   const isTeacherRole = userRole === 'ENSEIGNANT' || userRole === 'TITULAIRE';
 
-  const [activeSubTab, setActiveSubTab] = useState<'executive' | 'calendar' | 'pedagogy' | 'finances' | 'viescolaire'>(
+  // Accès aux vues et données financières selon le rôle
+  const canSeeAdvancedFinance = userRole === 'PROMOTEUR_ADMIN' || ROLE_DETAILS[userRole]?.canManageFinance;
+  const canSeeFinancialActivity = userRole === 'PROMOTEUR_ADMIN' || hasTabAccess(userRole, 'invoices') || hasTabAccess(userRole, 'cash');
+
+  // Cycles accessibles au compte connecté (promoteur/admin = null = tout)
+  const currentUser = LocalDatabaseService.getCurrentUser();
+  const accessibleCycles = useMemo<string[] | null>(() => {
+    if (!currentUser || currentUser.role === 'PROMOTEUR_ADMIN') return null;
+    const cycles = new Set<string>();
+    (currentUser.cyclesAssignes || []).forEach(c => {
+      const normalized = normalizeAccessCycle(c);
+      if (normalized) cycles.add(normalized);
+    });
+    if (currentUser.cycle) {
+      const normalized = normalizeAccessCycle(currentUser.cycle);
+      if (normalized) cycles.add(normalized);
+    }
+    return Array.from(cycles);
+  }, [currentUser?.id, currentUser?.cycle, currentUser?.cyclesAssignes?.join(',')]);
+
+  const accessibleCycleOptions = useMemo<SelectOption[]>(() => {
+    if (accessibleCycles === null) return cycleOptions;
+    return [
+      { value: 'ALL', label: 'Tous les cycles', icon: School },
+      ...cycleOptions.filter(c => c.value !== 'ALL' && accessibleCycles.includes(c.value)),
+    ];
+  }, [accessibleCycles]);
+
+
+  const [activeSubTab, setActiveSubTab] = useState<'executive' | 'calendar' | 'pedagogy' | 'finances'>(
     isTeacherRole ? 'pedagogy' : 'executive'
   );
-  const [chartMode, setChartMode] = useState<'BOTH' | 'COTES' | 'PRESENCE'>('BOTH');
 
   const availableSubTabs = useMemo(() => {
-    const tabs: Array<{ id: 'executive' | 'calendar' | 'pedagogy' | 'finances' | 'viescolaire'; label: string; icon: React.ElementType }> = [];
+    const tabs: Array<{ id: 'executive' | 'calendar' | 'pedagogy' | 'finances'; label: string; icon: React.ElementType }> = [];
 
     // Les enseignants n'ont pas accès à la synthèse exécutive (données financières globales)
     if (!isTeacherRole) {
@@ -1025,17 +762,21 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       tabs.push({ id: 'pedagogy', label: isTeacherRole ? 'Mes Cours & Classes' : 'Pédagogie & Performances', icon: GraduationCap });
     }
 
-    // Les enseignants n'ont PAS accès aux finances
-    if (!isTeacherRole && (hasTabAccess(userRole, 'invoices') || hasTabAccess(userRole, 'cash') || userRole === 'PROMOTEUR_ADMIN')) {
+    // Les finances avancées (tableau de bord financier) sont réservées aux rôles financiers
+    if (!isTeacherRole && canSeeAdvancedFinance) {
       tabs.push({ id: 'finances', label: 'Finances & Recouvrement', icon: DollarSign });
     }
 
-    if (!isTeacherRole && (hasTabAccess(userRole, 'discipline') || userRole === 'DIRECTEUR_DISCIPLINE' || userRole === 'PREFET_DIRECTEUR' || userRole === 'PROMOTEUR_ADMIN')) {
-      tabs.push({ id: 'viescolaire', label: 'Vie Scolaire & Présences', icon: Scale });
-    }
-
     return tabs;
-  }, [userRole, isTeacherRole]);
+  }, [userRole, isTeacherRole, canSeeAdvancedFinance]);
+
+  useEffect(() => {
+    const subtab = sessionStorage.getItem('ecolisa_dashboard_subtab');
+    if (subtab && availableSubTabs.some(t => t.id === subtab)) {
+      setActiveSubTab(subtab as any);
+    }
+    sessionStorage.removeItem('ecolisa_dashboard_subtab');
+  }, [availableSubTabs]);
 
   useEffect(() => {
     if (!availableSubTabs.some(t => t.id === activeSubTab)) {
@@ -1108,8 +849,10 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
     };
     load();
     
-    // Auto-refresh léger toutes les 3 secondes pour synchroniser la base de données en direct
-    const interval = setInterval(load, 3000);
+    // Rafraîchissement périodique (1 minute) uniquement quand l'onglet est visible
+    const interval = setInterval(() => {
+      if (!document.hidden && mounted) load();
+    }, 60000);
     return () => { mounted = false; clearInterval(interval); };
   }, [selectedSchoolYearId]);
 
@@ -1118,6 +861,11 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   const [selectedOptionFilter, setSelectedOptionFilter] = useState<string>('ALL');
   const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('FULL');
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  // Filtres du graphique de performance
+  const [perfCategory, setPerfCategory] = useState<string>('MOYENNE');
+  const [perfClasse, setPerfClasse] = useState<string>('ALL');
+  const [perfSalle, setPerfSalle] = useState<string>('ALL');
 
   // Valeurs par défaut utilisées pour le badge "filtres actifs" et la réinitialisation
   const defaultSchoolYearId = activeYearId;
@@ -1132,15 +880,87 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   const stats = useMemo<DashboardStats>(() => computeDashboardStats(filteredData, displayCurrency, currencies), [filteredData, displayCurrency, currencies]);
 
   const filteredRecentActivity = useMemo(() => {
-    if (!isTeacherRole) return stats.recentActivity;
-    // Les enseignants ne voient pas les transactions financières (paiements de minerval, etc.)
+    // Les paiements/encaissements ne sont visibles que par les rôles habilités aux finances
+    if (!isTeacherRole && canSeeFinancialActivity) return stats.recentActivity;
     return stats.recentActivity.filter(a => !a.id.startsWith('pay-'));
-  }, [stats.recentActivity, isTeacherRole]);
+  }, [stats.recentActivity, isTeacherRole, canSeeFinancialActivity]);
 
-  const { paginated: paginatedRecentActivity, ...recentActivityPagination } = usePagination(filteredRecentActivity, { defaultPageSize: 5 });
+  const { paginated: paginatedRecentActivity, ...recentActivityPagination } = usePagination(filteredRecentActivity, { defaultPageSize: 10 });
 
   const { paginated: paginatedUpcomingEvents, ...upcomingEventsPagination } = usePagination(stats.upcomingEvents, { defaultPageSize: 5 });
   const { paginated: paginatedTopUnpaid, ...topUnpaidPagination } = usePagination(stats.topUnpaidInvoices, { defaultPageSize: 5 });
+
+  // ALERTES RÉELLES DU DASHBOARD
+  const dashboardAlerts = useMemo(() => {
+    const alerts: { id: string; type: 'warning' | 'danger' | 'info'; title: string; desc: string; action?: string; onClick?: () => void }[] = [];
+
+    if (canSeeFinancialActivity && stats.topUnpaidInvoices.length > 0) {
+      const totalUnpaid = stats.topUnpaidInvoices.reduce((sum, inv) => sum + inv.montant, 0);
+      alerts.push({
+        id: 'unpaid',
+        type: 'danger',
+        title: `${stats.topUnpaidInvoices.length} impayé${stats.topUnpaidInvoices.length > 1 ? 's' : ''}`,
+        desc: `Total restant à recouvrer : ${format(totalUnpaid)}`,
+        action: 'Factures',
+        onClick: () => onNavigate && onNavigate('invoices'),
+      });
+    }
+
+    if (stats.presenceRate > 0 && stats.presenceRate < 80) {
+      alerts.push({
+        id: 'presence',
+        type: 'warning',
+        title: 'Présence faible',
+        desc: `Taux d'assiduité du jour à ${stats.presenceRate}%`,
+        action: 'Pointage',
+        onClick: () => onNavigate && onNavigate('pointage'),
+      });
+    }
+
+    if (stats.averageScore === 0 && stats.totalStudents > 0) {
+      alerts.push({
+        id: 'nocotes',
+        type: 'info',
+        title: 'Cotes à saisir',
+        desc: 'Aucune cote n\'a encore été enregistrée.',
+        action: 'Cotes',
+        onClick: () => onNavigate && onNavigate('grades'),
+      });
+    }
+
+    if (stats.totalStudents === 0) {
+      alerts.push({
+        id: 'nostudents',
+        type: 'warning',
+        title: 'Aucun élève inscrit',
+        desc: 'Commencez par inscrire un élève pour cette année.',
+        action: 'Inscription',
+        onClick: () => onOpenRegistration ? onOpenRegistration() : onNavigate && onNavigate('students'),
+      });
+    }
+
+    if (filteredData.students.some(s => s.statut === 'EXCLU' || s.statut === 'TRANSFERE')) {
+      const count = filteredData.students.filter(s => s.statut === 'EXCLU' || s.statut === 'TRANSFERE').length;
+      alerts.push({
+        id: 'inactifs',
+        type: 'warning',
+        title: `${count} élève${count > 1 ? 's' : ''} à suivre`,
+        desc: 'Des élèves sont marqués exclus ou transférés.',
+        action: 'Élèves',
+        onClick: () => onNavigate && onNavigate('students'),
+      });
+    }
+
+    return alerts;
+  }, [stats, filteredData.students, format, onNavigate, onOpenRegistration, canSeeFinancialActivity]);
+
+  // Repli si le cycle sélectionné n'est plus accessible (changement de compte)
+  useEffect(() => {
+    if (selectedCycleFilter === 'ALL') return;
+    if (!accessibleCycleOptions.some(o => o.value === selectedCycleFilter)) {
+      setSelectedCycleFilter('ALL');
+    }
+  }, [selectedCycleFilter, accessibleCycleOptions]);
 
   // GESTION DU CHANGEMENT DE CYCLE
   const handleCycleChange = (cycle: string) => {
@@ -1222,16 +1042,6 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
     }
   }, [periodOptions, selectedPeriodFilter]);
 
-  const periodFilterMonths: Record<string, number[]> = {
-    FULL: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-    S1: [0, 1, 2, 3, 4],
-    S2: [5, 6, 7, 8, 9, 10],
-    T1: [0, 1, 2],
-    T2: [3, 4, 5],
-    T3: [6, 7, 8],
-    T4: [9, 10],
-  };
-
   const periodFilterQuarters: Record<string, string[]> = {
     FULL: ['T1', 'T2', 'T3', 'T4'],
     S1: ['T1', 'T2'],
@@ -1242,25 +1052,119 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
     T4: ['T4'],
   };
 
-  const donneesPerformance = useMemo(() => {
-    const allowed = periodFilterMonths[selectedPeriodFilter] || periodFilterMonths['FULL'];
-    return stats.monthlyPerformance.filter((_, idx) => allowed.includes(idx));
-  }, [stats.monthlyPerformance, selectedPeriodFilter]);
+  const performanceClasseOptions = useMemo<SelectOption[]>(() => {
+    const all = [{ value: 'ALL', label: 'Toutes les classes', icon: School }];
+    const classes = [...data.classes]
+      .sort((a, b) => a.nom.localeCompare(b.nom))
+      .map(c => ({ value: c.id, label: c.nom, icon: School }));
+    return [...all, ...classes];
+  }, [data.classes]);
 
-  const donneesFinancieres = useMemo(() => {
-    const allowed = periodFilterQuarters[selectedPeriodFilter] || periodFilterQuarters['FULL'];
-    return stats.quarterlyFinance.filter((q) => allowed.some((a) => q.trimestre.startsWith(a)));
-  }, [stats.quarterlyFinance, selectedPeriodFilter]);
+  const performanceSalleOptions = useMemo<SelectOption[]>(() => {
+    const all = [{ value: 'ALL', label: 'Toutes les salles', icon: Users }];
+    const salles = Array.from(new Set(data.classes.flatMap(c => [c.salle, ...(c.salles || [])]).filter(Boolean)))
+      .sort()
+      .map(s => ({ value: s as string, label: s as string, icon: Users }));
+    return [...all, ...salles];
+  }, [data.classes]);
+
+  const performanceCategoryOptions: SelectOption[] = [
+    { value: 'MOYENNE', label: 'Moyenne générale', icon: Award },
+    { value: 'REUSSITE', label: 'Taux de réussite', icon: CheckCircle },
+    { value: 'PRESENCE', label: 'Assiduité', icon: UserCheck },
+  ];
+
+  const donneesPerformance = useMemo(() => {
+    const selectedDate = new Date(`${selectedDateFilter}T00:00:00`);
+    const year = selectedDate.getFullYear();
+    const month = selectedDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const classById = new Map(filteredData.classes.map(c => [c.id, c]));
+    const studentById = new Map(filteredData.students.map(s => [s.id, s]));
+
+    const getClassFor = (record: any) => {
+      if (record.classeId) return classById.get(record.classeId);
+      const student = studentById.get(record.eleveId);
+      if (student?.classId) return classById.get(student.classId);
+      if (student?.nomClasse) return filteredData.classes.find(c => c.nom === student.nomClasse);
+      return undefined;
+    };
+
+    const matchCote = (c: any) => {
+      const cls = getClassFor(c);
+      const classId = cls?.id || c.classeId;
+      if (perfClasse !== 'ALL' && classId !== perfClasse) return false;
+      if (perfSalle !== 'ALL' && cls) {
+        if (cls.salle !== perfSalle && !(cls.salles || []).includes(perfSalle)) return false;
+      }
+      return true;
+    };
+    const matchPresence = (p: any) => {
+      const cls = getClassFor(p);
+      const classId = cls?.id || p.classeId;
+      if (perfClasse !== 'ALL' && classId !== perfClasse) return false;
+      if (perfSalle !== 'ALL' && cls) {
+        if (cls.salle !== perfSalle && !(cls.salles || []).includes(perfSalle)) return false;
+      }
+      return true;
+    };
+
+    const dailyMap = new Map<string, { cotes: number[]; presences: any[] }>();
+    filteredData.cotes.filter(matchCote).forEach(c => {
+      const date = c.dateCote;
+      if (!date) return;
+      const entry = dailyMap.get(date) || { cotes: [], presences: [] };
+      entry.cotes.push((c.score / (c.maxScore || 100)) * 100);
+      dailyMap.set(date, entry);
+    });
+    filteredData.presences.filter(matchPresence).forEach(p => {
+      const date = p.dateJour;
+      if (!date) return;
+      const entry = dailyMap.get(date) || { cotes: [], presences: [] };
+      entry.presences.push(p);
+      dailyMap.set(date, entry);
+    });
+
+    return Array.from({ length: daysInMonth }, (_, index) => {
+      const day = index + 1;
+      const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const point = dailyMap.get(date) || { cotes: [], presences: [] };
+      const moyenneCotes = point.cotes.length > 0 ? Math.round((point.cotes.reduce((s, v) => s + v, 0) / point.cotes.length) * 10) / 10 : 0;
+      const tauxPresence = point.presences.length > 0
+        ? Math.round((point.presences.filter((p: any) => p.statut === 'PRESENT' || p.statut === 'RETARD' || p.statut === 'JUSTIFIE').length / point.presences.length) * 1000) / 10
+        : 0;
+      const tauxReussite = point.cotes.length > 0
+        ? Math.round((point.cotes.filter(v => v >= 50).length / point.cotes.length) * 1000) / 10
+        : 0;
+      return {
+        mois: String(day).padStart(2, '0'),
+        date,
+        moyenneCotes,
+        tauxPresence,
+        tauxReussite,
+      };
+    });
+  }, [filteredData.cotes, filteredData.presences, filteredData.classes, filteredData.students, selectedDateFilter, perfClasse, perfSalle]);
 
   const donneesCycle = useMemo(() => {
     const total = Math.max(1, stats.totalStudents);
     const secondaire = new Set(['SECONDAIRE', 'HUMANITES', 'CTEB']);
     let items = stats.studentsByCycle.map((c) => ({ ...c, pct: `${Math.round((c.value / total) * 100)}%` }));
+
+    // Filtrer par les cycles accessibles à l'utilisateur (sauf promoteur/admin)
+    if (accessibleCycles !== null) {
+      items = items.filter((c) =>
+        accessibleCycles.includes(c.code) ||
+        (c.code === 'SECONDAIRE' && accessibleCycles.some((ac) => secondaire.has(ac)))
+      );
+    }
+
     if (selectedCycleFilter !== 'ALL') {
       items = items.filter((c) => c.code === selectedCycleFilter || (selectedCycleFilter === 'SECONDAIRE' && secondaire.has(c.code)));
     }
     return items;
-  }, [stats.studentsByCycle, stats.totalStudents, selectedCycleFilter]);
+  }, [stats.studentsByCycle, stats.totalStudents, selectedCycleFilter, accessibleCycles]);
 
   const cycleTotal = useMemo(() => donneesCycle.reduce((sum, c) => sum + c.value, 0), [donneesCycle]);
 
@@ -1289,6 +1193,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
           desc: `Gestion des encaissements USD/CDF, bilans de caisse et facturation de la scolarité (${yrNom ? `Année ${yrNom}` : 'En cours'}).`,
         };
       case 'PREFET_DIRECTEUR':
+      case 'DIRECTEUR_ECOLE':
       case 'DIRECTEUR_ETUDES':
       case 'CENSEUR':
         return {
@@ -1391,7 +1296,8 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       ];
     }
 
-    if (userRole === 'PREFET_DIRECTEUR' || userRole === 'DIRECTEUR_ETUDES' || userRole === 'CENSEUR') {
+    if (userRole === 'PREFET_DIRECTEUR' || userRole === 'DIRECTEUR_ECOLE' || userRole === 'DIRECTEUR_ETUDES' || userRole === 'CENSEUR') {
+      const hasPointage = stats.presenceRate > 0 || (stats.attendanceByCycle || []).some(c => c.hasPointage);
       return [
         {
           label: 'Effectif Élèves Inscrit',
@@ -1406,14 +1312,15 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
         },
         {
           label: 'Taux de Présence du Jour',
-          sublabel: 'Assiduité répertoriée aujourd\'hui',
-          value: `${stats.presenceRate}%`,
-          trend: stats.presenceRate >= 85 ? 'Excellente présence' : 'Absences à suivre',
-          trendUp: stats.presenceRate >= 85,
+          sublabel: hasPointage ? 'Assiduité répertoriée aujourd\'hui' : 'Aucun pointage enregistré',
+          value: hasPointage ? `${stats.presenceRate.toFixed(1)}%` : '—',
+          trend: hasPointage ? (stats.presenceRate >= 85 ? 'Excellente présence' : 'Absences à suivre') : 'Pointage en attente',
+          trendUp: hasPointage && stats.presenceRate >= 85,
+          trendNeutral: !hasPointage,
           icon: UserCheck,
-          iconColor: 'emerald',
+          iconColor: hasPointage ? 'emerald' : 'amber',
           delay: 60,
-          onViewDetails: () => onNavigate && onNavigate('apprenants'),
+          onViewDetails: () => onNavigate && onNavigate('pointage'),
         },
         {
           label: 'Moyenne Générale École',
@@ -1492,7 +1399,8 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
     if (userRole === 'DIRECTEUR_DISCIPLINE') {
       const absencesJour = monthlyPresenceStats.absences || 0;
       const retardsJour = monthlyPresenceStats.retards || 0;
-      const assiduite = stats.presenceRate || 95;
+      const hasPointage = stats.presenceRate > 0 || (stats.attendanceByCycle || []).some(c => c.hasPointage);
+      const assiduite = hasPointage ? stats.presenceRate : 0;
       return [
         {
           label: 'Registre Conduite & Sanctions',
@@ -1507,14 +1415,15 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
         },
         {
           label: 'Taux d’Assiduité École',
-          sublabel: 'Présence générale des élèves',
-          value: `${assiduite}%`,
-          trend: assiduite >= 90 ? 'Excellente assiduité' : 'Vigilance requise',
-          trendUp: assiduite >= 90,
+          sublabel: hasPointage ? 'Présence générale des élèves' : 'Aucun pointage enregistré',
+          value: hasPointage ? `${assiduite.toFixed(1)}%` : '—',
+          trend: hasPointage ? (assiduite >= 90 ? 'Excellente assiduité' : 'Vigilance requise') : 'Pointage en attente',
+          trendUp: hasPointage && assiduite >= 90,
+          trendNeutral: !hasPointage,
           icon: UserCheck,
-          iconColor: 'emerald',
+          iconColor: hasPointage ? 'emerald' : 'amber',
           delay: 60,
-          onViewDetails: () => onNavigate && onNavigate('apprenants'),
+          onViewDetails: () => onNavigate && onNavigate('pointage'),
         },
         {
           label: 'Absences Signalées Aujourd’hui',
@@ -1529,7 +1438,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
           onViewDetails: () => onNavigate && onNavigate('apprenants'),
         },
         {
-          label: 'Effectif Présent en Cours',
+          label: 'Effectif Actif Scolarisé',
           sublabel: `${fmt(activeStudents)} élèves encadrés`,
           value: `${fmt(activeStudents)}`,
           trend: `${fmt(stats.totalClasses)} salles surveillées`,
@@ -1544,6 +1453,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
 
     if (userRole === 'PARENT_ELEVE') {
       const recovery = stats.recoveryRate;
+      const hasPointage = stats.presenceRate > 0 || (stats.attendanceByCycle || []).some(c => c.hasPointage);
       return [
         {
           label: 'Moyenne & Progression Élève',
@@ -1558,12 +1468,13 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
         },
         {
           label: 'Assiduité & Présence en Classe',
-          sublabel: 'Assiduité de l’enfant aux cours',
-          value: `${stats.presenceRate || 100}%`,
-          trend: 'Présence régulière',
-          trendUp: true,
+          sublabel: hasPointage ? 'Assiduité de l’enfant aux cours' : 'Aucun pointage enregistré',
+          value: hasPointage ? `${stats.presenceRate.toFixed(1)}%` : '—',
+          trend: hasPointage ? (stats.presenceRate >= 90 ? 'Présence régulière' : 'Absences à suivre') : 'Pointage en attente',
+          trendUp: hasPointage && stats.presenceRate >= 90,
+          trendNeutral: !hasPointage,
           icon: UserCheck,
-          iconColor: 'emerald',
+          iconColor: hasPointage ? 'emerald' : 'amber',
           delay: 60,
           onViewDetails: () => onNavigate && onNavigate('grades'),
         },
@@ -1619,14 +1530,15 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
         },
         {
           label: 'Taux de Présence de la Classe',
-          sublabel: 'Assiduité des élèves',
-          value: `${stats.presenceRate}%`,
-          trend: 'Présence en classe',
-          trendUp: true,
+          sublabel: stats.presenceRate > 0 ? 'Assiduité des élèves' : 'Aucun pointage enregistré',
+          value: stats.presenceRate > 0 ? `${stats.presenceRate.toFixed(1)}%` : '—',
+          trend: stats.presenceRate > 0 ? 'Présence en classe' : 'Pointage en attente',
+          trendUp: stats.presenceRate > 0,
+          trendNeutral: stats.presenceRate === 0,
           icon: UserCheck,
-          iconColor: 'emerald',
+          iconColor: stats.presenceRate > 0 ? 'emerald' : 'amber',
           delay: 120,
-          onViewDetails: () => onNavigate && onNavigate('grades'),
+          onViewDetails: () => onNavigate && onNavigate('pointage'),
         },
         {
           label: 'Préparation des Bulletins',
@@ -1668,14 +1580,15 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
         },
         {
           label: 'Taux de Présence des Élèves',
-          sublabel: 'Assiduité dans vos cours',
-          value: `${stats.presenceRate}%`,
-          trend: 'Présence en classe',
-          trendUp: true,
+          sublabel: stats.presenceRate > 0 ? 'Assiduité dans vos cours' : 'Aucun pointage enregistré',
+          value: stats.presenceRate > 0 ? `${stats.presenceRate.toFixed(1)}%` : '—',
+          trend: stats.presenceRate > 0 ? 'Présence en classe' : 'Pointage en attente',
+          trendUp: stats.presenceRate > 0,
+          trendNeutral: stats.presenceRate === 0,
           icon: UserCheck,
-          iconColor: 'emerald',
+          iconColor: stats.presenceRate > 0 ? 'emerald' : 'amber',
           delay: 120,
-          onViewDetails: () => onNavigate && onNavigate('grades'),
+          onViewDetails: () => onNavigate && onNavigate('pointage'),
         },
         {
           label: 'Prochaines Évaluations',
@@ -1744,33 +1657,83 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
     ];
   }, [stats, format, onNavigate, userRole, monthlyPresenceStats]);
 
+  /* ── Barre d'accès rapides adaptée au rôle ─────────────────────────────── */
+  const quickActions = useMemo(() => {
+    const actions: any[] = [];
+
+    const add = (id: string, label: string, icon: any, nav: string, primary = false) => {
+      if (hasTabAccess(userRole, id as any)) {
+        actions.push({ id, label, icon, onClick: () => (id === 'students' && onOpenRegistration ? onOpenRegistration() : onNavigate && onNavigate(nav)), primary });
+      }
+    };
+
+    if (userRole === 'PROMOTEUR_ADMIN') {
+      add('students', 'Inscrire élève', UserPlus, 'students', true);
+      add('teachers', 'Personnel', Users, 'teachers');
+      add('invoices', 'Paiement', CreditCard, 'invoices');
+      add('fees', 'Frais scolaires', Banknote, 'fees');
+      add('reports', 'Rapports', FileSpreadsheet, 'reports');
+      add('settings', 'Paramètres', Settings, 'settings');
+    } else if (userRole === 'COMPTABLE' || userRole === 'INTENDANT') {
+      add('invoices', 'Saisir paiement', CreditCard, 'invoices', true);
+      add('cash', 'Caisse', Wallet, 'cash');
+      add('reports', 'Rapports', FileSpreadsheet, 'reports');
+      add('expenses', 'Dépenses', Receipt, 'expenses');
+    } else if (['PREFET_DIRECTEUR', 'DIRECTEUR_ECOLE', 'DIRECTEUR_ETUDES', 'CENSEUR'].includes(userRole || '')) {
+      add('students', 'Inscrire élève', UserPlus, 'students', true);
+      add('grades', 'Cotes & bulletins', ClipboardCheck, 'grades');
+      add('deliberation', 'Délibérations', Scale, 'deliberation');
+      add('schedule', 'Emploi du temps', CalendarDays, 'schedule');
+      add('teachers', 'Personnel', Users, 'teachers');
+    } else if (userRole === 'SECRETAIRE') {
+      add('students', 'Inscrire élève', UserPlus, 'students', true);
+      add('documents', 'Documents', FileText, 'documents');
+      add('years', 'Années scolaires', Calendar, 'years');
+    } else if (userRole === 'DIRECTEUR_DISCIPLINE') {
+      add('discipline', 'Discipline', ShieldCheck, 'discipline', true);
+      add('pointage', 'Absences', CalendarCheck, 'pointage');
+      add('students', 'Dossiers élèves', UserCheck, 'students');
+    } else if (userRole === 'TITULAIRE' || userRole === 'ENSEIGNANT') {
+      add('grades', 'Saisir cotes', ClipboardCheck, 'grades', true);
+      add('pointage', 'Faire l\'appel', UserCheck, 'pointage');
+      add('schedule', 'Emploi du temps', CalendarDays, 'schedule');
+      add('students', 'Mes élèves', Users, 'students');
+    } else if (userRole === 'PARENT_ELEVE') {
+      add('invoices', 'Paiements', CreditCard, 'invoices', true);
+      add('grades', 'Bulletins', Award, 'grades');
+      add('students', 'Mes enfants', Users, 'students');
+    }
+
+    return [{ id: 'refresh', label: 'Actualiser', icon: RotateCcw, onClick: refreshData, primary: false }, ...actions];
+  }, [userRole, onNavigate, onOpenRegistration, refreshData]);
+
   return (
     <div className="space-y-4 w-full px-1 py-1 pb-8">
 
       {/* ===== BANNIÈRE D'ACCUEIL SOBRE & ÉLÉGANTE ===== */}
       <div
-        className="animate-fade-in p-4 sm:p-5 rounded-2xl border shadow-xs relative overflow-hidden flex flex-col xl:flex-row xl:items-center justify-between gap-4 transition-colors"
+        className="animate-fade-in p-4 sm:p-5 rounded-2xl border relative overflow-hidden flex flex-col xl:flex-row xl:items-start justify-between gap-4 transition-all"
         style={{
           background: 'var(--bg-surface)',
           borderColor: 'var(--border)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
         }}
       >
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25 flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-2 py-0.5 rounded-md text-[10px] font-medium tracking-wide text-slate-600 dark:text-slate-300 border flex items-center gap-1.5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+              <ShieldCheck className="w-3 h-3" style={{ color: 'var(--sidebar-active-text)' }} />
               {roleHeader.badge}
             </span>
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="flex items-center gap-1.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               Synchro Active
             </span>
           </div>
-          <h1 className="text-xl md:text-2xl font-extrabold tracking-tight flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+          <h1 className="text-lg md:text-xl font-bold tracking-tight flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
             <span>{roleHeader.title}</span>
-            <Sparkles className="w-5 h-5 text-amber-500 shrink-0" />
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-2xl leading-relaxed font-normal">
             {roleHeader.desc}
           </p>
           {!data.loading && (
@@ -1778,17 +1741,15 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
               {[
                 { label: `${stats.totalStudents} élève${stats.totalStudents > 1 ? 's' : ''}`, color: '#6366f1', hidden: false },
                 { label: `${stats.totalClasses} classe${stats.totalClasses > 1 ? 's' : ''}`, color: '#10b981', hidden: false },
-                // Personnel non affiché aux enseignants
                 { label: `${stats.totalStaff} personnel${stats.totalStaff > 1 ? 's' : ''}`, color: '#8b5cf6', hidden: isTeacherRole },
-                // Taux de recouvrement financier masqué aux enseignants
-                { label: `${stats.recoveryRate}% recouvrement`, color: stats.recoveryRate > 50 ? '#10b981' : '#f59e0b', hidden: isTeacherRole },
+                { label: `${stats.recoveryRate}% recouvrement`, color: stats.recoveryRate > 50 ? '#10b981' : '#f59e0b', hidden: isTeacherRole || !canSeeAdvancedFinance },
               ].filter(item => !item.hidden).map((item) => (
                 <span
                   key={item.label}
-                  className="px-2 py-0.5 rounded-md text-[10px] font-bold border"
+                  className="px-2 py-0.5 rounded-md text-[10px] font-medium border"
                   style={{
-                    background: `${item.color}12`,
-                    borderColor: `${item.color}30`,
+                    background: `${item.color}10`,
+                    borderColor: `${item.color}20`,
                     color: item.color,
                   }}
                 >
@@ -1799,116 +1760,78 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
           )}
         </div>
 
-        {/* BOUTONS D'ACTION ÉPURÉS SEGMENTÉS PAR PERMISSIONS DU RÔLE */}
+        {/* BOUTONS D'ACCÈS RAPIDE ADAPTÉS AU RÔLE */}
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <button
-            onClick={refreshData}
-            className="px-3.5 py-2 rounded-lg font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer border text-indigo-500 hover:bg-indigo-500/10"
-            style={{
-              background: 'var(--bg-sunken)',
-              borderColor: 'var(--border)',
-            }}
-            title="Actualiser les données de la base de données en direct"
-          >
-            <RotateCcw className={`w-4 h-4 text-indigo-500 ${data.loading ? 'animate-spin' : ''}`} />
-            <span>Actualiser</span>
-          </button>
-
-          {hasTabAccess(userRole, 'students') && (
-            <button
-              onClick={() => {
-                if (onOpenRegistration) {
-                  onOpenRegistration();
-                } else if (onNavigate) {
-                  onNavigate('students');
-                }
-              }}
-              className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4 text-white" />
-              <span>Inscrire Élève</span>
-            </button>
-          )}
-
-          {hasTabAccess(userRole, 'invoices') && (
-            <button
-              onClick={() => onNavigate && onNavigate('invoices')}
-              className="px-3.5 py-2 rounded-lg font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer border"
-              style={{
-                background: 'var(--bg-sunken)',
-                borderColor: 'var(--border)',
-                color: 'var(--text-primary)',
-              }}
-            >
-              <CreditCard className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <span>Saisir Paiement</span>
-            </button>
-          )}
-
-          {hasTabAccess(userRole, 'grades') && (
-            <button
-              onClick={() => onNavigate && onNavigate('grades')}
-              className="px-3.5 py-2 rounded-lg font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer border"
-              style={{
-                background: 'var(--bg-sunken)',
-                borderColor: 'var(--border)',
-                color: 'var(--text-primary)',
-              }}
-            >
-              <ClipboardCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <span>Cotes & Bulletins</span>
-            </button>
-          )}
-
-          {hasTabAccess(userRole, 'documents') && (
-            <button
-              onClick={() => onNavigate && onNavigate('documents')}
-              className="px-3.5 py-2 rounded-lg font-bold text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer border"
-              style={{
-                background: 'var(--bg-sunken)',
-                borderColor: 'var(--border)',
-                color: 'var(--text-primary)',
-              }}
-            >
-              <Zap className="w-4 h-4 text-amber-500" />
-              <span>Document EPST</span>
-            </button>
-          )}
+          {quickActions.map((action) => {
+            const ActionIcon = action.icon;
+            const isRefresh = action.id === 'refresh';
+            return (
+              <button
+                key={action.id}
+                onClick={action.onClick}
+                disabled={isRefresh && data.loading}
+                className={`group relative px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all duration-200 cursor-pointer border overflow-hidden active:scale-[0.96] hover:-translate-y-0.5 ${
+                  action.primary
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600'
+                    : 'text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400'
+                }`}
+                style={{
+                  background: action.primary ? undefined : 'var(--bg-surface)',
+                  borderColor: action.primary ? undefined : 'var(--border)',
+                  boxShadow: 'var(--elevation-1)',
+                }}
+                title={action.label}
+              >
+                <span
+                  className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ background: action.primary ? 'rgba(255,255,255,0.08)' : 'rgba(99,102,241,0.06)' }}
+                />
+                <ActionIcon className={`w-3.5 h-3.5 relative z-10 ${isRefresh && data.loading ? 'animate-spin' : ''}`} />
+                <span className="capitalize relative z-10">{action.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* ===== BARRE DE FILTRAGE MULTI-CRITÈRES INTELLIGENTE ===== */}
       <div
-        className="p-3.5 rounded-2xl flex flex-col xl:flex-row xl:items-center justify-between gap-3 animate-fade-in relative z-20 transition-all border"
+        className="p-2.5 rounded-lg flex flex-col xl:flex-row xl:items-center justify-between gap-2 animate-fade-in relative z-20 transition-all border"
         style={{
           background: 'var(--bg-surface)',
-          borderColor: activeFilterCount > 0 ? 'rgba(99,102,241,0.40)' : 'var(--border)',
-          boxShadow: 'var(--elevation-1)',
+          borderColor: 'var(--border)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
         }}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors shadow-xs ${activeFilterCount > 0 ? 'bg-indigo-500/15 border-indigo-500/30' : 'bg-slate-500/10 border-slate-500/20'}`}>
-            <Filter className="w-4.5 h-4.5 text-indigo-600 dark:text-indigo-400" />
+          <div
+            className="w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 transition-colors"
+            style={{
+              background: activeFilterCount > 0 ? 'rgba(99,102,241,0.08)' : 'var(--bg-sunken)',
+              borderColor: activeFilterCount > 0 ? 'rgba(99,102,241,0.25)' : 'var(--border)',
+            }}
+          >
+            <Filter className="w-4 h-4" style={{ color: 'var(--sidebar-active-text)' }} />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>Filtres Adaptatifs EPST</h3>
+              <h3 className="text-[11px] font-medium tracking-wide capitalize" style={{ color: 'var(--text-primary)' }}>Filtres adaptatifs EPST</h3>
               {activeFilterCount > 0 ? (
-                <span className="px-2 py-0.5 rounded-md text-[9.5px] font-black bg-indigo-600 text-white shadow-xs">
+                <span className="px-1.5 py-0.5 rounded text-[9.5px] font-medium text-white" style={{ background: '#6366f1' }}>
                   {activeFilterCount} actif{activeFilterCount > 1 ? 's' : ''}
                 </span>
               ) : (
-                <span className="px-2 py-0.5 rounded-md text-[9.5px] font-bold bg-slate-500/10 text-slate-500 border border-slate-500/20">
+                <span className="px-1.5 py-0.5 rounded text-[9.5px] font-medium text-slate-500 border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                   Par défaut
                 </span>
               )}
             </div>
-            <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">Adaptation dynamique selon le cycle et l'option sélectionnés</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">Adaptation dynamique selon le cycle et l'option sélectionnés</p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="w-full sm:w-auto min-w-[180px]">
+          <div className="w-full sm:w-auto min-w-[170px]">
             <CustomSelect
               options={schoolYearOptions}
               value={selectedSchoolYearId}
@@ -1917,16 +1840,16 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             />
           </div>
 
-          <div className="w-full sm:w-auto min-w-[170px]">
+          <div className="w-full sm:w-auto min-w-[160px]">
             <CustomSelect
-              options={cycleOptions}
+              options={accessibleCycleOptions}
               value={selectedCycleFilter}
               onChange={handleCycleChange}
-              placeholder="Cycle EPST"
+              placeholder="Cycle"
             />
           </div>
 
-          <div className="w-full sm:w-auto min-w-[170px]">
+          <div className="w-full sm:w-auto min-w-[160px]">
             <CustomSelect
               options={subSelectOptions}
               value={selectedOptionFilter}
@@ -1936,7 +1859,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             />
           </div>
 
-          <div className="w-full sm:w-auto min-w-[170px]">
+          <div className="w-full sm:w-auto min-w-[160px]">
             <CustomSelect
               options={periodOptions}
               value={selectedPeriodFilter}
@@ -1960,39 +1883,56 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
               setSelectedPeriodFilter(defaultPeriodKey);
               setSelectedDateFilter(todayStr);
             }}
-            className="px-3 py-2 rounded-lg text-xs font-bold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/25 hover:bg-rose-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+            className="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1.5 cursor-pointer active:scale-[0.98]"
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              color: '#e11d48',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+            }}
             title="Réinitialiser tous les filtres"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Réinitialiser</span>
+            <span className="capitalize">Réinitialiser</span>
           </button>
         </div>
       </div>
 
       {/* ===== BARRE D'ONGLETS DU DASHBOARD (Material 3 Segmented Control) ===== */}
       <div
-        className="flex items-center gap-1.5 p-1.5 rounded-2xl overflow-x-auto sidebar-scroll border transition-all"
+        className="flex items-center gap-1 p-1.5 rounded-2xl overflow-x-auto sidebar-scroll border transition-all"
         style={{
-          background: 'var(--bg-sunken)',
+          background: 'var(--bg-surface)',
           borderColor: 'var(--border)',
-          boxShadow: 'var(--elevation-1)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
         }}
       >
         {availableSubTabs.map((tab) => {
           const TabIcon = tab.icon;
           const isActive = activeSubTab === tab.id;
+          const tabColors: Record<string, string> = {
+            executive: '#6366f1',
+            calendar: '#10b981',
+            pedagogy: '#f59e0b',
+            finances: '#ef4444',
+          };
+          const color = tabColors[tab.id] || '#6366f1';
           return (
             <button
               key={tab.id}
               onClick={() => setActiveSubTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap cursor-pointer select-none ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-medium transition-all whitespace-nowrap cursor-pointer select-none active:scale-[0.98] ${
                 isActive
-                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-600/30 border border-indigo-400/40'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10 border border-transparent'
+                  ? 'text-white'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300'
               }`}
+              style={{
+                background: isActive ? color : 'transparent',
+                boxShadow: isActive ? `0 3px 8px -2px ${color}40` : undefined,
+              }}
             >
-              <TabIcon className={`w-4 h-4 transition-transform ${isActive ? 'text-white scale-110' : 'text-indigo-500 dark:text-indigo-400'}`} />
-              <span>{tab.label}</span>
+              <TabIcon className={`w-3.5 h-3.5 transition-transform ${isActive ? 'text-white' : ''}`} style={{ color: isActive ? '#fff' : color }} />
+              <span className="capitalize">{tab.label}</span>
             </button>
           );
         })}
@@ -2011,57 +1951,78 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
           {/* Section Graphiques Exécutifs */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
 
-            {/* Performances Académiques & Présences (8/12) */}
+            {/* Performances des élèves (pleine largeur) */}
             <div
-              className="lg:col-span-8 p-4 sm:p-5 rounded-2xl shadow-xs animate-fade-in flex flex-col justify-between border transition-colors"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+              className="lg:col-span-12 p-4 rounded-xl animate-fade-in flex flex-col justify-between border transition-all"
+              style={{
+                background: 'var(--bg-surface)',
+                borderColor: 'var(--border)',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
+              }}
             >
               <div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 mb-3">
                   <div>
-                    <h2 className="text-base font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                      Performances Académiques & Présences Élèves
+                    <h2 className="text-sm font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                      Performance des élèves
                     </h2>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      Évolution mensuelle de la moyenne des cotes par rapport à l'assiduité
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Évolution de la moyenne générale sur le mois sélectionné
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <div className="flex p-1 rounded-lg border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      {[
-                        { id: 'BOTH', label: 'Toutes les courbes' },
-                        { id: 'COTES', label: 'Cotes' },
-                        { id: 'PRESENCE', label: 'Présences' },
-                      ].map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() => setChartMode(m.id as any)}
-                          className={`px-2.5 py-1 text-[10.5px] font-bold rounded-md transition-all cursor-pointer ${
-                            chartMode === m.id
-                              ? 'bg-indigo-600 text-white shadow-xs'
-                              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                          }`}
-                        >
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CustomSelect
+                      options={performanceCategoryOptions}
+                      value={perfCategory}
+                      onChange={setPerfCategory}
+                      placeholder="Catégorie"
+                      className="w-full sm:w-auto min-w-[150px]"
+                    />
+                    <CustomSelect
+                      options={accessibleCycleOptions}
+                      value={selectedCycleFilter}
+                      onChange={handleCycleChange}
+                      placeholder="Cycle"
+                      className="w-full sm:w-auto min-w-[150px]"
+                    />
+                    <CustomSelect
+                      options={subSelectOptions}
+                      value={selectedOptionFilter}
+                      onChange={setSelectedOptionFilter}
+                      placeholder={subSelectPlaceholder}
+                      disabled={subSelectOptions.length <= 1}
+                      className="w-full sm:w-auto min-w-[150px]"
+                    />
+                    <CustomSelect
+                      options={performanceClasseOptions}
+                      value={perfClasse}
+                      onChange={setPerfClasse}
+                      placeholder="Classe"
+                      className="w-full sm:w-auto min-w-[150px]"
+                    />
+                    <CustomSelect
+                      options={performanceSalleOptions}
+                      value={perfSalle}
+                      onChange={setPerfSalle}
+                      placeholder="Salle"
+                      className="w-full sm:w-auto min-w-[150px]"
+                    />
                   </div>
                 </div>
 
                 {/* Message d'information si aucune cote enregistrée */}
                 {stats.averageScore === 0 && (
-                  <div className="mb-3 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between text-xs text-amber-700 dark:text-amber-300">
+                  <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/08 border flex items-center justify-between text-xs" style={{ borderColor: 'rgba(245,158,11,0.20)', color: '#b45309' }}>
                     <span className="flex items-center gap-2 font-medium">
                       <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
                       Aucune cote n'a encore été saisie dans le registre. La moyenne générale est à 0%.
                     </span>
                     <button
                       onClick={() => onNavigate && onNavigate('grades')}
-                      className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-200 font-bold transition-all shrink-0 cursor-pointer"
+                      className="px-2.5 py-1 rounded-md bg-amber-500/12 hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 font-medium transition-all shrink-0 cursor-pointer"
                     >
-                      Saisir des Cotes
+                      Saisir des cotes
                     </button>
                   </div>
                 )}
@@ -2070,17 +2031,13 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={donneesPerformance} margin={{ top: 10, right: 15, left: 0, bottom: 0 }}>
                       <defs>
-                        <linearGradient id="gradCotes" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.35} />
-                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                        </linearGradient>
-                        <linearGradient id="gradPresence" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%"  stopColor="#10b981" stopOpacity={0.25} />
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                        <linearGradient id={`grad-${perfCategory}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={perfCategory === 'PRESENCE' ? '#10b981' : perfCategory === 'REUSSITE' ? '#f59e0b' : '#6366f1'} stopOpacity={0.30} />
+                          <stop offset="95%" stopColor={perfCategory === 'PRESENCE' ? '#10b981' : perfCategory === 'REUSSITE' ? '#f59e0b' : '#6366f1'} stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(150,150,150,0.12)" vertical={false} />
-                      <XAxis dataKey="mois" stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(150,150,150,0.10)" vertical={false} />
+                      <XAxis dataKey="mois" interval={2} stroke="var(--text-muted)" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
                       <YAxis
                         domain={[0, 100]}
                         ticks={[0, 25, 50, 75, 100]}
@@ -2091,34 +2048,18 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                         unit="%"
                         width={35}
                       />
-                      <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(99,102,241,0.2)', strokeWidth: 1 }} />
-                      {(chartMode === 'BOTH' || chartMode === 'COTES') && (
-                        <Area
-                          type="monotone"
-                          dataKey="moyenneCotes"
-                          name="moyenneCotes"
-                          stroke="#6366f1"
-                          strokeWidth={2.5}
-                          fillOpacity={1}
-                          fill="url(#gradCotes)"
-                          dot={{ r: 3.5, fill: '#6366f1', strokeWidth: 0 }}
-                          activeDot={{ r: 5.5, fill: '#6366f1', strokeWidth: 2, stroke: '#ffffff' }}
-                        />
-                      )}
-                      {(chartMode === 'BOTH' || chartMode === 'PRESENCE') && (
-                        <Area
-                          type="monotone"
-                          dataKey="tauxPresence"
-                          name="tauxPresence"
-                          stroke="#10b981"
-                          strokeWidth={2}
-                          strokeDasharray="4 4"
-                          fillOpacity={1}
-                          fill="url(#gradPresence)"
-                          dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }}
-                          activeDot={{ r: 5, fill: '#10b981', strokeWidth: 2, stroke: '#ffffff' }}
-                        />
-                      )}
+                      <Tooltip content={<CustomTooltip />} cursor={{ stroke: `${perfCategory === 'PRESENCE' ? '#10b981' : perfCategory === 'REUSSITE' ? '#f59e0b' : '#6366f1'}20`, strokeWidth: 1 }} />
+                      <Area
+                        type="monotone"
+                        dataKey={perfCategory === 'PRESENCE' ? 'tauxPresence' : perfCategory === 'REUSSITE' ? 'tauxReussite' : 'moyenneCotes'}
+                        name={perfCategory === 'PRESENCE' ? 'Assiduité' : perfCategory === 'REUSSITE' ? 'Taux de réussite' : 'Moyenne générale'}
+                        stroke={perfCategory === 'PRESENCE' ? '#10b981' : perfCategory === 'REUSSITE' ? '#f59e0b' : '#6366f1'}
+                        strokeWidth={2.5}
+                        fillOpacity={1}
+                        fill={`url(#grad-${perfCategory})`}
+                        dot={{ r: 3, fill: perfCategory === 'PRESENCE' ? '#10b981' : perfCategory === 'REUSSITE' ? '#f59e0b' : '#6366f1', strokeWidth: 0 }}
+                        activeDot={{ r: 5, fill: perfCategory === 'PRESENCE' ? '#10b981' : perfCategory === 'REUSSITE' ? '#f59e0b' : '#6366f1', strokeWidth: 2, stroke: '#ffffff' }}
+                      />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -2127,153 +2068,117 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
               <div className="flex items-center justify-between mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
                 <div className="flex items-center gap-4 text-xs">
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
-                    <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>Moyenne générale ({stats.averageScore}%)</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                    <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>Assiduité globale ({stats.presenceRate}%)</span>
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: perfCategory === 'PRESENCE' ? '#10b981' : perfCategory === 'REUSSITE' ? '#f59e0b' : '#6366f1' }} />
+                    <span className="font-medium" style={{ color: 'var(--text-secondary)' }}>
+                      {perfCategory === 'PRESENCE' ? `Assiduité globale (${stats.presenceRate}%)` : perfCategory === 'REUSSITE' ? `Taux de réussite (${donneesPerformance.filter(d => d.tauxReussite > 0).length > 0 ? Math.round((donneesPerformance.reduce((s, d) => s + d.tauxReussite, 0) / Math.max(1, donneesPerformance.filter(d => d.tauxReussite > 0).length))) : 0}%)` : `Moyenne générale (${stats.averageScore}%)`}
+                    </span>
                   </div>
                 </div>
 
                 <button
                   onClick={() => onNavigate && onNavigate('grades')}
-                  className="px-3 py-1.5 rounded-lg bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/25 border border-indigo-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg text-[11px] font-medium flex items-center gap-1.5 transition-all cursor-pointer active:scale-[0.98] hover:shadow-md"
+                  style={{
+                    background: 'var(--bg-surface)',
+                    color: '#6366f1',
+                    border: '1px solid var(--border)',
+                    boxShadow: 'var(--elevation-1)',
+                  }}
                 >
-                  <Eye className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                  <span>Consulter le Registre des Cotes</span>
+                  <Eye className="w-3.5 h-3.5" />
+                  <span className="capitalize">Registre des cotes</span>
                 </button>
               </div>
             </div>
-
-            {/* Droite : Synthèse Financière — masquée aux enseignants */}
-            {!isTeacherRole && (
-            <div
-              className="lg:col-span-4 p-4 sm:p-5 rounded-2xl shadow-xs animate-fade-in flex flex-col justify-between border transition-colors"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
-            >
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <h2 className="text-base font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                    Synthèse Financière
-                  </h2>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                    {stats.recoveryRate}%
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3">
-                  Objectifs et encaissements par trimestre
-                </p>
-
-                <div className="h-36">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={donneesFinancieres} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
-                      <XAxis dataKey="trimestre" stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} />
-                      <YAxis hide />
-                      <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99, 102, 241, 0.08)' }} />
-                      <Bar dataKey="objectif" fill="var(--bg-sunken)" radius={[4, 4, 0, 0]} name="objectif" />
-                      <Bar dataKey="encaisse" fill="#6366f1" radius={[4, 4, 0, 0]} name="encaisse" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className="space-y-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
-                  {[
-                    { label: "Frais d'Études (Minerval)", val: format(stats.totalRevenue), color: '#6366f1', icon: GraduationCap },
-                    { label: 'Subventions & Donateurs', val: format(0), color: '#10b981', icon: Award },
-                    { label: 'Impayés en Recouvrement', val: format(stats.totalUnpaid), color: '#ef4444', icon: AlertCircle },
-                  ].map((item) => (
-                    <div
-                      key={item.label}
-                      className="flex items-center justify-between p-2 rounded-lg transition-all"
-                      style={{ background: 'var(--bg-sunken)' }}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div
-                          className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 border border-slate-500/15"
-                          style={{ background: `${item.color}15` }}
-                        >
-                          <item.icon className="w-3.5 h-3.5" style={{ color: item.color }} />
-                        </div>
-                        <span className="text-[11px] font-semibold truncate" style={{ color: 'var(--text-secondary)' }}>{item.label}</span>
-                      </div>
-                      <span className="text-xs font-bold shrink-0" style={{ color: item.color }}>{item.val}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                onClick={() => onNavigate && onNavigate('invoices')}
-                className="mt-3 pt-2.5 border-t w-full flex items-center justify-between text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline transition-colors cursor-pointer"
-                style={{ borderColor: 'var(--border)' }}
-              >
-                <span>Journal Comptable Complet</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-            )}
           </div>
 
           {/* Section Inférieure : 3 Colonnes */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-            {/* Alertes Critiques */}
+            {/* Alertes du tableau de bord */}
             <div
-              className="p-4 rounded-2xl shadow-xs animate-fade-in flex flex-col justify-between border transition-colors"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+              className="p-4 rounded-xl flex flex-col justify-between border transition-all"
+              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
             >
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-rose-500/15 border border-rose-500/25 flex items-center justify-center">
-                      <Bell className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(244,63,94,0.08)' }}>
+                      <Bell className="w-3.5 h-3.5" style={{ color: '#f43f5e' }} />
                     </div>
-                    <h3 className="font-bold text-[13.5px]" style={{ color: 'var(--text-primary)' }}>Alertes Critiques</h3>
+                    <h3 className="font-medium text-[13px]" style={{ color: 'var(--text-primary)' }}>Alertes</h3>
                   </div>
-                  <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
-                    URGENT
-                  </span>
+                  {dashboardAlerts.length > 0 && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-medium text-white" style={{ background: '#f43f5e' }}>
+                      {dashboardAlerts.length}
+                    </span>
+                  )}
                 </div>
 
-                <div className="p-4 rounded-xl border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucune Alerte Critiques</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Tous les registres et assiduités scolaires sont en ordre.</p>
-                </div>
+                {dashboardAlerts.length === 0 ? (
+                  <div className="p-3 rounded-lg border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>Aucune alerte</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Tous les registres sont en ordre.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {dashboardAlerts.slice(0, 4).map((alert) => {
+                      const color = alert.type === 'danger' ? '#f43f5e' : alert.type === 'warning' ? '#f59e0b' : '#6366f1';
+                      return (
+                        <button
+                          key={alert.id}
+                          onClick={alert.onClick}
+                          className="w-full text-left p-2 rounded-lg border transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+                          style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-medium truncate" style={{ color }}>{alert.title}</p>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug truncate">{alert.desc}</p>
+                            </div>
+                            {alert.action && (
+                              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded shrink-0" style={{ background: `${color}10`, color }}>{alert.action}</span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <button
-                onClick={() => onNavigate && onNavigate('students')}
-                className="mt-3 pt-2.5 border-t w-full flex items-center justify-between text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline transition-colors cursor-pointer"
-                style={{ borderColor: 'var(--border)' }}
+                onClick={() => onNavigate && onNavigate('audit')}
+                className="mt-3 pt-2.5 border-t w-full flex items-center justify-between text-[11px] font-medium transition-colors cursor-pointer hover:text-indigo-600"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
               >
-                <span>Voir toutes les alertes (8)</span>
+                <span>Journal d'activités</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
             {/* Activité Récente */}
             <div
-              className="p-4 rounded-2xl shadow-xs animate-fade-in flex flex-col justify-between border transition-colors"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+              className="p-4 rounded-xl flex flex-col justify-between border transition-all"
+              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
             >
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-indigo-500/15 border border-indigo-500/25 flex items-center justify-center">
-                      <Activity className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(99,102,241,0.08)' }}>
+                      <Activity className="w-3.5 h-3.5" style={{ color: '#6366f1' }} />
                     </div>
-                    <h3 className="font-bold text-[13.5px]" style={{ color: 'var(--text-primary)' }}>
-                      {isTeacherRole ? 'Activité Pédagogique' : 'Activité Récente'}
+                    <h3 className="font-medium text-[13px]" style={{ color: 'var(--text-primary)' }}>
+                      {isTeacherRole ? 'Activité pédagogique' : 'Activité récente'}
                     </h3>
                   </div>
-                  <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
-                    EN DIRECT
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{ background: 'rgba(99,102,241,0.08)', color: '#6366f1' }}>
+                    En direct
                   </span>
                 </div>
 
                 {filteredRecentActivity.length === 0 ? (
-                  <div className="p-4 rounded-xl border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <div className="p-3 rounded-lg border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucune Activité Récente</p>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
                       {isTeacherRole
@@ -2282,9 +2187,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {paginatedRecentActivity.map((fu) => (
-                      <div key={fu.id} className="flex items-start gap-2.5">
+                      <div key={fu.id} className="flex items-start gap-2">
                         <img
                           src={fu.avatarUrl}
                           alt={fu.nomAuteur}
@@ -2316,9 +2221,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
               </div>
 
               <button
-                onClick={() => onNavigate && onNavigate('faculty')}
-                className="mt-3 pt-2.5 border-t w-full flex items-center justify-between text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline transition-colors cursor-pointer"
-                style={{ borderColor: 'var(--border)' }}
+                onClick={() => onNavigate && onNavigate('audit')}
+                className="mt-3 pt-2.5 border-t w-full flex items-center justify-between text-[11px] font-medium transition-colors cursor-pointer hover:text-indigo-600"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
               >
                 <span>{isTeacherRole ? 'Mes activités pédagogiques' : 'Journal d\'activités complet'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -2327,40 +2232,45 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
 
             {/* Événements EPST */}
             <div
-              className="p-4 rounded-2xl shadow-xs animate-fade-in flex flex-col justify-between border transition-colors"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+              className="p-4 rounded-xl flex flex-col justify-between border transition-all"
+              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
             >
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-indigo-500/15 border border-indigo-500/25 flex items-center justify-center">
-                      <Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(16,185,129,0.08)' }}>
+                      <Calendar className="w-3.5 h-3.5" style={{ color: '#10b981' }} />
                     </div>
-                    <h3 className="font-bold text-[13.5px]" style={{ color: 'var(--text-primary)' }}>Calendrier EPST</h3>
+                    <h3 className="font-medium text-[13px]" style={{ color: 'var(--text-primary)' }}>Agenda scolaire</h3>
                   </div>
+                  {stats.upcomingEvents.length > 0 && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{ background: 'rgba(16,185,129,0.08)', color: '#10b981' }}>
+                      {stats.upcomingEvents.length}
+                    </span>
+                  )}
                 </div>
 
                 {stats.upcomingEvents.length === 0 ? (
-                  <div className="p-4 rounded-xl border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                    <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucun Événement Planifié</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Aucun événement dans l'agenda de l'année scolaire.</p>
+                  <div className="p-4 rounded-lg border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>Aucun événement planifié</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">L'agenda de l'année scolaire est vide.</p>
                   </div>
                 ) : (
                   <div className="space-y-2.5">
                     {paginatedUpcomingEvents.map((ev) => (
                       <div key={ev.id} className="flex items-start gap-2.5">
-                        <div className="rounded-lg p-1 text-center min-w-[38px] shrink-0 border shadow-xs" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                          <div className="text-[8px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <div className="rounded-lg p-1 text-center min-w-[38px] shrink-0 border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                          <div className="text-[8px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             {ev.dateJour.split(' ')[1] || ''}
                           </div>
-                          <div className="text-[12px] font-black text-indigo-600 dark:text-indigo-400 leading-tight">
+                          <div className="text-[12px] font-semibold leading-tight" style={{ color: '#6366f1' }}>
                             {ev.dateJour.split(' ')[0] || ev.dateJour}
                           </div>
                         </div>
                         <div className="flex-1 min-w-0 pt-0.5">
-                          <h4 className="text-[11.5px] font-bold leading-tight truncate" style={{ color: 'var(--text-primary)' }}>{ev.titre}</h4>
+                          <h4 className="text-[11.5px] font-medium leading-tight truncate" style={{ color: 'var(--text-primary)' }}>{ev.titre}</h4>
                           <p className="text-[9.5px] mt-0.5 flex items-center gap-1 font-medium text-slate-500 dark:text-slate-400">
-                            <Clock className="w-3 h-3 text-indigo-500" />
+                            <Clock className="w-3 h-3" style={{ color: '#6366f1' }} />
                             {ev.heureLieu}
                           </p>
                         </div>
@@ -2383,9 +2293,14 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
               </div>
 
               <button
-                onClick={() => onNavigate && onNavigate('schedule')}
-                className="mt-3 pt-2.5 border-t w-full flex items-center justify-between text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline transition-colors cursor-pointer"
-                style={{ borderColor: 'var(--border)' }}
+                onClick={() => {
+                  try {
+                    sessionStorage.setItem('ecolisa_dashboard_subtab', 'calendar');
+                  } catch {}
+                  onNavigate && onNavigate('dashboard');
+                }}
+                className="mt-3 pt-2.5 border-t w-full flex items-center justify-between text-[11px] font-medium transition-colors cursor-pointer hover:text-emerald-600"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
               >
                 <span>Agenda scolaire complet</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -2399,7 +2314,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       {/* ===== ONGLET 2 : CALENDRIER SCOLAIRE INTERACTIF & OFFICIEL RDC ===== */}
       {activeSubTab === 'calendar' && (
         <div className="space-y-4 animate-fade-in">
-          <SchoolCalendar />
+          <SchoolCalendar events={data.schoolEvents} />
         </div>
       )}
 
@@ -2488,7 +2403,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                     <button
                       key={card.title}
                       onClick={card.action}
-                      className="p-4 rounded-2xl border text-left flex flex-col gap-3 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer group"
+                      className="p-3 rounded-xl border text-left flex flex-col gap-2 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer group"
                       style={{
                         background: 'var(--bg-surface)',
                         borderColor: 'var(--border)',
@@ -2497,10 +2412,10 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                     >
                       <div className="flex items-center justify-between">
                         <div
-                          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                           style={{ background: `${card.iconBg}20` }}
                         >
-                          <CardIcon className="w-5 h-5" style={{ color: card.iconBg }} />
+                          <CardIcon className="w-4 h-4" style={{ color: card.iconBg }} />
                         </div>
                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-black bg-${card.badgeColor}-500/15 text-${card.badgeColor}-700 dark:text-${card.badgeColor}-300 border border-${card.badgeColor}-500/25`}>
                           {card.badge}
@@ -2521,11 +2436,11 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
 
               {/* Palmarès Classes Assignées */}
               <div
-                className="p-5 rounded-2xl border transition-all"
+                className="p-4 rounded-2xl border transition-all hover:shadow-lg"
                 style={{
                   background: 'var(--bg-surface)',
                   borderColor: 'var(--border)',
-                  boxShadow: 'var(--elevation-1)',
+                  boxShadow: 'var(--elevation-2)',
                 }}
               >
                 <div className="flex items-center justify-between mb-4">
@@ -2543,7 +2458,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                 </div>
 
                 {filteredData.classes.length > 0 ? (
-                  <div className="space-y-2.5">
+                  <div className="space-y-1.5">
                     {filteredData.classes.slice(0, 8).map(cls => {
                       const classStudents = filteredData.students.filter(s => s.classId === cls.id || s.nomClasse === cls.nom);
                       const girls = classStudents.filter(s => s.sexe === 'F').length;
@@ -2551,11 +2466,11 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                       return (
                         <div
                           key={cls.id}
-                          className="p-3 rounded-xl border flex items-center justify-between gap-3 transition-all hover:bg-indigo-500/5"
-                          style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
+                          className="p-2 rounded-lg border flex items-center justify-between gap-2 transition-all hover:shadow-md active:scale-[0.99] cursor-pointer"
+                          style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}
                         >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-black text-xs shrink-0 border border-indigo-500/25">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black text-[10px] shrink-0 border" style={{ background: 'var(--bg-surface)', color: '#6366f1', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}>
                               {cls.nom.slice(0, 2).toUpperCase()}
                             </div>
                             <div className="min-w-0">
@@ -2615,65 +2530,87 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
 
             {/* Distribution des Élèves par Cycle EPST */}
             <div
-              className="lg:col-span-5 p-5 rounded-2xl flex flex-col justify-between border transition-all"
+              className="lg:col-span-5 p-4 rounded-2xl flex flex-col justify-between border transition-all hover:shadow-lg"
               style={{
                 background: 'var(--bg-surface)',
                 borderColor: 'var(--border)',
-                boxShadow: 'var(--elevation-1)',
+                boxShadow: 'var(--elevation-2)',
               }}
             >
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <h3 className="font-extrabold text-base tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                    Distribution par Cycle EPST
-                  </h3>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25">
+                  <div>
+                    <h3 className="font-extrabold text-base tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                      Distribution par Cycle EPST
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Répartition des effectifs par cycle actif
+                    </p>
+                  </div>
+                  <span
+                    className="px-2.5 py-1 rounded-full text-[10px] font-black border"
+                    style={{ background: 'rgba(99,102,241,0.10)', color: '#6366f1', borderColor: 'rgba(99,102,241,0.22)' }}
+                  >
                     {cycleTotal.toLocaleString()} Élèves
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Répartition des effectifs selon le cycle actif ({selectedCycleFilter})</p>
 
-                {/* Graphique Donut avec Badge Central */}
-                <div className="h-56 relative flex items-center justify-center">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartsPieChart>
-                      <Pie
-                        data={donneesCycle}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={85}
-                        paddingAngle={4}
-                      >
-                        {donneesCycle.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
-                        ))}
-                      </Pie>
-                      <Tooltip content={<CustomTooltip />} />
-                    </RechartsPieChart>
-                  </ResponsiveContainer>
+                <div className="flex flex-col sm:flex-row items-center gap-4 mt-3">
+                  {/* Graphique Donut */}
+                  <div className="h-48 w-48 shrink-0 relative">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartsPieChart>
+                        <Pie
+                          data={donneesCycle}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={52}
+                          outerRadius={74}
+                          paddingAngle={3}
+                        >
+                          {donneesCycle.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} stroke="var(--bg-surface)" strokeWidth={2} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<CustomTooltip />} />
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
 
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-2xl font-black" style={{ color: 'var(--text-primary)' }}>{cycleTotal.toLocaleString()}</span>
-                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Élèves Inscrits</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 mt-2 pt-3 border-t text-center" style={{ borderColor: 'var(--border)' }}>
-                  {donneesCycle.map(dc => (
-                    <div key={dc.name} className="p-2.5 rounded-xl border shadow-xs" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                      <div className="flex items-center justify-center gap-1.5 mb-1">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: dc.color }} />
-                        <span className="text-[11px] font-black" style={{ color: 'var(--text-primary)' }}>{dc.name}</span>
-                      </div>
-                      <p className="text-xs font-black flex items-center justify-center gap-1">
-                        <span style={{ color: dc.color }}>{dc.value}</span>
-                        <span className="text-[10px] text-slate-400 font-medium">({dc.pct})</span>
-                      </p>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span className="text-xl font-black" style={{ color: 'var(--text-primary)' }}>{cycleTotal.toLocaleString()}</span>
+                      <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400">Élèves</span>
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Légende détaillée */}
+                  <div className="flex-1 w-full space-y-2">
+                    {donneesCycle.map(dc => (
+                      <div
+                        key={dc.name}
+                        className="flex items-center gap-2.5 p-2 rounded-lg border transition-all hover:shadow-md active:scale-[0.99] cursor-pointer"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}
+                      >
+                        <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 border" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}>
+                          <span className="w-2 h-2 rounded-full" style={{ background: dc.color }} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold truncate" style={{ color: 'var(--text-primary)' }}>{dc.name}</span>
+                            <span className="text-[10px] font-black" style={{ color: dc.color }}>{dc.pct}</span>
+                          </div>
+                          <div className="w-full h-1.5 rounded-full bg-slate-500/10 overflow-hidden mt-1.5">
+                            <div
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{ width: dc.pct, background: dc.color }}
+                            />
+                          </div>
+                        </div>
+                        <span className="text-xs font-black shrink-0" style={{ color: 'var(--text-primary)' }}>{dc.value}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -2687,69 +2624,106 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
               </button>
             </div>
 
-            {/* Palmarès & Performance des Classes */}
+            {/* Palmarès & Effectifs par Promotion */}
             <div
-              className="lg:col-span-7 p-5 rounded-2xl flex flex-col justify-between border transition-all"
+              className="lg:col-span-7 p-4 rounded-2xl flex flex-col justify-between border transition-all hover:shadow-lg"
               style={{
                 background: 'var(--bg-surface)',
                 borderColor: 'var(--border)',
-                boxShadow: 'var(--elevation-1)',
+                boxShadow: 'var(--elevation-2)',
               }}
             >
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <h3 className="font-extrabold text-base tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                    Palmarès & Effectifs par Promotion
-                  </h3>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
-                    {filteredData.classes.length} Classe(s) Ouverte(s)
+                  <div>
+                    <h3 className="font-extrabold text-base tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                      Palmarès & Effectifs par Promotion
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Synthèse des effectifs par classe
+                    </p>
+                  </div>
+                  <span
+                    className="px-2.5 py-1 rounded-full text-[10px] font-black border"
+                    style={{ background: 'rgba(16,185,129,0.10)', color: '#10b981', borderColor: 'rgba(16,185,129,0.22)' }}
+                  >
+                    {filteredData.classes.length} Promotion{filteredData.classes.length > 1 ? 's' : ''}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Synthèse des effectifs et indicateurs de performance</p>
 
                 {filteredData.classes.length > 0 ? (
-                  <div className="space-y-2.5 max-h-[300px] overflow-y-auto sidebar-scroll pr-1">
-                    {filteredData.classes.map(cls => {
-                      const classStudents = filteredData.students.filter(s => s.classId === cls.id || s.nomClasse === cls.nom);
-                      const girls = classStudents.filter(s => s.sexe === 'F').length;
-                      const boys = classStudents.length - girls;
-                      const hasStudents = classStudents.length > 0;
-                      return (
-                        <div
-                          key={cls.id}
-                          className="p-3 rounded-xl border flex items-center justify-between gap-3 transition-all hover:bg-indigo-500/5"
-                          style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-black text-xs shrink-0 border border-indigo-500/25">
-                              {cls.nom.slice(0, 2).toUpperCase()}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-xs font-black truncate" style={{ color: 'var(--text-primary)' }}>{cls.nom}</p>
-                              <p className="text-[10.5px] text-slate-400 font-medium">
-                                {cls.salle || 'Salle de classe'} · {cls.optionCode || 'Tronc Commun'}
-                              </p>
-                            </div>
-                          </div>
+                  <div className="space-y-1.5 mt-3 max-h-[320px] overflow-y-auto sidebar-scroll pr-1">
+                    {filteredData.classes
+                      .map(cls => {
+                        const classStudents = filteredData.students.filter(s => s.classId === cls.id || s.nomClasse === cls.nom);
+                        const girls = classStudents.filter(s => s.sexe === 'F').length;
+                        const boys = classStudents.length - girls;
+                        return { cls, classStudents, girls, boys };
+                      })
+                      .sort((a, b) => b.classStudents.length - a.classStudents.length)
+                      .map(({ cls, classStudents, girls, boys }, index) => {
+                        const totalStudents = filteredData.students.length;
+                        const pct = totalStudents > 0 ? Math.round((classStudents.length / totalStudents) * 1000) / 10 : 0;
+                        const hasStudents = classStudents.length > 0;
 
-                          <div className="flex items-center gap-3 shrink-0">
-                            <div className="text-right">
-                              <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 block">{classStudents.length} élève{classStudents.length > 1 ? 's' : ''}</span>
-                              <span className="text-[10px] text-slate-400 font-medium">{girls}F / {boys}M</span>
+                        return (
+                          <div
+                            key={cls.id}
+                            className="group p-2 rounded-lg border flex items-center justify-between gap-2 transition-all hover:shadow-md active:scale-[0.99] cursor-pointer"
+                            style={{
+                              background: 'var(--bg-surface)',
+                              borderColor: 'var(--border)',
+                              boxShadow: 'var(--elevation-1)',
+                            }}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div
+                                className="w-7 h-7 rounded-lg flex items-center justify-center font-black text-[10px] shrink-0 border"
+                                style={{ background: 'var(--bg-surface)', color: '#6366f1', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}
+                              >
+                                {index + 1}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-black truncate" style={{ color: 'var(--text-primary)' }}>{cls.nom}</p>
+                                <p className="text-[10px] text-slate-400 font-medium truncate">
+                                  {cls.salle || 'Salle'} · {cls.optionCode || 'Tronc Commun'}
+                                </p>
+                                <div className="w-20 h-1 rounded-full bg-slate-500/10 overflow-hidden mt-1.5">
+                                  <div
+                                    className="h-full rounded-full transition-all duration-500"
+                                    style={{ width: `${pct}%`, background: '#6366f1' }}
+                                  />
+                                </div>
+                              </div>
                             </div>
-                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${
-                              hasStudents ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25' : 'bg-slate-500/10 text-slate-500 border-slate-500/20'
-                            }`}>
-                              {hasStudents ? 'Actif' : 'En attente'}
-                            </span>
+
+                            <div className="flex items-center gap-3 shrink-0">
+                              <div className="text-right">
+                                <span className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>{classStudents.length} <span className="text-[10px] font-medium text-slate-400">élèves</span></span>
+                                <div className="flex items-center gap-1.5 justify-end mt-0.5">
+                                  <span className="text-[10px] font-medium text-pink-500">{girls}F</span>
+                                  <span className="text-[10px] text-slate-300">·</span>
+                                  <span className="text-[10px] font-medium text-indigo-500">{boys}M</span>
+                                </div>
+                              </div>
+                              <span
+                                className="px-2 py-0.5 rounded-md text-[10px] font-black border"
+                                style={{
+                                  background: hasStudents ? 'rgba(16,185,129,0.10)' : 'rgba(148,163,184,0.10)',
+                                  color: hasStudents ? '#10b981' : 'var(--text-muted)',
+                                  borderColor: hasStudents ? 'rgba(16,185,129,0.22)' : 'var(--border)',
+                                }}
+                              >
+                                {hasStudents ? 'Actif' : 'En attente'}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
                   </div>
                 ) : (
-                  <div className="py-8 text-center space-y-2">
-                    <BookOpen className="w-8 h-8 text-slate-400 mx-auto" />
+                  <div className="py-10 text-center space-y-2">
+                    <BookOpen className="w-10 h-10 text-slate-400 mx-auto" />
                     <p className="text-xs font-bold text-slate-500">Aucune classe répertoriée pour ce cycle</p>
                   </div>
                 )}
@@ -2765,7 +2739,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                 </button>
                 <button
                   onClick={() => onNavigate && onNavigate('grades')}
-                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
                 >
                   <Award className="w-3.5 h-3.5 text-white" />
                   <span>Palmarès & Cotes</span>
@@ -2788,63 +2762,97 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                 label: 'Total Encaissements Minerval',
                 val: format(stats.totalRevenue),
                 sub: `${stats.recoveryRate}% des objectifs annuels`,
+                color: '#10b981',
+                icon: Banknote,
+                nav: 'invoices',
               },
               {
                 label: 'Reste à Recouvrer (Impayés)',
                 val: format(stats.totalUnpaid),
                 sub: `${filteredData.invoices.filter((inv) => getInvoiceRemaining(inv, filteredData.payments, displayCurrency) > 0.001).length} dossier(s) en retard`,
+                color: '#ef4444',
+                icon: AlertCircle,
+                nav: 'invoices',
               },
               {
                 label: 'Solde en Caisse & Banques',
                 val: format(stats.cashBalance),
                 sub: stats.totalExpenses > 0 ? `Dépenses: ${format(stats.totalExpenses)}` : 'Comptabilité vierge',
+                color: '#6366f1',
+                icon: Wallet,
+                nav: 'cash',
               },
-            ].map((f, i) => (
-              <div
-                key={i}
-                className="p-4 rounded-2xl shadow-xs flex flex-col justify-between border transition-colors"
-                style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
-              >
-                <div>
-                  <p className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400">{f.label}</p>
-                  <p className="text-2xl font-black mt-1" style={{ color: 'var(--text-primary)' }}>{f.val}</p>
-                  <p className="text-[10.5px] mt-1 font-medium text-slate-500 dark:text-slate-400">{f.sub}</p>
-                </div>
-                <button
-                  onClick={() => onNavigate && onNavigate('invoices')}
-                  className="mt-3 pt-2 border-t text-[10.5px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center justify-between cursor-pointer"
-                  style={{ borderColor: 'var(--border)' }}
+            ].map((f, i) => {
+              const FinIcon = f.icon;
+              return (
+                <div
+                  key={i}
+                  className="p-4 rounded-2xl flex flex-col justify-between border transition-all hover:shadow-md active:scale-[0.99]"
+                  style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-2)' }}
                 >
-                  <span>Détail complet</span>
-                  <ArrowRight className="w-3 h-3 text-indigo-500" />
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{f.label}</p>
+                      <p className="text-2xl font-black mt-1.5" style={{ color: 'var(--text-primary)' }}>{f.val}</p>
+                      <p className="text-[10.5px] mt-1 font-medium" style={{ color: f.color }}>{f.sub}</p>
+                    </div>
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border"
+                      style={{ background: 'var(--bg-surface)', borderColor: `${f.color}30`, color: f.color }}
+                    >
+                      <FinIcon className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onNavigate && onNavigate(f.nav)}
+                    className="mt-4 pt-3 border-t text-[10.5px] font-bold flex items-center justify-between cursor-pointer transition-colors hover:opacity-80"
+                    style={{ borderColor: 'var(--border)', color: f.color }}
+                  >
+                    <span>Détail complet</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div
-              className="p-5 rounded-2xl shadow-xs flex flex-col justify-between border transition-colors"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+              className="p-4 rounded-2xl flex flex-col justify-between border transition-all"
+              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-2)' }}
             >
               <div>
-                <h3 className="font-bold text-base mb-2" style={{ color: 'var(--text-primary)' }}>Ventilation des Encaissements par Canal</h3>
-                <div className="space-y-2.5 mt-3">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center border" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: '#6366f1' }}>
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <h3 className="font-extrabold text-base tracking-tight" style={{ color: 'var(--text-primary)' }}>Encaissements par Canal</h3>
+                </div>
+                <div className="space-y-1.5 mt-2.5">
                   {stats.paymentMethods.length > 0 ? stats.paymentMethods.map((m, i) => {
                     const Icon = m.method.includes('Caisse') ? DollarSign : m.method.includes('Carte') || m.method.includes('Banque') ? CreditCard : Smartphone;
+                    const canalColors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'];
+                    const color = canalColors[i % canalColors.length];
                     return (
-                      <div key={i} className="p-3 rounded-xl flex items-center justify-between" style={{ background: 'var(--bg-sunken)' }}>
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-lg flex items-center justify-center border border-indigo-500/20 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                      <div
+                        key={i}
+                        className="p-2 rounded-lg border flex items-center justify-between gap-2 cursor-pointer transition-all hover:shadow-md active:scale-[0.99]"
+                        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 border" style={{ background: 'var(--bg-surface)', borderColor: `${color}30`, color }}>
                             <Icon className="w-3.5 h-3.5" />
                           </div>
-                          <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{m.method}</span>
+                          <span className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{m.method}</span>
                         </div>
-                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{format(m.amount)} ({m.pct}%)</span>
+                        <div className="shrink-0 text-right">
+                          <p className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>{format(m.amount)}</p>
+                          <p className="text-[10px] font-medium" style={{ color }}>{m.pct}%</p>
+                        </div>
                       </div>
                     );
                   }) : (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 p-3">Aucun encaissement enregistré.</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 p-2">Aucun encaissement enregistré.</p>
                   )}
                 </div>
               </div>
@@ -2854,30 +2862,44 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                 className="mt-4 pt-3 border-t w-full flex items-center justify-between text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline transition-colors cursor-pointer"
                 style={{ borderColor: 'var(--border)' }}
               >
-                <span>Toutes les transactions électroniques</span>
+                <span>Toutes les transactions</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
 
             <div
-              className="p-5 rounded-2xl shadow-xs flex flex-col justify-between border transition-colors"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+              className="p-4 rounded-2xl flex flex-col justify-between border transition-all"
+              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}
             >
               <div>
-                <h3 className="font-bold text-base mb-2" style={{ color: 'var(--text-primary)' }}>Top des Impayés par Promotion</h3>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(239,68,68,0.10)', color: '#ef4444' }}>
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                  <h3 className="font-extrabold text-base tracking-tight" style={{ color: 'var(--text-primary)' }}>Impayés Prioritaires</h3>
+                </div>
                 {stats.topUnpaidInvoices.length > 0 ? (
-                  <div className="space-y-2 mt-3">
+                  <div className="space-y-1.5 mt-2.5">
                     {paginatedTopUnpaid.map((inv, i) => (
-                      <div key={i} className="p-3 rounded-xl flex items-center justify-between" style={{ background: 'var(--bg-sunken)' }}>
-                        <span className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{inv.nomEleve}</span>
-                        <span className="text-xs font-bold text-rose-600 dark:text-rose-400">{format(inv.montant)}</span>
+                      <div
+                        key={i}
+                        className="p-2 rounded-lg border flex items-center justify-between gap-2 transition-all hover:shadow-sm"
+                        style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-6 h-6 rounded-md flex items-center justify-center text-[9px] font-black shrink-0" style={{ background: 'rgba(239,68,68,0.10)', color: '#ef4444' }}>
+                            {i + 1}
+                          </div>
+                          <span className="text-xs font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{inv.nomEleve}</span>
+                        </div>
+                        <span className="text-xs font-black" style={{ color: '#ef4444' }}>{format(inv.montant)}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="p-4 rounded-xl border text-center space-y-1 mt-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <div className="p-3 rounded-lg border text-center space-y-1 mt-2.5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucun Impayé Enregistré</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Toutes les factures et minervals sont en ordre.</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Toutes les factures sont en ordre.</p>
                   </div>
                 )}
                 {stats.topUnpaidInvoices.length > 0 && (
@@ -2896,121 +2918,10 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
 
               <button
                 onClick={() => onNavigate && onNavigate('invoices')}
-                className="mt-4 pt-3 border-t w-full flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 hover:underline transition-colors cursor-pointer"
+                className="mt-4 pt-3 border-t w-full flex items-center justify-between text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline transition-colors cursor-pointer"
                 style={{ borderColor: 'var(--border)' }}
               >
                 <span>Registre des impayés ({stats.topUnpaidInvoices.length})</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== ONGLET 4 : VIE SCOLAIRE, PRÉSENCES & DISCIPLINE ===== */}
-      {activeSubTab === 'viescolaire' && (
-        <div className="space-y-4 animate-fade-in">
-          {/* CARTES KPI DE SYNTHÈSE VIE SCOLAIRE */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div
-              className="p-4 rounded-2xl shadow-xs border transition-colors flex items-center justify-between"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
-            >
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Taux d'Assiduité Globale</span>
-                <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5 block">{stats.presenceRate}%</span>
-                <span className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">Moyenne générale de présence</span>
-              </div>
-              <div className="p-3 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
-                <UserCheck className="w-5 h-5" />
-              </div>
-            </div>
-
-            <div
-              className="p-4 rounded-2xl shadow-xs border transition-colors flex items-center justify-between"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
-            >
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Absences Ce Mois</span>
-                <span className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-0.5 block">{monthlyPresenceStats.absences}</span>
-                <span className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">{monthlyPresenceStats.justifiees} justifiée{monthlyPresenceStats.justifiees > 1 ? 's' : ''}</span>
-              </div>
-              <div className="p-3 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25">
-                <AlertCircle className="w-5 h-5" />
-              </div>
-            </div>
-
-            <div
-              className="p-4 rounded-2xl shadow-xs border transition-colors flex items-center justify-between"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
-            >
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Retards Signalisés</span>
-                <span className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-0.5 block">{monthlyPresenceStats.retards}</span>
-                <span className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">Registre des retards en classe</span>
-              </div>
-              <div className="p-3 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25">
-                <Clock className="w-5 h-5" />
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION PRÉSENCE DU JOUR PAR CATÉGORIE ET CYCLE */}
-          <DailyAttendanceByCategory selectedCycleFilter={selectedCycleFilter} data={stats.attendanceByCycle} />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div
-              className="p-5 rounded-2xl shadow-xs flex flex-col justify-between space-y-3 border transition-colors"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
-            >
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-bold text-base flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                    <HeartPulse className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                    <span>Infirmerie & Consultations Récentes</span>
-                  </h3>
-                  <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded-full border border-indigo-500/25">{monthlyPresenceStats.absences} absence{monthlyPresenceStats.absences > 1 ? 's' : ''} ce mois</span>
-                </div>
-                <div className="p-4 rounded-xl border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucune Consultation Récente</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Le registre de santé de l'infirmerie est vierge.</p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => onNavigate && onNavigate('viescolaire')}
-                className="pt-3 border-t w-full flex items-center justify-between text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline transition-colors cursor-pointer"
-                style={{ borderColor: 'var(--border)' }}
-              >
-                <span>Registre complet de santé & infirmerie</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div
-              className="p-5 rounded-2xl shadow-xs flex flex-col justify-between space-y-3 border transition-colors"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
-            >
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-bold text-base flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                    <Scale className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                    <span>Rapports Disciplinaires Récents</span>
-                  </h3>
-                  <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded-full border border-indigo-500/25">{monthlyPresenceStats.retards} retard{monthlyPresenceStats.retards > 1 ? 's' : ''}</span>
-                </div>
-                <div className="p-4 rounded-xl border text-center space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucun Rapport Disciplinaire</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Le registre disciplinaire ne contient aucune sanction.</p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => onNavigate && onNavigate('viescolaire')}
-                className="pt-3 border-t w-full flex items-center justify-between text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline transition-colors cursor-pointer"
-                style={{ borderColor: 'var(--border)' }}
-              >
-                <span>Registre disciplinaire intégral</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

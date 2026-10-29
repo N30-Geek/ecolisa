@@ -5,6 +5,8 @@ import { Eleve, CodeCycle } from '../../types';
 import { SchoolConfig, CardCustomization, CardFieldOverride } from '../onboarding/OnboardingWizard';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { LOGO_EPST_RDC_BASE64 } from '../../assets/logoEPSTData';
+import { FLAG_RDC_BASE64 } from '../../assets/flagRDCData';
+import { RDCEleveCardTemplate } from './RDCEleveCardTemplate';
 
 type CardTheme = 'blue' | 'indigo' | 'emerald' | 'gold' | 'burgundy' | 'violet' | 'light_rdc';
 type CardLayout = 'portrait' | 'landscape';
@@ -56,9 +58,20 @@ interface IdCardRendererProps {
   face?: 'front' | 'back';
   className?: string;
   style?: React.CSSProperties;
+  cycle?: CodeCycle;
+  model?: CardCustomization['rendererModel'];
 }
 
 export const defaultCardCustomization: CardCustomization = {
+  rendererModel: 'rdc_epst',
+  templateId: 'rdc_classic',
+  headerTitle: 'République Démocratique du Congo',
+  headerSubtitle: 'Ministère de l’EPST',
+  footerText: 'Carte personnelle • À présenter à chaque contrôle',
+  photoShape: 'rounded',
+  borderStyle: 'solid',
+  cornerRadius: 14,
+  fontFamily: 'sans',
   selectedFields: ['nom', 'postnom', 'prenom', 'dateNaissance', 'lieuNaissance', 'sexe', 'nationalite', 'groupeSanguin', 'adressePhysique', 'provinceOrigine', 'nomClasse', 'registrationNumber', 'telephoneParent', 'nomPere', 'nomMere', 'transportScolaire'],
   legalMention: 'Cette carte est strictement personnelle. Toute falsification est punissable par la loi.',
   validityPeriod: '2025–2026',
@@ -101,6 +114,14 @@ function formatDate(d?: string) {
   try { return new Date(d).toLocaleDateString('fr-FR'); } catch { return d; }
 }
 
+export function getStudentCardCycle(student: Eleve): CodeCycle {
+  const code = student.cycleCode;
+  if (code === 'MATERNELLE' || code === 'PRESCHOOL') return 'PRESCHOOL';
+  if (code === 'SECONDAIRE_CTEB' || code === 'CTEB') return 'CTEB';
+  if (code === 'PRIMAIRE' || code === 'HUMANITES' || code === 'CUSTOM') return code;
+  return detectCycle(student.nomClasse);
+}
+
 function detectCycle(nomClasse?: string): CodeCycle {
   const n = (nomClasse || '').toLowerCase();
   if (n.includes('maternelle') || n.includes('préscolaire') || n.includes('preschool')) return 'PRESCHOOL';
@@ -110,39 +131,31 @@ function detectCycle(nomClasse?: string): CodeCycle {
   return 'CUSTOM';
 }
 
-function resolveCardConfig(
+export function resolveCardConfig(
   schoolConfig: Partial<SchoolConfig> | null | undefined,
   cardConfig: Partial<CardCustomization> | undefined,
   cycle: CodeCycle
 ): CardCustomization {
   const base = { ...defaultCardCustomization, ...schoolConfig?.cardCustomization, ...cardConfig };
-  const override = (base.byCycle || {})[cycle] as CardFieldOverride | undefined;
+  const override = base.byCycle?.[cycle];
   if (!override) return base;
+  const defined = Object.fromEntries(Object.entries(override).filter(([, value]) => value !== undefined && value !== null));
+  return { ...base, ...defined, selectedFields: override.fields ?? base.selectedFields };
+}
+
+export function cardAppearance(cfg: CardCustomization): React.CSSProperties {
   return {
-    ...base,
-    selectedFields: override.fields ?? base.selectedFields,
-    legalMention: override.legalMention ?? base.legalMention,
-    validityPeriod: override.validityPeriod ?? base.validityPeriod,
-    showCoatOfArms: override.showCoatOfArms ?? base.showCoatOfArms,
-    showCountryFlag: override.showCountryFlag ?? base.showCountryFlag,
-    showFiligree: override.showFiligree ?? base.showFiligree,
-    showMiniLogos: override.showMiniLogos ?? base.showMiniLogos,
-    cardTheme: (override.cardTheme ?? base.cardTheme) as CardTheme,
-    cardLayout: (override.cardLayout ?? base.cardLayout) as CardLayout,
-    filigreeType: (override.filigreeType ?? base.filigreeType) as CardCustomization['filigreeType'],
-    filigreeText: override.filigreeText ?? base.filigreeText,
-    filigreeShape: (override.filigreeShape ?? base.filigreeShape) as CardCustomization['filigreeShape'],
-    filigreeImage: override.filigreeImage ?? base.filigreeImage,
-    filigreeOpacity: override.filigreeOpacity ?? base.filigreeOpacity,
-    filigreeDensity: (override.filigreeDensity ?? base.filigreeDensity) as CardCustomization['filigreeDensity'],
-    headerAlign: (override.headerAlign ?? base.headerAlign) as CardCustomization['headerAlign'],
-    photoPosition: (override.photoPosition ?? base.photoPosition) as CardCustomization['photoPosition'],
-    fieldsLayout: (override.fieldsLayout ?? base.fieldsLayout) as CardCustomization['fieldsLayout'],
-    textAlign: (override.textAlign ?? base.textAlign) as CardCustomization['textAlign'],
-    showQR: override.showQR ?? base.showQR,
-    showTricolor: override.showTricolor ?? base.showTricolor,
-    showSchoolSeal: override.showSchoolSeal ?? base.showSchoolSeal,
+    fontFamily: cfg.fontFamily === 'serif' ? 'Georgia, Times New Roman, serif' : cfg.fontFamily === 'mono' ? 'Courier New, monospace' : 'Arial, Helvetica, sans-serif',
+    borderStyle: cfg.borderStyle ?? 'solid',
+    borderWidth: cfg.borderStyle === 'none' ? 0 : cfg.borderStyle === 'double' ? 4 : 1,
+    borderColor: cfg.borderColor || '#cbd5e1',
+    borderRadius: cfg.cornerRadius ?? 14,
+    backgroundColor: cfg.cardBgColor || '#ffffff',
   };
+}
+
+export function cardPhotoStyle(cfg: CardCustomization): React.CSSProperties {
+  return { borderRadius: cfg.photoShape === 'circle' ? '50%' : cfg.photoShape === 'square' ? 0 : 8, borderColor: cfg.borderColor || '#94a3b8' };
 }
 
 const idPayload = (student: Eleve) =>
@@ -196,10 +209,12 @@ export const IdCardRenderer: React.FC<IdCardRendererProps> = ({
   face = 'front',
   className = '',
   style,
+  cycle: propCycle,
+  model,
 }) => {
   const { config: hookSchoolConfig } = useSchoolConfig();
   const schoolConfig = propSchoolConfig || hookSchoolConfig;
-  const cycle = detectCycle(student.nomClasse);
+  const cycle = propCycle ?? getStudentCardCycle(student);
   const cfg = resolveCardConfig(schoolConfig, cardConfig, cycle);
   const t = themeMeta[cfg.cardTheme];
   const qrValue = useMemo(() => idPayload(student), [student]);
@@ -348,31 +363,27 @@ export const IdCardRenderer: React.FC<IdCardRendererProps> = ({
   const headerTextAlign = { left: 'left', center: 'center', right: 'right' }[cfg.headerAlign];
 
   const FrontHeader = ({ compact = false, subtitle }: { compact?: boolean; subtitle?: string }) => (
-    <div className={`relative z-10 ${compact ? 'pt-2 pb-1 px-3' : 'pt-3 pb-1.5 px-3'} border-b`} style={{ borderColor: t.border, background: `linear-gradient(180deg, ${t.light} 0%, #fff 100%)` }}>
+    <div className={`relative z-10 ${compact ? 'pt-2 pb-1 px-3' : 'pt-3 pb-1.5 px-3'} border-b`} style={{ borderColor: t.border, background: cfg.headerBgColor || `linear-gradient(180deg, ${t.light} 0%, #fff 100%)` }}>
       <div className="flex items-center justify-between gap-2">
-        {/* LOGO GAUCHE : SCEAU OFFICIEL EPST RDC (input_file_1.png) */}
-        {cfg.showOfficialEpstLogo !== false && (
+        {/* LOGO GAUCHE : DRAPEAU RDC */}
+        {cfg.showCountryFlag && (
           <div className={`${compact ? 'w-7 h-7' : 'w-9 h-9'} rounded-full bg-white p-0.5 border border-slate-300 shrink-0 shadow-2xs flex items-center justify-center`}>
-            <img src={LOGO_EPST_RDC_BASE64} alt="EPST Logo" className="w-full h-full object-contain" />
+            <img src={FLAG_RDC_BASE64} alt="Drapeau RDC" className="w-full h-full object-contain" />
           </div>
         )}
 
         {/* CENTRE : INFORMATIONS DU HEADER EN-TÊTE RDC ET ÉCOLE */}
-        <div className="flex-1 text-center min-w-0 leading-tight">
-          <p className="font-black uppercase tracking-wider truncate text-slate-900" style={{ color: t.primary, fontSize: compact ? 7 : 8 }}>République Démocratique du Congo</p>
-          <p className="font-bold uppercase tracking-wide text-slate-500 truncate" style={{ fontSize: compact ? 6 : 7 }}>Ministère de l'EPST</p>
+        <div className="flex-1 min-w-0 leading-tight" style={{ textAlign: cfg.headerAlign }}>
+          <p className="font-black uppercase tracking-wider truncate text-slate-900" style={{ color: t.primary, fontSize: compact ? 7 : 8 }}>{cfg.headerTitle}</p>
+          <p className="font-bold uppercase tracking-wide text-slate-500 truncate" style={{ fontSize: compact ? 6 : 7 }}>{cfg.headerSubtitle}</p>
           <h3 className={`font-black uppercase tracking-tight truncate ${compact ? 'text-[10px]' : 'text-[12px]'} mt-0.5`} style={{ color: t.primary }}>{schoolName}</h3>
           {subtitle && <p className={`font-black uppercase tracking-wider truncate ${compact ? 'text-[6px]' : 'text-[7px]'}`} style={{ color: t.secondary }}>{subtitle}</p>}
         </div>
 
-        {/* LOGO DROITE : LOGO DE L'ÉTABLISSEMENT */}
-        {cfg.showSchoolLogo !== false && (
-          <div className={`${compact ? 'w-7 h-7' : 'w-9 h-9'} rounded-md bg-white p-0.5 border border-slate-300 shrink-0 shadow-2xs flex items-center justify-center`}>
-            {schoolLogo ? (
-              <img src={schoolLogo} alt="logo" className="w-full h-full object-contain rounded" />
-            ) : (
-              <School className={`${compact ? 'w-5 h-5' : 'w-6 h-6'}`} style={{ color: t.primary }} />
-            )}
+        {/* LOGO DROITE : SCEAU OFFICIEL EPST RDC */}
+        {cfg.showCoatOfArms && cfg.showOfficialEpstLogo !== false && (
+          <div className={`${compact ? 'w-7 h-7' : 'w-9 h-9'} rounded-full bg-white p-0.5 border border-slate-300 shrink-0 shadow-2xs flex items-center justify-center`}>
+            <img src={LOGO_EPST_RDC_BASE64} alt="EPST Logo" className="w-full h-full object-contain" />
           </div>
         )}
       </div>
@@ -386,7 +397,7 @@ export const IdCardRenderer: React.FC<IdCardRendererProps> = ({
     <div className="flex flex-col items-center gap-1.5">
       <div
         className="w-32 h-40 rounded-lg border-2 bg-white shadow-md overflow-hidden relative"
-        style={{ borderColor: '#94a3b8' }}
+        style={{ ...cardPhotoStyle(cfg), ...(cfg.photoShape === 'circle' ? { height: 128 } : {}) }}
       >
         {student.photoUrl ? (
           <img src={student.photoUrl} alt={student.prenom} className="w-full h-full object-cover" />
@@ -432,7 +443,7 @@ export const IdCardRenderer: React.FC<IdCardRendererProps> = ({
     <div className="w-44 flex flex-col items-center justify-center gap-1.5 p-2" style={{ borderColor: t.border, background: t.light }}>
       <div
         className="w-32 h-40 rounded-lg border-2 bg-white shadow-md overflow-hidden relative"
-        style={{ borderColor: '#94a3b8' }}
+        style={{ ...cardPhotoStyle(cfg), ...(cfg.photoShape === 'circle' ? { height: 128 } : {}) }}
       >
         {student.photoUrl ? (
           <img src={student.photoUrl} alt={student.prenom} className="w-full h-full object-cover" />
@@ -470,6 +481,7 @@ export const IdCardRenderer: React.FC<IdCardRendererProps> = ({
             </div>
           </div>
         )}
+        {cfg.footerText && <p className="text-[8px] text-center text-slate-600 leading-tight mt-1">{cfg.footerText}</p>}
         {cfg.showTricolor && <div className="h-1.5 w-full mt-2 rounded-full bg-gradient-to-r from-blue-600 via-yellow-400 to-red-500" />}
       </div>
     </div>
@@ -478,7 +490,7 @@ export const IdCardRenderer: React.FC<IdCardRendererProps> = ({
   const FrontPortrait = () => (
     <div
       className={`relative rounded-2xl overflow-hidden shadow-2xl border-2 ${className}`}
-      style={{ width: '360px', height: '500px', background: '#fff', borderColor: t.border, ...style }}
+      style={{ width: '360px', height: '500px', background: '#fff', ...cardAppearance(cfg), ...style }}
     >
       {cfg.showFiligree && <Filigree color={t.primary} />}
       {cfg.showMiniLogos && (
@@ -500,6 +512,7 @@ export const IdCardRenderer: React.FC<IdCardRendererProps> = ({
             </div>
           </div>
         )}
+        {cfg.footerText && <p className="text-[8px] text-center text-slate-600 leading-tight mt-1">{cfg.footerText}</p>}
         {cfg.showTricolor && <div className="h-1.5 w-full mt-2 rounded-full bg-gradient-to-r from-blue-600 via-yellow-400 to-red-500" />}
       </div>
     </div>
@@ -508,7 +521,7 @@ export const IdCardRenderer: React.FC<IdCardRendererProps> = ({
   const FrontLandscape = () => (
     <div
       className={`relative rounded-2xl overflow-hidden shadow-2xl border-2 ${className}`}
-      style={{ width: '540px', height: '360px', background: '#fff', borderColor: t.border, ...style }}
+      style={{ width: '540px', height: '360px', background: '#fff', ...cardAppearance(cfg), ...style }}
     >
       {cfg.showFiligree && <Filigree color={t.primary} />}
       {cfg.showMiniLogos && (
@@ -529,7 +542,7 @@ export const IdCardRenderer: React.FC<IdCardRendererProps> = ({
     return (
       <div
         className={`relative rounded-2xl overflow-hidden shadow-2xl border-2 ${className}`}
-        style={{ width: backWidth, height: backHeight, background: '#fff', borderColor: t.border, ...style }}
+        style={{ width: backWidth, height: backHeight, background: '#fff', ...cardAppearance(cfg), ...style }}
       >
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden" style={{ opacity: 0.05 }}>
           <div
@@ -604,7 +617,7 @@ export const IdCardRenderer: React.FC<IdCardRendererProps> = ({
               <div className="flex items-center justify-between">
                 <div className="text-[8px] text-slate-500">
                   <p>Année scolaire : <span className="text-slate-800 font-black">{schoolConfig?.activeSchoolYear || validityPeriod}</span></p>
-                  <p>Valable sur tout le territoire national</p>
+                  <p>{cfg.footerText}</p>
                 </div>
                 {cfg.showQR && (
                   <div className="bg-white p-1 rounded-lg border" style={{ borderColor: t.border }}>
@@ -620,6 +633,9 @@ export const IdCardRenderer: React.FC<IdCardRendererProps> = ({
     );
   };
 
+  if ((model ?? cfg.rendererModel) === 'rdc_epst') {
+    return <RDCEleveCardTemplate student={student} schoolConfig={schoolConfig} cardConfig={{ ...cfg, byCycle: {} }} face={face} className={className} style={style} />;
+  }
   if (face === 'back') return <Back />;
   return cfg.cardLayout === 'portrait' ? <FrontPortrait /> : <FrontLandscape />;
 };

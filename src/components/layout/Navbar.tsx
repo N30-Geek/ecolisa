@@ -35,6 +35,7 @@ import {
   HelpCircle,
   LogOut,
   User,
+  Download,
   Shield,
   LifeBuoy,
   X,
@@ -54,6 +55,7 @@ import { CommandPalette } from './CommandPalette';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { hasTabAccess } from '../../utils/permissions';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
+import { setSearchTarget } from '../../hooks/useSearchTarget';
 
 interface NavbarProps {
   userRole: RôleSystème;
@@ -76,7 +78,8 @@ interface NavbarProps {
 
 const roleLabels: Record<RôleSystème, string> = {
   PROMOTEUR_ADMIN: 'Promoteur / Admin',
-  PREFET_DIRECTEUR: 'Préfet / Directeur',
+  PREFET_DIRECTEUR: 'Préfet des Études',
+  DIRECTEUR_ECOLE: 'Directeur d’école (P/M)',
   DIRECTEUR_ETUDES: 'Directeur des Études',
   DIRECTEUR_DISCIPLINE: 'Dir. de Discipline',
   COMPTABLE: 'Comptable Intendant',
@@ -90,7 +93,8 @@ const roleLabels: Record<RôleSystème, string> = {
 
 const roleOptions: SelectOption[] = [
   { value: 'PROMOTEUR_ADMIN', label: 'Promoteur / Admin Système', description: 'Accès complet & administration', badge: 'PRO' },
-  { value: 'PREFET_DIRECTEUR', label: 'Préfet / Directeur', description: 'Direction pédagogique et administrative', badge: 'DIR' },
+  { value: 'PREFET_DIRECTEUR', label: 'Préfet des Études', description: 'Direction pédagogique et administrative', badge: 'PREF' },
+  { value: 'DIRECTEUR_ECOLE', label: 'Directeur d’école (P/M)', description: 'Direction cycle maternel / primaire', badge: 'DIR' },
   { value: 'DIRECTEUR_ETUDES', label: 'Directeur des Études', description: 'Horaires, cotes et délibérations', badge: 'EDU' },
   { value: 'DIRECTEUR_DISCIPLINE', label: 'Dir. de Discipline', description: 'Suivi de la conduite et absences', badge: 'DISC' },
   { value: 'COMPTABLE', label: 'Comptable / Intendant', description: 'Frais scolaires, caisse et paie', badge: 'FIN' },
@@ -230,12 +234,22 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleSync = () => {
     setIsSyncing(true);
+    // Synchronisation automatique en arrière-plan
     setTimeout(() => {
       setIsSyncing(false);
     }, 1200);
   };
 
-  // Charger les alertes du centre de notifications selon le rôle
+  // Synchronisation automatique en arrière-plan toutes les 60 secondes
+  useEffect(() => {
+    if (!isOnline) return;
+    const interval = setInterval(() => {
+      handleSync();
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [isOnline]);
+
+  // Charger les alertes du centre de notifications selon les données réelles
   useEffect(() => {
     const loadRead = () => {
       try {
@@ -246,38 +260,149 @@ export const Navbar: React.FC<NavbarProps> = ({
         setReadNotifIds(new Set());
       }
     };
-    const loadNotifs = () => {
-      try {
-        const system = [
-          { id: 'sys-1', type: 'system', text: 'Exetat RDC : Inscriptions ouvertes', time: 'Il y a 20 min', icon: 'FileText', iconColor: '#6366f1' },
-          { id: 'sys-2', type: 'system', text: 'Sauvegarde SQLite P2P réussie (0.4ms)', time: 'Il y a 1h', icon: 'CheckCircle2', iconColor: '#3b82f6' },
-        ];
 
-        if (isFinanceAllowed) {
-          const raw = localStorage.getItem(NOTIF_FINANCE_KEY);
-          const financial = raw ? JSON.parse(raw) : [];
-          setNotifications([...financial, ...system]);
-        } else {
-          // Notifications pédagogiques adaptées aux enseignants
-          const pedagogical = [
-            { id: 'ped-1', type: 'pedagogy', text: 'Évaluations EPST : Clôture de l\'encodage des cotes en cours', time: 'Il y a 15 min', icon: 'ClipboardCheck', iconColor: '#6366f1' },
-            { id: 'ped-2', type: 'pedagogy', text: 'Assiduité : Pointage journalier des présences actif', time: 'Ce matin', icon: 'UserCheck', iconColor: '#10b981' },
-            { id: 'ped-3', type: 'pedagogy', text: 'Calendrier : Prochaine délibération pédagogique programmée', time: 'Hier', icon: 'Calendar', iconColor: '#8b5cf6' },
-          ];
-          setNotifications([...pedagogical, ...system]);
+    const timeAgo = (dateStr?: string) => {
+      if (!dateStr) return 'Récemment';
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      const diff = Date.now() - d.getTime();
+      const minutes = Math.floor(diff / 60000);
+      if (minutes < 1) return 'À l\'instant';
+      if (minutes < 60) return `Il y a ${minutes} min`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `Il y a ${hours}h`;
+      return `Il y a ${Math.floor(hours / 24)}j`;
+    };
+
+    const loadNotifs = async () => {
+      try {
+        const [students, classes, invoices, payments, presences, events, staff] = await Promise.all([
+          LocalDatabaseService.getEleves().catch(() => []),
+          LocalDatabaseService.getClasses().catch(() => []),
+          LocalDatabaseService.getInvoices().catch(() => []),
+          LocalDatabaseService.getPayments().catch(() => []),
+          LocalDatabaseService.getPresences().catch(() => []),
+          LocalDatabaseService.getSchoolEvents().catch(() => []),
+          LocalDatabaseService.getStaff().catch(() => []),
+        ]);
+
+        const notifs: any[] = [];
+
+        // Impayés (finance)
+        if (isFinanceAllowed && invoices.length > 0) {
+          const unpaid = invoices.filter((inv: any) => (inv.soldeRestant || 0) > 0);
+          if (unpaid.length > 0) {
+            const total = unpaid.reduce((sum: number, inv: any) => sum + (inv.soldeRestant || 0), 0);
+            notifs.push({
+              id: 'fin-unpaid',
+              type: 'finance',
+              text: `${unpaid.length} impayé${unpaid.length > 1 ? 's' : ''} — ${total.toLocaleString()} CDF à recouvrer`,
+              nom: unpaid[0].nomEleve,
+              time: 'En direct',
+              icon: 'Banknote',
+              iconColor: '#ef4444',
+              action: 'invoices',
+              targetId: unpaid[0].studentId || unpaid[0].id,
+              targetType: 'invoice',
+            });
+          }
         }
+
+        // Dernier paiement (finance)
+        if (isFinanceAllowed && payments.length > 0) {
+          const last = payments[payments.length - 1];
+          notifs.push({
+            id: `fin-pay-${last.id}`,
+            type: 'finance',
+            text: `Paiement reçu : ${(last.montantPaye || 0).toLocaleString()} ${last.devise || 'CDF'}`,
+            nom: last.nomEleve,
+            time: timeAgo(last.dateCreation),
+            icon: 'Banknote',
+            iconColor: '#10b981',
+            action: 'cash',
+            targetId: last.studentId || last.id,
+            targetType: 'payment',
+          });
+        }
+
+        // Nouvelles inscriptions (pédagogie)
+        const recentStudents = students.slice(-3);
+        recentStudents.forEach((s: any) => {
+          notifs.push({
+            id: `ped-std-${s.id}`,
+            type: 'pedagogy',
+            text: `Inscription : ${s.prenom} ${s.nom} (${s.nomClasse || 'Classe'})`,
+            nom: `${s.prenom} ${s.nom}`,
+            time: timeAgo(s.dateCreation || s.registrationDate),
+            icon: 'GraduationCap',
+            iconColor: '#6366f1',
+            action: 'students',
+            targetId: s.id,
+            targetType: 'student',
+          });
+        });
+
+        // Assiduité du jour
+        if (presences.length > 0) {
+          const today = new Date().toISOString().split('T')[0];
+          const todayPresences = presences.filter((p: any) => (p.dateJour || '').startsWith(today));
+          if (todayPresences.length > 0) {
+            const absents = todayPresences.filter((p: any) => p.statut === 'ABSENT' || p.statut === 'RETARD').length;
+            if (absents > 0) {
+              notifs.push({
+                id: 'ped-presence',
+                type: 'pedagogy',
+                text: `${absents} élève${absents > 1 ? 's' : ''} absent${absents > 1 ? 's' : ''}/retard aujourd'hui`,
+                time: 'Aujourd\'hui',
+                icon: 'UserCheck',
+                iconColor: '#f59e0b',
+                action: 'pointage',
+              });
+            }
+          }
+        }
+
+        // Événements à venir
+        const upcoming = events.filter((e: any) => new Date(e.dateDebut || '') >= new Date()).slice(0, 2);
+        upcoming.forEach((e: any) => {
+          notifs.push({
+            id: `sys-ev-${e.id}`,
+            type: 'system',
+            text: `Agenda : ${e.titre}`,
+            time: timeAgo(e.dateDebut),
+            icon: 'Calendar',
+            iconColor: '#8b5cf6',
+            action: 'calendar',
+          });
+        });
+
+        // Personnel manquant de cycles
+        const unassignedStaff = staff.filter((p: any) => !(p.cyclesAssignes || []).length);
+        if (unassignedStaff.length > 0) {
+          notifs.push({
+            id: 'sys-staff',
+            type: 'system',
+            text: `${unassignedStaff.length} membre${unassignedStaff.length > 1 ? 's' : ''} du personnel sans cycle assigné`,
+            time: 'À vérifier',
+            icon: 'UserCheck',
+            iconColor: '#f59e0b',
+            action: 'teachers',
+          });
+        }
+
+        setNotifications(notifs);
       } catch {
         setNotifications([]);
       }
     };
+
     loadRead();
     loadNotifs();
     const onStorage = (e: StorageEvent) => {
-      if (e.key === NOTIF_FINANCE_KEY) loadNotifs();
       if (e.key === NOTIF_READ_KEY) loadRead();
     };
     window.addEventListener('storage', onStorage);
-    const timer = setInterval(() => { loadNotifs(); loadRead(); }, 5000);
+    const timer = setInterval(() => { loadNotifs(); loadRead(); }, 60000);
     return () => { window.removeEventListener('storage', onStorage); clearInterval(timer); };
   }, [isFinanceAllowed]);
 
@@ -365,10 +490,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
                     {currentTabInfo.category}
                   </span>
-                  <span className="w-1 h-1 rounded-full bg-slate-400 opacity-50" />
-                  <span className="text-[9.5px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest hidden sm:inline flex items-center gap-1">
-                    <HardDrive className="w-3 h-3 inline" /> LOCAL-FIRST
-                  </span>
                 </div>
 
                 <h1
@@ -392,24 +513,26 @@ export const Navbar: React.FC<NavbarProps> = ({
               />
             </div>
 
-            {/* Selecteur de Devise d'Affichage Utilisateur */}
-            <div className="hidden lg:block ml-2 shrink-0">
-              <CustomSelect
-                options={currencies.map((c) => ({ value: c.code, label: `${c.code} (${c.symbol})` }))}
-                value={displayCurrency}
-                onChange={(val) => setDisplayCurrency(val)}
-                placeholder="Devise"
-                icon={DollarSign}
-                className="w-32"
-              />
-            </div>
+            {/* Selecteur de Devise d'Affichage Utilisateur (uniquement rôles financiers) */}
+            {isFinanceAllowed && (
+              <div className="hidden lg:block ml-2 shrink-0">
+                <CustomSelect
+                  options={currencies.map((c) => ({ value: c.code, label: `${c.code} (${c.symbol})` }))}
+                  value={displayCurrency}
+                  onChange={(val) => setDisplayCurrency(val)}
+                  placeholder="Devise"
+                  icon={DollarSign}
+                  className="w-32"
+                />
+              </div>
+            )}
           </div>
 
           {/* ===== SECTION CENTRALE: RECHERCHE GLOBALE ===== */}
-          <div className="hidden md:flex items-center justify-center max-w-xs xl:max-w-sm w-full mx-2">
+          <div className="hidden md:flex items-center justify-center max-w-md xl:max-w-lg w-full mx-4">
             <button
               onClick={() => setIsCommandPaletteOpen(true)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-150 cursor-pointer group"
+              className="w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all duration-150 cursor-pointer group"
               style={{
                 background: 'var(--bg-sunken)',
                 borderColor: 'var(--border)',
@@ -427,11 +550,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="flex items-center gap-2 truncate">
                 <Search className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
                 <span className="truncate group-hover:text-indigo-500 transition-colors">
-                  Rechercher un élève, reçu, classe...
+                  Rechercher un élève, reçu, classe, personnel...
                 </span>
               </div>
               <kbd
-                className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9.5px] font-mono font-black text-indigo-500"
+                className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9.5px] font-mono font-medium text-indigo-500"
                 style={{ background: 'rgba(99,102,241,0.10)', border: '1px solid rgba(99,102,241,0.18)' }}
               >
                 <Command className="w-2.5 h-2.5" /> K
@@ -454,30 +577,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </button>
 
-            {/* Statut Local-First & Synchro */}
+            {/* Forcer l'actualisation des données */}
             <button
               onClick={() => {
-                if (isOnline) handleSync();
-                else setIsOnline(true);
+                setIsSyncing(true);
+                window.location.reload();
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all duration-150 active:scale-95 cursor-pointer"
-              style={{
-                background: isOnline ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)',
-                borderColor: isOnline ? 'rgba(16,185,129,0.20)' : 'rgba(239,68,68,0.20)',
-                color: isOnline ? '#10b981' : '#f87171',
-              }}
-              title={isOnline ? 'Base SQLite locale synchronisée' : 'Mode Hors-Ligne'}
+              disabled={isSyncing}
+              className="toolbar-btn"
+              title="Actualiser les données"
             >
               {isSyncing ? (
                 <Loader className="w-3.5 h-3.5 animate-spin" />
-              ) : isOnline ? (
-                <RefreshCw className="w-3.5 h-3.5" />
               ) : (
-                <WifiOff className="w-3.5 h-3.5" />
+                <RefreshCw className="w-3.5 h-3.5" />
               )}
-              <span className="hidden sm:inline">
-                {isSyncing ? 'Synchro...' : isOnline ? 'SQLite WAL' : 'Hors-ligne'}
-              </span>
             </button>
 
             {/* Centre de Notifications */}
@@ -504,10 +618,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Popover Notifications */}
               {showNotifMenu && (
                 <div
-                  className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl border z-50 overflow-hidden animate-scale-in"
+                  className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl border shadow-2xl z-50 overflow-hidden animate-scale-in"
                   style={{
                     background: 'var(--sidebar-popover-bg)',
                     borderColor: 'var(--sidebar-popover-border)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
                   }}
                 >
                   <div
@@ -567,6 +683,26 @@ export const Navbar: React.FC<NavbarProps> = ({
                       return (
                         <div
                           key={n.id}
+                          onClick={() => {
+                            if (n.action && onNavigate) {
+                              if (n.targetId || n.targetType || n.text) {
+                                setSearchTarget({
+                                  tab: n.action,
+                                  id: n.targetId,
+                                  name: n.nom || n.text,
+                                  type: n.targetType,
+                                });
+                              }
+                              onNavigate(n.action);
+                            }
+                            setReadNotifIds(prev => {
+                              const next = new Set(prev);
+                              next.add(n.id);
+                              localStorage.setItem(NOTIF_READ_KEY, JSON.stringify(Array.from(next)));
+                              return next;
+                            });
+                            setShowNotifMenu(false);
+                          }}
                           className="flex items-start gap-3 p-3 hover:bg-indigo-500/10 cursor-pointer transition-colors relative"
                         >
                           {isUnread && (
@@ -646,14 +782,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                     style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-white text-sm shadow-xs">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center font-semibold text-white text-sm">
                         {userInitials}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-black truncate" style={{ color: 'var(--text-primary)' }}>
+                        <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>
                           {userName}
                         </p>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{currentUser?.email || 'session.active@ecolisa.cd'}</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{currentUser?.email || '—'}</p>
+                        <p className="text-[10px] font-medium text-indigo-500 truncate">{roleLabels[userRole]}</p>
                       </div>
                     </div>
 
@@ -684,53 +821,73 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </div>
                   </div>
 
-                  <div className="p-1.5 space-y-0.5 text-xs font-extrabold">
-                    <button
-                      onClick={() => {
-                        onNavigate?.('users');
-                        setShowProfileMenu(false);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-black hover:bg-slate-500/10 transition-all text-left cursor-pointer"
-                      style={{ color: 'var(--text-primary)' }}
-                    >
-                      <User className="w-4 h-4 text-indigo-500" />
-                      <span>Comptes Utilisateurs & Accès</span>
-                    </button>
+                  <div className="p-1.5 space-y-0.5 text-[11px] font-medium">
+                    {hasTabAccess(userRole, 'users') && (
+                      <button
+                        onClick={() => {
+                          onNavigate?.('users');
+                          setShowProfileMenu(false);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-500/10 transition-all text-left cursor-pointer"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        <User className="w-4 h-4 text-indigo-500" />
+                        <span>Comptes utilisateurs & accès</span>
+                      </button>
+                    )}
+
+                    {hasTabAccess(userRole, 'audit') && (
+                      <button
+                        onClick={() => {
+                          onNavigate?.('audit');
+                          setShowProfileMenu(false);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-500/10 transition-all text-left cursor-pointer"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        <ShieldCheck className="w-4 h-4 text-violet-500" />
+                        <span>Journal d'audit système</span>
+                      </button>
+                    )}
+
+                    {hasTabAccess(userRole, 'settings') && (
+                      <button
+                        onClick={() => {
+                          onNavigate?.('settings');
+                          setShowProfileMenu(false);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-500/10 transition-all text-left cursor-pointer"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        <Settings className="w-4 h-4 text-slate-500" />
+                        <span>Paramètres établissement</span>
+                      </button>
+                    )}
+
+                    {hasTabAccess(userRole, 'license') && (
+                      <button
+                        onClick={() => {
+                          onNavigate?.('license');
+                          setShowProfileMenu(false);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-500/10 transition-all text-left cursor-pointer"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                        <span>Licence & synchro offline</span>
+                      </button>
+                    )}
 
                     <button
                       onClick={() => {
-                        onNavigate?.('audit');
                         setShowProfileMenu(false);
+                        // TODO: brancher la logique de vérification de mise à jour
                       }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-black hover:bg-slate-500/10 transition-all text-left cursor-pointer"
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-500/10 transition-all text-left cursor-pointer"
                       style={{ color: 'var(--text-primary)' }}
                     >
-                      <ShieldCheck className="w-4 h-4 text-violet-500" />
-                      <span>Journal d'Audit Système</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        onNavigate?.('settings');
-                        setShowProfileMenu(false);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-black hover:bg-slate-500/10 transition-all text-left cursor-pointer"
-                      style={{ color: 'var(--text-primary)' }}
-                    >
-                      <Settings className="w-4 h-4 text-slate-500" />
-                      <span>Paramètres Établissement</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        onNavigate?.('license');
-                        setShowProfileMenu(false);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl font-black hover:bg-slate-500/10 transition-all text-left cursor-pointer"
-                      style={{ color: 'var(--text-primary)' }}
-                    >
-                      <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                      <span>Licence & Synchro Offline</span>
+                      <Download className="w-4 h-4 text-sky-500" />
+                      <span>Vérifier les mises à jour</span>
                     </button>
 
                     <div className="my-1 border-t" style={{ borderColor: 'var(--border)' }} />
@@ -795,6 +952,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           onNavigate?.(tab);
           setIsCommandPaletteOpen(false);
         }}
+        userRole={userRole}
       />
     </>
   );

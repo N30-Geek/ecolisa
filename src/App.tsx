@@ -3,6 +3,7 @@ import { TitleBar } from './components/layout/TitleBar';
 import { Sidebar } from './components/layout/Sidebar';
 import { Navbar } from './components/layout/Navbar';
 import { ExecutiveDashboard } from './components/dashboard/ExecutiveDashboard';
+import { TeacherDashboard } from './components/dashboard/TeacherDashboard';
 import { AcademicManager } from './components/academic/AcademicManager';
 import { FinanceManager } from './components/finance/FinanceManager';
 import { DocumentEngine } from './components/documents/DocumentEngine';
@@ -12,6 +13,8 @@ import { SettingsManager } from './components/settings/SettingsManager';
 import { TeacherManager } from './components/administration/TeacherManager';
 import { UsersManager } from './components/administration/UsersManager';
 import { AuditLogViewer } from './components/administration/AuditLogViewer';
+import { CongesAbsencesManager } from './components/administration/CongesAbsencesManager';
+import { PointagePresencesManager } from './components/attendance/PointagePresencesManager';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { AccountSwitcherModal } from './components/auth/AccountSwitcherModal';
 import { ToastContainer } from './components/common/ToastNotification';
@@ -20,6 +23,8 @@ import { RôleSystème } from './types';
 import { OfflineStorageService } from './services/offlineStorage';
 import { LocalDatabaseService, UserSession } from './services/localDatabase';
 import { hasTabAccess, getDefaultTabForRole } from './utils/permissions';
+import { useThemeConfig } from './hooks/useThemeConfig';
+import { useSchoolConfig } from './hooks/useSchoolConfig';
 
 // ─── Placeholder pour les modules en développement ───────────────────────────
 const ComingSoonModule: React.FC<{ title: string; icon: string; description: string }> = ({
@@ -83,20 +88,11 @@ export function App() {
   const [appLoading, setAppLoading] = useState<boolean>(true);
   const [splashConfig, setSplashConfig] = useState<SchoolConfig | null>(null);
 
-  // Le theme reste dans localStorage (preference UI seulement)
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    return (localStorage.getItem('ecolisa_theme') as 'dark' | 'light') || 'light';
-  });
-
-  useEffect(() => {
-    localStorage.setItem('ecolisa_theme', theme);
-    const root = document.documentElement;
-    const body = document.body;
-    root.classList.remove('dark', 'light');
-    body.classList.remove('dark', 'light');
-    root.classList.add(theme);
-    body.classList.add(theme);
-  }, [theme]);
+  // Apparence persistée dans app_settings (thème, accent, densité, police...).
+  // Le hook applique les variables CSS sur :root et gère appearance === 'system'
+  // via matchMedia('(prefers-color-scheme: dark)') + l'événement 'ecolisa:config:change'.
+  const { resolvedTheme: theme, toggleTheme } = useThemeConfig();
+  const { appSettings } = useSchoolConfig();
 
   // Chargement initial depuis SQLite via IPC
   useEffect(() => {
@@ -120,13 +116,16 @@ export function App() {
       // La session précédente est effacée : l'utilisateur doit toujours
       // saisir son code PIN ou mot de passe au démarrage et après verrouillage.
       await LocalDatabaseService.logout();
+
+      // Sauvegarde automatique si configurée et intervalle dépassé
+      try {
+        await LocalDatabaseService.maybeAutoBackup();
+      } catch (e) {
+        console.warn('[App] Auto-backup échoué :', e);
+      }
     };
     initApp();
   }, []);
-
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-  };
 
   const [pendingQueueCount] = useState<number>(
     OfflineStorageService.getPendingQueue().length
@@ -141,11 +140,25 @@ export function App() {
     setIsSidebarCollapsed(prev => !prev);
   };
 
+  // Applique les préférences utilisateur connecté (onglet par défaut, sidebar, listes compactes)
+  useEffect(() => {
+    if (!currentUser || !appSettings?.userPreferences) return;
+    const prefs = appSettings.userPreferences[currentUser.id];
+    if (!prefs) return;
+
+    setIsSidebarCollapsed(prefs.sidebarCollapsed ?? false);
+
+    if (prefs.compactLists) {
+      document.body.dataset.listsCompact = 'true';
+    } else {
+      delete document.body.dataset.listsCompact;
+    }
+  }, [appSettings, currentUser]);
+
   const handleCompleteOnboarding = async (config: SchoolConfig) => {
-    // 1. Persister la config établissement dans SQLite
+    // 1. Persister la config établissement dans SQLite (unique source de vérité)
     await LocalDatabaseService.setConfig('onboarding_completed', true);
     await LocalDatabaseService.setConfig('school_config', config);
-    localStorage.setItem('ecolisa_school_config', JSON.stringify(config));
 
     // 2. Synchroniser l'année scolaire active dans l'état de l'app
     if (config.activeSchoolYear) {
@@ -199,8 +212,14 @@ export function App() {
     setCurrentUser(user);
     setLockedUser(null); // Effacer le verrouillage une fois authentifié
     setUserRole(user.role);
-    const targetTab = getDefaultTabForRole(user.role);
+
+    const prefs = appSettings?.userPreferences?.[user.id];
+    const targetTab = prefs?.defaultTab && hasTabAccess(user.role, prefs.defaultTab)
+      ? prefs.defaultTab
+      : getDefaultTabForRole(user.role);
     setActiveTab(targetTab);
+
+    setIsSidebarCollapsed(prefs?.sidebarCollapsed ?? false);
   };
 
   const handleLogout = async () => {
@@ -245,7 +264,12 @@ export function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return (
+        return (userRole === 'ENSEIGNANT' || userRole === 'TITULAIRE') ? (
+          <TeacherDashboard
+            activeSchoolYear={activeSchoolYear}
+            onNavigate={setActiveTab}
+          />
+        ) : (
           <ExecutiveDashboard
             activeSchoolYear={activeSchoolYear}
             onNavigate={setActiveTab}
@@ -261,6 +285,7 @@ export function App() {
       case 'schedule':
       case 'grades':
       case 'examens':
+      case 'deliberation':
       case 'classes':
       case 'subjects':
         return <AcademicManager activeSchoolYear={activeSchoolYear} activeSubTab={activeTab} registrationRequest={registrationRequest} />;
@@ -292,7 +317,9 @@ export function App() {
           ? <div className="p-6 animate-fade-in"><AuditLogViewer /></div>
           : <AccessDeniedBanner role={userRole} onFallback={() => setActiveTab(getDefaultTabForRole(userRole))} />;
       case 'leaves':
-        return <ComingSoonModule title="Congés & Absences" icon="🗓️" description="Gestion des demandes de congés et suivi des présences du personnel." />;
+        return <CongesAbsencesManager activeSchoolYear={activeSchoolYear} />;
+      case 'pointage':
+        return <PointagePresencesManager activeSchoolYear={activeSchoolYear} currentUser={currentUser} />;
       // ── Vie Scolaire ──
       case 'infirmerie':
         return <ComingSoonModule title="Santés & Infirmerie Scolaire" icon="🏥" description="Registre de passage à l'infirmerie, fiches médicales et urgences." />;
@@ -318,7 +345,12 @@ export function App() {
           : <AccessDeniedBanner role={userRole} onFallback={() => setActiveTab(getDefaultTabForRole(userRole))} />;
 
       default:
-        return (
+        return (userRole === 'ENSEIGNANT' || userRole === 'TITULAIRE') ? (
+          <TeacherDashboard
+            activeSchoolYear={activeSchoolYear}
+            onNavigate={setActiveTab}
+          />
+        ) : (
           <ExecutiveDashboard
             activeSchoolYear={activeSchoolYear}
             onNavigate={setActiveTab}
@@ -339,7 +371,7 @@ export function App() {
           onComplete={handleCompleteOnboarding}
           onSkip={isOnboardingCompleted ? () => setShowOnboardingModal(false) : undefined}
           isDarkMode={theme === 'dark'}
-          toggleTheme={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+          toggleTheme={toggleTheme}
         />
       </div>
     );
@@ -354,7 +386,7 @@ export function App() {
           onLoginSuccess={handleLoginSuccess}
           onResetAndReconfigure={handleResetAndReconfigure}
           isDarkMode={theme === 'dark'}
-          toggleTheme={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+          toggleTheme={toggleTheme}
           lockedUser={lockedUser ?? undefined}
         />
       </div>
@@ -371,16 +403,13 @@ export function App() {
       {/* Conteneur principal sous la TitleBar (Menu latéral FIXE + Zone de travail) */}
       <div className="flex-1 flex min-h-0 relative">
 
-        {/* Sidebar FIXE avec bouton de verrouillage/déconnexion */}
+        {/* Sidebar FIXE */}
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           userRole={userRole}
           isOnline={isOnline}
           isCollapsed={isSidebarCollapsed}
-          setIsCollapsed={setIsSidebarCollapsed}
-          onLock={handleLogout}
-          onOpenAccountSwitcher={() => setIsAccountSwitcherOpen(true)}
         />
 
         {/* Colonne de droite : Header FIXE + Zone de contenu défilante */}

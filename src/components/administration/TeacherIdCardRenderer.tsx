@@ -1,5 +1,6 @@
-import React from 'react';
-import { QrCode, ShieldCheck, School, Droplet, Phone, User } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { ShieldCheck, School, Droplet, Phone, User } from 'lucide-react';
+import { QRCode } from 'react-qr-code';
 import { MembrePersonnel } from '../../types';
 import { SchoolConfig } from '../onboarding/OnboardingWizard';
 
@@ -12,11 +13,29 @@ interface TeacherIdCardRendererProps {
 
 const roleLabel: Record<string, string> = {
   ENSEIGNANT: 'ENSEIGNANT / PROFESSEUR',
+  TITULAIRE: 'ENSEIGNANT TITULAIRE',
   COMPTABLE: 'COMPTABLE / INTENDANT',
+  INTENDANT: 'ÉCONOME / INTENDANT',
+  SECRETAIRE: 'SECRÉTAIRE ADMINISTRATIF',
   PREFET: 'PRÉFET DES ÉTUDES',
+  PREFET_DIRECTEUR: 'PRÉFET DES ÉTUDES',
+  DIRECTEUR_ECOLE: "DIRECTEUR D'ÉCOLE",
   SURVEILLANT: 'DIRECTEUR DE DISCIPLINE',
+  DIRECTEUR_DISCIPLINE: 'DIRECTEUR DE DISCIPLINE',
+  CENSEUR: 'CENSEUR DES ÉTUDES',
   DE: 'DIRECTEUR DES ÉTUDES',
+  DIRECTEUR_ETUDES: 'DIRECTEUR DES ÉTUDES',
+  PROMOTEUR_ADMIN: 'PROMOTEUR / ADMINISTRATEUR',
   ADMIN: 'PERSONNEL ADMINISTRATIF',
+};
+
+const CYCLE_LABELS: Record<string, string> = {
+  MATERNELLE: 'Maternelle',
+  PRIMAIRE: 'Primaire',
+  SECONDAIRE: 'Secondaire',
+  SECONDAIRE_CTEB: 'CTEB',
+  CTEB: 'CTEB',
+  HUMANITES: 'Humanités',
 };
 
 const gradeLabel: Record<string, string> = {
@@ -27,23 +46,78 @@ const gradeLabel: Record<string, string> = {
 const statutMeta: Record<string, { label: string; bg: string; text: string; border: string }> = {
   ACTIF: {
     label: 'ACTIF EN SERVICE',
-    bg: 'rgba(16,185,129,0.16)',
-    text: '#34d399',
-    border: 'rgba(16,185,129,0.45)',
+    bg: 'rgba(16,185,129,0.10)',
+    text: '#059669',
+    border: 'rgba(16,185,129,0.35)',
   },
   EN_CONGE: {
     label: 'EN CONGÉ',
-    bg: 'rgba(245,158,11,0.16)',
-    text: '#fbbf24',
-    border: 'rgba(245,158,11,0.45)',
+    bg: 'rgba(245,158,11,0.10)',
+    text: '#d97706',
+    border: 'rgba(245,158,11,0.35)',
   },
   SUSPENDU: {
     label: 'SUSPENDU',
-    bg: 'rgba(239,68,68,0.16)',
-    text: '#f87171',
-    border: 'rgba(239,68,68,0.45)',
+    bg: 'rgba(239,68,68,0.10)',
+    text: '#dc2626',
+    border: 'rgba(239,68,68,0.35)',
   },
 };
+
+/**
+ * Couleurs officielles RDC : bleu #007fff, jaune #f7d618, rouge #ce1021.
+ * Thème clair, professionnel, lisible et imprimable.
+ */
+const RDC = {
+  blue: '#0066cc',
+  sky: '#38bdf8',
+  yellow: '#f7d618',
+  red: '#ce1021',
+  paper: '#ffffff',
+  ink: '#0f172a',
+  muted: '#64748b',
+  border: 'rgba(0,102,204,0.18)',
+  surface: '#f8fafc',
+};
+
+/**
+ * Filigrane léger : trame de points + hachures très fines + icône école
+ * en arrière-plan, le tout à très faible opacité pour rester lisible.
+ */
+const LightSecurityTexture: React.FC = () => (
+  <>
+    {/* Trame de micro-points */}
+    <div
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        opacity: 0.08,
+        backgroundImage: `radial-gradient(${RDC.blue} 0.4px, transparent 0.5px)`,
+        backgroundSize: '4px 4px',
+      }}
+    />
+    {/* Hachures fines */}
+    <div
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        opacity: 0.05,
+        backgroundImage: `repeating-linear-gradient(-55deg, transparent, transparent 9px, ${RDC.blue} 9px, ${RDC.blue} 9.5px)`,
+      }}
+    />
+    {/* Icône école en filigrane (très légère) */}
+    <div
+      className="absolute right-2 bottom-2 pointer-events-none"
+      style={{ opacity: 0.04 }}
+    >
+      <School className="w-28 h-28" style={{ color: RDC.blue }} />
+    </div>
+    {/* Ruban tricolore RDC vertical */}
+    <div className="absolute left-0 top-0 bottom-0 w-[1.4mm] pointer-events-none flex flex-col">
+      <div className="flex-1" style={{ background: RDC.blue }} />
+      <div style={{ height: '16%', background: RDC.yellow }} />
+      <div className="flex-1" style={{ background: RDC.red }} />
+    </div>
+  </>
+);
 
 export const TeacherIdCardRenderer: React.FC<TeacherIdCardRendererProps> = ({
   teacher,
@@ -58,197 +132,239 @@ export const TeacherIdCardRenderer: React.FC<TeacherIdCardRendererProps> = ({
 
   const status = statutMeta[teacher.statut] || statutMeta.ACTIF;
 
-  const isTeacherRole = teacher.role === 'ENSEIGNANT';
+  const isTeacherRole = teacher.role === 'ENSEIGNANT' || teacher.role === 'TITULAIRE';
+  const badgeColor = isTeacherRole ? RDC.blue : '#7c3aed';
 
-  const renderFront = () => {
-    const cardBg = isTeacherRole
-      ? 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%)'
-      : 'linear-gradient(135deg, #022c22 0%, #064e3b 45%, #0f172a 100%)';
-    const cardBorder = isTeacherRole ? 'rgba(99,102,241,0.40)' : 'rgba(16,185,129,0.40)';
-    const headerTitle = isTeacherRole ? 'CARTE ENSEIGNANT' : 'CARTE DE SERVICE ADMIN';
+  // QR code authentique avec les données du personnel
+  const qrValue = useMemo(() => {
+    return JSON.stringify({
+      app: 'ECOLISA',
+      type: 'STAFF_CARD',
+      id: teacher.id,
+      matricule: teacher.numeroMatriculeEPST || teacher.matricule,
+      nom: `${teacher.prenom || ''} ${teacher.postnom || ''} ${teacher.nom || ''}`.trim(),
+      role: teacher.role,
+      ecole: schoolName,
+      code: schoolCode,
+      timestamp: new Date().toISOString(),
+    });
+  }, [teacher, schoolName, schoolCode]);
 
-    return (
-      <div
-        className="w-[85.6mm] h-[53.98mm] rounded-2xl overflow-hidden relative border shadow-xl flex flex-col justify-between p-3 text-white select-none shrink-0"
-        style={{
-          background: cardBg,
-          borderColor: cardBorder,
-        }}
-      >
-        {/* Filigrane d'arrière plan */}
-        <div className="absolute right-0 bottom-0 opacity-8 pointer-events-none translate-x-5 translate-y-6">
-          <School className={`w-44 h-44 ${isTeacherRole ? 'text-indigo-400' : 'text-emerald-400'}`} />
-        </div>
+  // Périmètre de cycle affecté
+  const cycleScope = React.useMemo(() => {
+    const raw = (teacher.cyclesAssignes?.length ? teacher.cyclesAssignes : [teacher.cyclePrincipal])
+      .filter(Boolean)
+      .map(c => String(c).toUpperCase());
+    const labels = Array.from(new Set(raw.map(c => CYCLE_LABELS[c] || c)));
+    return labels.length ? labels.join(' · ') : null;
+  }, [teacher.cyclesAssignes, teacher.cyclePrincipal]);
 
-        {/* Header */}
-        <div className={`flex items-center justify-between border-b pb-1.5 z-10 ${isTeacherRole ? 'border-indigo-500/30' : 'border-emerald-500/30'}`}>
-          <div className="flex items-center gap-2 min-w-0">
-            {logoUrl ? (
-              <img src={logoUrl} alt="Logo" className="w-6 h-6 object-contain rounded-md bg-white/10 p-0.5 shrink-0" />
-            ) : (
-              <div className={`w-6 h-6 rounded-md flex items-center justify-center text-white text-[9px] font-black shrink-0 ${isTeacherRole ? 'bg-indigo-600' : 'bg-emerald-600'}`}>
-                E
-              </div>
-            )}
-            <div className="min-w-0">
-              <h4 className={`text-[8px] font-black uppercase tracking-wider leading-tight truncate max-w-[150px] ${isTeacherRole ? 'text-indigo-200' : 'text-emerald-200'}`}>
-                {schoolName}
-              </h4>
-              <p className="text-[6.5px] font-semibold text-slate-300">
-                MIN. ÉDUCATION NATIONALE • RDC
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <span className={`px-1.5 py-0.5 rounded text-[6.5px] font-black uppercase ${isTeacherRole ? 'bg-indigo-500/25 text-indigo-200 border border-indigo-500/40' : 'bg-emerald-500/25 text-emerald-200 border border-emerald-500/40'}`}>
-              {headerTitle}
-            </span>
-            <span
-              className="px-1.5 py-0.5 rounded text-[6.5px] font-black uppercase"
-              style={{ background: status.bg, color: status.text, border: `1px solid ${status.border}` }}
-            >
-              {status.label}
-            </span>
-          </div>
-        </div>
+  const cardClass =
+    'w-[85.6mm] h-[53.98mm] rounded-2xl overflow-hidden relative border shadow-xl flex flex-col justify-between p-3 select-none shrink-0 pl-[4mm]';
 
-        {/* Body */}
-        <div className="flex items-center gap-2.5 z-10 my-auto">
-          {teacher.avatarUrl ? (
-            <img
-              src={teacher.avatarUrl}
-              alt={`${teacher.prenom} ${teacher.nom}`}
-              className={`w-[16mm] h-[20mm] rounded-lg object-cover border-2 shadow-md shrink-0 bg-slate-800 ${isTeacherRole ? 'border-indigo-400/60' : 'border-emerald-400/60'}`}
-            />
+  const renderFront = () => (
+    <div
+      className={cardClass}
+      style={{
+        background: RDC.paper,
+        borderColor: RDC.border,
+        color: RDC.ink,
+      }}
+    >
+      <LightSecurityTexture />
+
+      {/* Header */}
+      <div className="flex items-center justify-between border-b pb-1.5 z-10" style={{ borderColor: RDC.border }}>
+        <div className="flex items-center gap-2 min-w-0">
+          {logoUrl ? (
+            <img src={logoUrl} alt="Logo" className="w-6 h-6 object-contain rounded-md p-0.5 shrink-0" style={{ border: `1px solid ${RDC.border}` }} />
           ) : (
-            <div className={`w-[16mm] h-[20mm] rounded-lg border-2 flex items-center justify-center text-base font-black text-white shrink-0 shadow-md ${isTeacherRole ? 'bg-indigo-600 border-indigo-400/60' : 'bg-emerald-700 border-emerald-400/60'}`}>
-              {teacher.prenom?.[0]}{teacher.nom?.[0]}
+            <div
+              className="w-6 h-6 rounded-md flex items-center justify-center text-[9px] font-black shrink-0"
+              style={{ background: RDC.blue, color: '#fff' }}
+            >
+              E
             </div>
           )}
-
-          <div className="min-w-0 flex-1 space-y-0.5">
-            <p className="text-[10px] font-black tracking-tight text-white leading-tight truncate">
-              {teacher.prenom} {teacher.postnom ? `${teacher.postnom} ` : ''}{teacher.nom}
+          <div className="min-w-0">
+            <h4 className="text-[8px] font-black uppercase tracking-wider leading-tight truncate max-w-[150px]" style={{ color: RDC.blue }}>
+              {schoolName}
+            </h4>
+            <p className="text-[6.5px] font-semibold" style={{ color: RDC.muted }}>
+              MIN. ÉDUCATION NATIONALE • RDC
             </p>
-            <p className={`text-[7.5px] font-extrabold tracking-wide uppercase ${isTeacherRole ? 'text-indigo-300' : 'text-emerald-300'}`}>
-              {roleLabel[teacher.role] || teacher.titreOfficiel || teacher.role}
-            </p>
-            {isTeacherRole ? (
-              <>
-                <p className="text-[7px] text-slate-300 truncate">
-                  Grade : <span className="font-bold text-white">{gradeLabel[teacher.grade || ''] || teacher.grade || 'Licencié'}</span>
-                </p>
-                <p className="text-[7px] text-slate-300 truncate">
-                  Spécialité : <span className="font-bold text-indigo-200">{teacher.specialite || teacher.diplome || '—'}</span>
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-[7px] text-slate-300 truncate">
-                  Service : <span className="font-bold text-white">{teacher.qualification || 'Administration Centralisée'}</span>
-                </p>
-                <p className="text-[7px] text-slate-300 truncate">
-                  Matricule CNSS : <span className="font-bold text-emerald-200">{teacher.numeroINSS || 'CNSS-RDC-OK'}</span>
-                </p>
-              </>
-            )}
-
-            <div className="flex items-center gap-1.5 pt-0.5">
-              <span
-                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[6.5px] font-black uppercase"
-                style={{ background: 'rgba(244,63,94,0.15)', color: '#fb7185', border: '1px solid rgba(244,63,94,0.35)' }}
-              >
-                <Droplet className="w-2 h-2" />
-                GS {teacher.groupeSanguin || 'O+'}
-              </span>
-              {teacher.contactUrgenceTelephone && (
-                <span
-                  className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[6.5px] font-black uppercase"
-                  style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.35)' }}
-                >
-                  <Phone className="w-2 h-2" />
-                  Urgence
-                </span>
-              )}
-            </div>
-
-            <div className={`pt-1 flex items-center justify-between text-[6.5px] text-slate-400 border-t ${isTeacherRole ? 'border-indigo-500/20' : 'border-emerald-500/20'}`}>
-              <span>Matricule : <strong className="text-white">{teacher.numeroMatriculeEPST || teacher.matricule || '—'}</strong></span>
-              <span>Année : <strong className="text-emerald-400">{activeSchoolYear}</strong></span>
-            </div>
           </div>
         </div>
-
-        {/* Footer */}
-        <div className={`flex items-center justify-between text-[6.5px] pt-1 border-t z-10 ${isTeacherRole ? 'text-indigo-300 border-indigo-500/30' : 'text-emerald-300 border-emerald-500/30'}`}>
-          <span className="font-bold truncate max-w-[120px]">PROVINCE : {schoolProvince.toUpperCase()}</span>
-          <span className="flex items-center gap-1 text-emerald-400 font-extrabold shrink-0">
-            <ShieldCheck className="w-2.5 h-2.5" /> {isTeacherRole ? 'CORPS ENSEIGNANT RDC' : 'PERSONNEL DIRECTION RDC'}
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span
+            className="px-1.5 py-0.5 rounded text-[6.5px] font-black uppercase"
+            style={{ background: 'rgba(0,102,204,0.08)', color: RDC.blue, border: `1px solid ${RDC.border}` }}
+          >
+            {isTeacherRole ? 'CARTE ENSEIGNANT' : 'CARTE DE SERVICE'}
+          </span>
+          <span
+            className="px-1.5 py-0.5 rounded text-[6.5px] font-black uppercase"
+            style={{ background: status.bg, color: status.text, border: `1px solid ${status.border}` }}
+          >
+            {status.label}
           </span>
         </div>
       </div>
-    );
-  };
 
-  const renderBack = () => {
-    const backBg = isTeacherRole
-      ? 'linear-gradient(135deg, #020617 0%, #0f172a 50%, #1e1b4b 100%)'
-      : 'linear-gradient(135deg, #022c22 0%, #0f172a 50%, #064e3b 100%)';
-    const borderCol = isTeacherRole ? 'rgba(99,102,241,0.35)' : 'rgba(16,185,129,0.35)';
+      {/* Body */}
+      <div className="flex items-center gap-2.5 z-10 flex-1 min-h-0 py-1">
+        {teacher.avatarUrl ? (
+          <img
+            src={teacher.avatarUrl}
+            alt={`${teacher.prenom} ${teacher.nom}`}
+            className="w-[16mm] h-[20mm] rounded-lg object-cover border shadow-md shrink-0"
+            style={{ borderColor: RDC.border }}
+          />
+        ) : (
+          <div
+            className="w-[16mm] h-[20mm] rounded-lg border flex items-center justify-center text-base font-black shrink-0 shadow-md"
+            style={{ background: RDC.surface, color: RDC.blue, borderColor: RDC.border }}
+          >
+            {teacher.prenom?.[0]}{teacher.nom?.[0]}
+          </div>
+        )}
 
-    return (
-      <div
-        className="w-[85.6mm] h-[53.98mm] rounded-2xl overflow-hidden relative border shadow-xl flex flex-col justify-between p-3 text-slate-200 select-none shrink-0"
-        style={{
-          background: backBg,
-          borderColor: borderCol,
-        }}
-      >
-        <div className={`text-center border-b pb-1 z-10 ${isTeacherRole ? 'border-indigo-500/30' : 'border-emerald-500/30'}`}>
-          <p className={`text-[7.5px] font-black uppercase tracking-wider ${isTeacherRole ? 'text-indigo-300' : 'text-emerald-300'}`}>
-            RÉPUBLIQUE DÉMOCRATIQUE DU CONGO
+        <div className="min-w-0 flex-1 space-y-[3px]">
+          <p className="text-[10.5px] font-black tracking-tight leading-tight truncate" style={{ color: RDC.ink }}>
+            {teacher.prenom} {teacher.postnom ? `${teacher.postnom} ` : ''}{teacher.nom}
           </p>
-          <p className="text-[6.5px] font-semibold text-slate-400">
-            Ministère de l'Éducation Nationale et Nouvelle Citoyenneté
+          <p className="text-[7.5px] font-extrabold tracking-wide uppercase truncate" style={{ color: badgeColor }}>
+            {roleLabel[teacher.role] || teacher.titreOfficiel || teacher.role}
           </p>
-        </div>
 
-        <div className="flex items-start justify-between gap-3 my-auto z-10">
-          <div className="space-y-0.5 text-[7px] text-slate-300 flex-1 min-w-0">
-            <p className="truncate"><strong className="text-white">Nationalité :</strong> {teacher.nationalite || 'Congolaise'}</p>
-            <p className="truncate"><strong className="text-white">Téléphone :</strong> {teacher.telephone}</p>
+          {/* Ligne 1 : qualification / service */}
+          <p className="text-[7px] truncate" style={{ color: RDC.muted }}>
+            {isTeacherRole ? 'Grade' : 'Service'} :{' '}
+            <span className="font-bold" style={{ color: RDC.ink }}>
+              {isTeacherRole
+                ? (gradeLabel[teacher.grade || ''] || teacher.grade || 'Licencié')
+                : (teacher.qualification || 'Administration centralisée')}
+            </span>
+          </p>
+
+          {/* Ligne 2 : spécialité / CNSS */}
+          <p className="text-[7px] truncate" style={{ color: RDC.muted }}>
+            {isTeacherRole ? 'Spécialité' : 'CNSS'} :{' '}
+            <span className="font-bold" style={{ color: RDC.blue }}>
+              {isTeacherRole
+                ? (teacher.specialite || teacher.diplome || '—')
+                : (teacher.numeroINSS || '—')}
+            </span>
+          </p>
+
+          {/* Ligne 3 : périmètre de cycle affecté */}
+          {cycleScope && (
+            <p className="text-[7px] truncate" style={{ color: RDC.muted }}>
+              Cycle : <span className="font-bold" style={{ color: '#7c3aed' }}>{cycleScope}</span>
+            </p>
+          )}
+
+          {/* Pastilles santé / urgence */}
+          <div className="flex items-center gap-1.5 pt-[2px]">
+            <span
+              className="flex items-center gap-0.5 px-1.5 py-[1px] rounded text-[6.5px] font-black uppercase"
+              style={{ background: 'rgba(244,63,94,0.08)', color: '#e11d48', border: '1px solid rgba(244,63,94,0.25)' }}
+            >
+              <Droplet className="w-2 h-2" />
+              GS {teacher.groupeSanguin || 'O+'}
+            </span>
             {teacher.contactUrgenceTelephone && (
-              <p className="truncate">
-                <strong className="text-white">Urgence :</strong> {teacher.contactUrgenceNom || '—'} ({teacher.contactUrgenceTelephone})
-              </p>
+              <span
+                className="flex items-center gap-0.5 px-1.5 py-[1px] rounded text-[6.5px] font-black uppercase"
+                style={{ background: 'rgba(16,185,129,0.08)', color: '#059669', border: '1px solid rgba(16,185,129,0.25)' }}
+              >
+                <Phone className="w-2 h-2" />
+                Urgence
+              </span>
             )}
-            <p className="truncate"><strong className="text-white">Groupe sanguin :</strong> {teacher.groupeSanguin || 'O+'}</p>
-            <p className="truncate"><strong className="text-white">INSS / CNSS :</strong> {teacher.numeroINSS || '—'}</p>
-            <p className="truncate"><strong className="text-white">Matricule EPST :</strong> {teacher.numeroMatriculeEPST || teacher.matricule || '—'}</p>
-            <p className="truncate"><strong className="text-white">Prise de service :</strong> {teacher.dateEmbauche || '—'}</p>
-            <p className="text-[6px] text-slate-400 pt-1 leading-tight">
-              Cette carte de service est strictement personnelle. En cas de perte, aviser la Direction.
-            </p>
           </div>
-
-          <div className="shrink-0 text-center">
-            <div className="bg-white p-1 rounded-lg shadow-md">
-              <QrCode className="w-10 h-10 text-slate-900" />
-            </div>
-            <p className="text-[5.5px] font-black text-slate-300 mt-0.5">VÉRIFIÉ EPST</p>
-            <p className="text-[5px] text-slate-500 mt-0.5">{schoolCode}</p>
-          </div>
-        </div>
-
-        <div className={`flex items-center justify-between text-[6.5px] border-t pt-1 z-10 ${isTeacherRole ? 'text-indigo-300 border-indigo-500/30' : 'text-emerald-300 border-emerald-500/30'}`}>
-          <span className="flex items-center gap-1">
-            <User className="w-2 h-2" /> Signature de l'Autorité
-          </span>
-          <span className="font-bold text-white">ECOLISA ERP RDC</span>
         </div>
       </div>
-    );
-  };
+
+      {/* Bandeau matricule / année */}
+      <div
+        className="flex items-center justify-between gap-2 px-2 py-[3px] rounded-md z-10 text-[6.5px]"
+        style={{ background: RDC.surface, border: `1px solid ${RDC.border}` }}
+      >
+        <span className="truncate" style={{ color: RDC.muted }}>
+          Matricule : <strong className="font-mono tracking-tight" style={{ color: RDC.ink }}>{teacher.numeroMatriculeEPST || teacher.matricule || '—'}</strong>
+        </span>
+        <span className="shrink-0" style={{ color: RDC.muted }}>
+          Année : <strong style={{ color: RDC.blue }}>{activeSchoolYear}</strong>
+        </span>
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between gap-2 text-[6.5px] pt-1 border-t z-10" style={{ color: RDC.muted, borderColor: RDC.border }}>
+        <span className="font-bold truncate">PROVINCE : {schoolProvince.toUpperCase()}</span>
+        <span className="flex items-center gap-1 font-extrabold shrink-0 whitespace-nowrap" style={{ color: RDC.blue }}>
+          <ShieldCheck className="w-2.5 h-2.5" /> {isTeacherRole ? 'CORPS ENSEIGNANT RDC' : 'PERSONNEL ADMINISTRATIF RDC'}
+        </span>
+      </div>
+    </div>
+  );
+
+  const renderBack = () => (
+    <div
+      className={cardClass}
+      style={{
+        background: RDC.paper,
+        borderColor: RDC.border,
+        color: RDC.ink,
+      }}
+    >
+      <LightSecurityTexture />
+
+      <div className="text-center border-b pb-1 z-10" style={{ borderColor: RDC.border }}>
+        <p className="text-[7.5px] font-black uppercase tracking-wider" style={{ color: RDC.blue }}>
+          RÉPUBLIQUE DÉMOCRATIQUE DU CONGO
+        </p>
+        <p className="text-[6.5px] font-semibold" style={{ color: RDC.muted }}>
+          Ministère de l'Éducation Nationale et Nouvelle Citoyenneté
+        </p>
+      </div>
+
+      <div className="flex items-start justify-between gap-3 my-auto z-10">
+        <div className="space-y-0.5 text-[7px] flex-1 min-w-0" style={{ color: RDC.muted }}>
+          <p className="truncate"><strong style={{ color: RDC.blue }}>Nationalité :</strong> {teacher.nationalite || 'Congolaise'}</p>
+          <p className="truncate"><strong style={{ color: RDC.blue }}>Téléphone :</strong> {teacher.telephone}</p>
+          {teacher.contactUrgenceTelephone && (
+            <p className="truncate">
+              <strong style={{ color: RDC.blue }}>Urgence :</strong> {teacher.contactUrgenceNom || '—'} ({teacher.contactUrgenceTelephone})
+            </p>
+          )}
+          <p className="truncate"><strong style={{ color: RDC.blue }}>Groupe sanguin :</strong> {teacher.groupeSanguin || 'O+'}</p>
+          <p className="truncate"><strong style={{ color: RDC.blue }}>INSS / CNSS :</strong> {teacher.numeroINSS || '—'}</p>
+          <p className="truncate"><strong style={{ color: RDC.blue }}>Matricule EPST :</strong> {teacher.numeroMatriculeEPST || teacher.matricule || '—'}</p>
+          <p className="truncate"><strong style={{ color: RDC.blue }}>Prise de service :</strong> {teacher.dateEmbauche || '—'}</p>
+          <p className="truncate"><strong style={{ color: RDC.blue }}>Cycle affecté :</strong> {cycleScope || 'Non défini'}</p>
+          <p className="text-[6px] pt-1 leading-tight" style={{ color: RDC.muted }}>
+            Cette carte de service est strictement personnelle. En cas de perte, aviser la Direction.
+          </p>
+        </div>
+
+        <div className="shrink-0 text-center">
+          <div className="p-1 rounded-lg shadow-md" style={{ background: '#ffffff', border: `1px solid ${RDC.border}` }}>
+            <QRCode value={qrValue} size={44} level="M" bgColor="#ffffff" fgColor={RDC.blue} />
+          </div>
+          <p className="text-[5.5px] font-black mt-0.5" style={{ color: RDC.blue }}>VÉRIFIÉ EPST</p>
+          <p className="text-[5px] mt-0.5" style={{ color: RDC.muted }}>{schoolCode}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between text-[6.5px] border-t pt-1 z-10" style={{ color: RDC.muted, borderColor: RDC.border }}>
+        <span className="flex items-center gap-1">
+          <User className="w-2 h-2" /> Signature de l'Autorité
+        </span>
+        <span className="font-bold" style={{ color: RDC.blue }}>ECOLISA ERP RDC</span>
+      </div>
+    </div>
+  );
 
   if (face === 'front') return renderFront();
   if (face === 'back') return renderBack();

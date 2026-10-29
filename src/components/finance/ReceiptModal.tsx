@@ -84,13 +84,15 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [isDoubleCopy, setIsDoubleCopy] = useState(false);
   const [zoom, setZoom] = useState<number>(1.3); // Zoom confortable par défaut à 130%
-  const [invoicePayments, setInvoicePayments] = useState<TransactionPaiement[]>([]);
+  const [invoicePayments, setInvoicePayments] = useState<TransactionPaiement[]>(
+    invoice && payment?.invoiceId === invoice.id ? [payment] : []
+  );
 
   useEffect(() => {
     if (invoice?.id) {
       LocalDatabaseService.getPayments(invoice.id).then(setInvoicePayments).catch(() => {});
     }
-  }, [invoice?.id]);
+  }, [invoice?.id, payment?.invoiceId]);
   
   // POPUP DE RÉGLAGES IMPRIMANTE DANS LE REÇU
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
@@ -133,15 +135,14 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   const handleSavePrinterSettings = async () => {
     try {
-      const STORAGE_KEY = 'ecolisa_school_config';
-      const stored = localStorage.getItem(STORAGE_KEY);
-      const current = stored ? JSON.parse(stored) : (config || {});
+      // Les préférences d'impression sont fusionnées avec la config école dans SQLite.
+      const current = (await LocalDatabaseService.getConfig('school_config')) || {};
       const updated = {
         ...current,
         thermalPrinterName: printerName,
         directSilentPrint: silentPrint,
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      await LocalDatabaseService.setConfig('school_config', updated);
       setSavedPrinterNotice(true);
       showToast('Imprimante configurée !', `Imprimante "${printerName || 'Par défaut'}" enregistrée avec succès.`, 'success');
       setTimeout(() => {
@@ -159,7 +160,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
       if (e.key === 'Escape') onClose();
       if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
         e.preventDefault();
-        handlePrint();
+        handlePrintThermal();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -203,31 +204,69 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
           (allocationSummaries.length > 2 ? ` + ${allocationSummaries.length - 2} autre(s)` : '')
         : 'Frais scolaires');
 
-  // IMPRESSION DIRECTE / SILENCIEUSE VERS LE DRIVER ELECTRON OU FENÊTRE
-  const handlePrint = async () => {
+  // IMPRESSION DIRECTE / SILENCIEUSE VERS L'IMPRIMANTE THERMIQUE CONFIGURÉE
+  const handlePrintThermal = async () => {
+    if (!printRef.current) return;
     setIsPrinting(true);
     const electron = (window as any).electronAPI;
+    const configuredPrinter = printerName || config?.thermalPrinterName;
 
     try {
-      if (electron?.printThermalReceipt && printRef.current) {
-        const receiptHtml = printRef.current.innerHTML;
-        const result = await electron.printThermalReceipt({
-          html: receiptHtml,
-          printerName: printerName || config?.thermalPrinterName,
-          silent: silentPrint,
-          width: '80mm',
+      if (electron?.printReceipt) {
+        if (!configuredPrinter) {
+          showToast('Imprimante thermique non configurée', 'Ouverture du dialogue Windows...', 'info');
+        }
+        const result = await electron.printReceipt({
+          html: printRef.current.innerHTML,
+          deviceName: configuredPrinter,
+          silent: configuredPrinter ? silentPrint : false,
         });
         if (result?.success) {
-          showToast('Ticket imprimé !', 'Le ticket a été transmis à l\'imprimante de caisse.', 'success');
+          showToast('Ticket envoyé', configuredPrinter ? `Imprimante thermique : ${configuredPrinter}` : 'Imprimante par défaut', 'success');
           setIsPrinting(false);
           return;
         }
+        console.warn('[Receipt] Échec impression thermique:', result?.error);
+        showToast('Impression thermique échouée', result?.error || 'Le dialogue d\'impression va s\'ouvrir.', 'error');
       }
-      
-      // Fallback impression native
+      // Fallback navigateur / Electron standard
       window.print();
     } catch (err) {
-      console.warn('Impression silencieuse non disponible, ouverture boîte d\'impression standard...', err);
+      console.warn('Impression thermique non disponible, ouverture boîte d\'impression standard...', err);
+      window.print();
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
+  // IMPRESSION DU REÇU AU FORMAT A4 VIA L'IMPRIMANTE A4 CONFIGURÉE
+  const handlePrintA4 = async () => {
+    if (!printRef.current) return;
+    setIsPrinting(true);
+    const electron = (window as any).electronAPI;
+    const configuredPrinter = config?.a4PrinterName;
+
+    try {
+      if (electron?.printA4) {
+        if (!configuredPrinter) {
+          showToast('Imprimante A4 non configurée', 'Ouverture du dialogue Windows...', 'info');
+        }
+        const result = await electron.printA4({
+          html: printRef.current.innerHTML,
+          deviceName: configuredPrinter,
+          silent: configuredPrinter ? silentPrint : false,
+        });
+        if (result?.success) {
+          showToast('Document A4 envoyé', configuredPrinter ? `Imprimante A4 : ${configuredPrinter}` : 'Imprimante par défaut', 'success');
+        } else {
+          console.warn('[Receipt] Échec impression A4:', result?.error);
+          showToast('Impression A4 échouée', result?.error || 'Le dialogue d\'impression va s\'ouvrir.', 'error');
+        }
+      } else {
+        window.print();
+      }
+    } catch (err) {
+      console.warn('Impression A4 non disponible, ouverture boîte d\'impression standard...', err);
       window.print();
     } finally {
       setIsPrinting(false);
@@ -584,15 +623,24 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               <span>PDF</span>
             </button>
 
-            {/* BOUTON D'IMPRESSION SILENCIEUSE / DIRECTE */}
+            {/* BOUTONS D'IMPRESSION THERMIQUE ET A4 */}
             <button
-              onClick={handlePrint}
+              onClick={handlePrintThermal}
               disabled={isPrinting}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-[11px] font-black bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-all cursor-pointer"
-              title="Imprimer directement vers l'imprimante thermique"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-all cursor-pointer"
+              title="Imprimer directement vers l'imprimante thermique (ticket)"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Imprimer</span>
+              <span>Imprimer Ticket</span>
+            </button>
+            <button
+              onClick={handlePrintA4}
+              disabled={isPrinting}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black border border-slate-300 dark:border-slate-700 hover:bg-slate-500/10 text-slate-700 dark:text-slate-200 shadow-xs transition-all cursor-pointer"
+              title="Imprimer le reçu au format A4 sur l'imprimante A4 configurée"
+            >
+              <Printer className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Imprimer A4</span>
             </button>
 
             <button

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { LocalDatabaseService } from '../services/localDatabase';
 import type { SchoolConfig } from '../components/onboarding/OnboardingWizard';
+import type { AppSettings } from '../types';
 import {
   convertCurrencyFromList,
   formatCurrencyFromList,
@@ -13,6 +14,8 @@ import {
   DEFAULT_EXCHANGE_RATE,
   DEFAULT_NUMBER_FORMAT,
   applyNumberFormatPreset,
+  setCurrencyConfigCache,
+  setUserDisplayCurrencyCache,
 } from '../utils/currency';
 
 export interface UseSchoolConfigReturn {
@@ -27,54 +30,46 @@ export interface UseSchoolConfigReturn {
   convert: (amount: number, from?: string) => number;
   format: (amount: number, from?: string) => string;
   setDisplayCurrency: (code: string) => void;
+  /** Objet `app_settings` complet (thème, backups, préférences utilisateur). */
+  appSettings: AppSettings | null;
+  /** Persiste l'objet `app_settings` et notifie les autres hooks. */
+  setAppSettings: (next: AppSettings) => Promise<void>;
   refresh: () => Promise<void>;
 }
 
-const STORAGE_KEY = 'ecolisa_school_config';
-const USER_DISPLAY_CURRENCY_KEY = 'ecolisa_user_display_currency';
-
 export const useSchoolConfig = (): UseSchoolConfigReturn => {
-  const [config, setConfig] = useState<Partial<SchoolConfig> | null>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return null;
-  });
+  const [config, setConfig] = useState<Partial<SchoolConfig> | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userDisplayCurrency, setUserDisplayCurrency] = useState<string>(() => {
-    try {
-      return localStorage.getItem(USER_DISPLAY_CURRENCY_KEY) || '';
-    } catch {
-      return '';
-    }
-  });
+  const [userDisplayCurrency, setUserDisplayCurrency] = useState<string>('');
+  const [appSettings, setAppSettingsState] = useState<AppSettings | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const stored = localStorage.getItem(STORAGE_KEY);
-    let parsed: Partial<SchoolConfig> | null = null;
-    try {
-      parsed = stored ? JSON.parse(stored) : null;
-    } catch {}
-
+    // Source de vérité : SQLite, pas le localStorage.
     const db = await LocalDatabaseService.getConfig('school_config');
-    if (db && typeof db === 'object') {
-      parsed = { ...parsed, ...db };
-    }
+    const userDisplay = await LocalDatabaseService.getConfig('user_display_currency');
+    const rawAppSettings = await LocalDatabaseService.getConfig('app_settings');
+    setAppSettingsState(rawAppSettings && typeof rawAppSettings === 'object' ? rawAppSettings : null);
+    let parsed: Partial<SchoolConfig> | null = db && typeof db === 'object' ? db : null;
 
     if (parsed) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      setCurrencyConfigCache(parsed);
+      setUserDisplayCurrencyCache(typeof userDisplay === 'string' ? userDisplay : null);
       setConfig(parsed);
+      setUserDisplayCurrency(typeof userDisplay === 'string' ? userDisplay : (parsed.displayCurrency || DEFAULT_REFERENCE_CURRENCY));
     } else {
-      setConfig({
+      const fallback = {
         currency: 'USD',
         exchangeRate: DEFAULT_EXCHANGE_RATE,
         currencies: DEFAULT_CURRENCIES,
         referenceCurrency: DEFAULT_REFERENCE_CURRENCY,
         displayCurrency: DEFAULT_REFERENCE_CURRENCY,
         numberFormat: DEFAULT_NUMBER_FORMAT,
-      });
+      };
+      setCurrencyConfigCache(fallback);
+      setUserDisplayCurrencyCache(null);
+      setConfig(fallback);
+      setUserDisplayCurrency(fallback.displayCurrency);
     }
     setLoading(false);
   }, []);
@@ -82,23 +77,14 @@ export const useSchoolConfig = (): UseSchoolConfigReturn => {
   useEffect(() => {
     refresh();
 
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) refresh();
-    };
-
     const onConfigChange = () => refresh();
     const onDisplayCurrencyChange = () => {
-      try {
-        const saved = localStorage.getItem(USER_DISPLAY_CURRENCY_KEY) || '';
-        setUserDisplayCurrency(saved);
-      } catch {}
+      refresh();
     };
 
-    window.addEventListener('storage', onStorage);
     window.addEventListener('ecolisa:config:change', onConfigChange);
     window.addEventListener('ecolisa:currency:change', onDisplayCurrencyChange);
     return () => {
-      window.removeEventListener('storage', onStorage);
       window.removeEventListener('ecolisa:config:change', onConfigChange);
       window.removeEventListener('ecolisa:currency:change', onDisplayCurrencyChange);
     };
@@ -149,11 +135,20 @@ export const useSchoolConfig = (): UseSchoolConfigReturn => {
     return { ...DEFAULT_NUMBER_FORMAT, ...base };
   }, [config?.numberFormat]);
 
-  const setDisplayCurrency = useCallback((code: string) => {
-    localStorage.setItem(USER_DISPLAY_CURRENCY_KEY, code);
+  const setDisplayCurrency = useCallback(async (code: string) => {
+    await LocalDatabaseService.setConfig('user_display_currency', code);
+    setUserDisplayCurrencyCache(code);
     setUserDisplayCurrency(code);
     try {
       window.dispatchEvent(new Event('ecolisa:currency:change'));
+    } catch {}
+  }, []);
+
+  const setAppSettings = useCallback(async (next: AppSettings) => {
+    await LocalDatabaseService.setConfig('app_settings', next);
+    setAppSettingsState(next);
+    try {
+      window.dispatchEvent(new Event('ecolisa:config:change'));
     } catch {}
   }, []);
 
@@ -183,6 +178,8 @@ export const useSchoolConfig = (): UseSchoolConfigReturn => {
     convert,
     format,
     setDisplayCurrency,
+    appSettings,
+    setAppSettings,
     refresh,
   };
 };

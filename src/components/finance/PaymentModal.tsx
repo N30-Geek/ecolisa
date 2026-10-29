@@ -89,11 +89,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose, on
 
   const enrichedLines = useMemo(() => {
     if (!invoice.lignes?.length) return [];
+    const invTotal = getInvoiceTotal(invoice, currency);
     return invoice.lignes.map(l => {
       const lMontant = convertCurrency(l.montant || 0, l.devise || invoice.devise, currency, exchangeRate);
       let paid = 0;
       for (const p of invoicePayments) {
-        if (!p.allocations || p.allocations.length === 0) continue;
+        const pAmount = convertCurrency(p.montantPaye, p.devise, currency, exchangeRate);
+        if (!p.allocations || p.allocations.length === 0) {
+          // Paiement global non alloué : réparti au prorata du total
+          paid += (lMontant / (invTotal || 1)) * pAmount;
+          continue;
+        }
         const matches = p.allocations.filter(a =>
           a.feeTypeId &&
           a.feeTypeId === l.feeTypeId &&
@@ -101,10 +107,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose, on
         );
         if (matches.length > 0) {
           paid += matches.reduce((s, a) => s + convertCurrency(a.montant, p.devise, currency, exchangeRate), 0);
-        } else if (p.allocations.length === 1 && !p.allocations[0].feeTypeId) {
-          // fallback : allocation globale répartie au prorata
-          const totalPaid = getInvoicePaid(invoice, invoicePayments, currency);
-          paid += (lMontant / (getInvoiceTotal(invoice, currency) || 1)) * totalPaid;
+        } else {
+          // Allocation globale ou non ciblée sur cette ligne : prorata de la part restante
+          const allocatedToOtherLines = p.allocations.reduce((s, a) => s + convertCurrency(a.montant, p.devise, currency, exchangeRate), 0);
+          const unallocated = Math.max(0, pAmount - allocatedToOtherLines);
+          paid += (lMontant / (invTotal || 1)) * unallocated;
         }
       }
       const remaining = round2(Math.max(0, lMontant - paid));
@@ -116,47 +123,50 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose, on
   useEffect(() => {
     if (enrichedLines.length > 0) {
       const init: Record<string, number> = {};
-      enrichedLines.forEach(l => { init[l.feeTypeId] = Math.round(l.montantDu * 100) / 100; });
+      enrichedLines.forEach(l => { init[l.id] = round2(l.montantDu); });
       setLinePayments(init);
     }
   }, [enrichedLines]);
 
-  const totalDu = useMemo(() =>
-    enrichedLines.reduce((a, l) => a + l.montantDu, 0),
-    [enrichedLines]
-  );
+  const totalDu = useMemo(() => {
+    if (enrichedLines.length > 0) {
+      return round2(enrichedLines.reduce((a, l) => a + l.montantDu, 0));
+    }
+    // Facture sans lignes détaillées : solde = total - déjà payé
+    return Math.max(0, getInvoiceTotal(invoice, currency) - getInvoicePaid(invoice, invoicePayments, currency));
+  }, [enrichedLines, invoice, currency, invoicePayments]);
 
   const totalPaidByLines = useMemo(() => {
     if (enrichedLines.length === 0) return linePayments['__global'] ?? 0;
-    return enrichedLines.reduce((a, l) => a + (linePayments[l.feeTypeId] ?? 0), 0);
+    return round2(enrichedLines.reduce((a, l) => a + (linePayments[l.id] ?? 0), 0));
   }, [enrichedLines, linePayments]);
 
-  const soldeRestant = Math.max(0, totalDu - totalPaidByLines);
+  const soldeRestant = Math.max(0, round2(totalDu - totalPaidByLines));
   const hasLines = enrichedLines.length > 0;
 
   const setAll = () => {
     const all: Record<string, number> = {};
-    enrichedLines.forEach(l => { all[l.feeTypeId] = Math.round(l.montantDu * 100) / 100; });
+    enrichedLines.forEach(l => { all[l.id] = round2(l.montantDu); });
     setLinePayments(all);
   };
 
   const setP1Only = () => {
     const p1: Record<string, number> = {};
     enrichedLines.forEach(l => {
-      p1[l.feeTypeId] = l.prio.code === 'P1' ? Math.round(l.montantDu * 100) / 100 : 0;
+      p1[l.id] = l.prio.code === 'P1' ? round2(l.montantDu) : 0;
     });
     setLinePayments(p1);
   };
 
   const clearAll = () => {
     const none: Record<string, number> = {};
-    enrichedLines.forEach(l => { none[l.feeTypeId] = 0; });
+    enrichedLines.forEach(l => { none[l.id] = 0; });
     setLinePayments(none);
   };
 
   const mandatoryP1Covered = enrichedLines
     .filter(l => l.prio.code === 'P1')
-    .every(l => (linePayments[l.feeTypeId] || 0) >= l.montantDu - 0.001);
+    .every(l => (linePayments[l.id] || 0) >= l.montantDu - 0.001);
 
   const handleSubmit = async () => {
     if (totalPaidByLines <= 0) {
@@ -167,15 +177,26 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose, on
       setError(`Le montant encaissé (${fmt(totalPaidByLines)}) dépasse le reste dû (${fmt(totalDu)}).`);
       return;
     }
+    // Double garde cross-devise : le montant encaissé converti dans la devise de la facture
+    // ne doit pas dépasser le total de la facture (avec marge d'arrondi).
+    const paymentInInvoiceCurrency = round2(convertCurrency(totalPaidByLines, currency, invoice.devise, exchangeRate));
+    const invoiceTotalInInvoiceCurrency = round2(getInvoiceTotal(invoice, invoice.devise));
+    if (paymentInInvoiceCurrency > invoiceTotalInInvoiceCurrency + 0.01) {
+      setError(`Le montant saisi correspond à ${fmt(paymentInInvoiceCurrency, invoice.devise)} sur un total de ${fmt(invoiceTotalInInvoiceCurrency, invoice.devise)}. Vérifiez la devise de saisie.`);
+      return;
+    }
     setError(null);
     setLoading(true);
 
+    // Les montants saisis sont dans la devise d'affichage (currency).
+    // Pour éviter les arrondis cumulés, on les stocke dans la devise de la facture.
     const allocations = hasLines
       ? enrichedLines
-          .filter(l => (linePayments[l.feeTypeId] || 0) > 0.001)
+          .filter(l => (linePayments[l.id] || 0) > 0.001)
           .map(l => ({
             feeTypeId: l.feeTypeId,
-            montant: round2(convertCurrency(linePayments[l.feeTypeId] || 0, currency, invoice.devise, exchangeRate)),
+            trancheId: l.trancheId,
+            montant: round2(convertCurrency(linePayments[l.id] || 0, currency, invoice.devise, exchangeRate)),
           }))
       : [{ feeTypeId: '', montant: round2(convertCurrency(totalPaidByLines, currency, invoice.devise, exchangeRate)) }];
 
@@ -190,7 +211,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose, on
       nomEleve: invoice.nomEleve,
       registrationNumber: invoice.studentId,
       montantPaye: paymentMontant,
-      devise: invoice.devise || 'USD',
+      devise: invoice.devise,
       moyenPaiement: method as any,
       reference,
       numeroRecu: `R-${Date.now()}`,
@@ -200,10 +221,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose, on
       allocations,
     };
 
-    await LocalDatabaseService.addPayment(payment);
+    const storedPayment = await LocalDatabaseService.addPayment(payment);
+    if (!storedPayment) {
+      setLoading(false);
+      setError('Le paiement n\'a pas pu être enregistré. Vérifiez la connexion à la base de données.');
+      return;
+    }
     setLoading(false);
-    showToast('Paiement enregistré avec succès !', `Encaissement N° ${payment.numeroRecu} de ${fmt(payment.montantPaye, payment.devise)} pour ${payment.nomEleve}.`, 'success');
-    onSaved?.(payment);
+    showToast('Paiement enregistré avec succès !', `Encaissement N° ${storedPayment.numeroRecu} de ${fmt(storedPayment.montantPaye, storedPayment.devise)} pour ${storedPayment.nomEleve}.`, 'success');
+    onSaved?.(storedPayment);
     onClose();
   };
 
@@ -301,7 +327,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose, on
                   </thead>
                   <tbody className="divide-y" style={{ borderColor: 'var(--border)' }}>
                     {enrichedLines.map(l => {
-                      const paid = linePayments[l.feeTypeId] ?? 0;
+                      const paid = linePayments[l.id] ?? 0;
                       const solde = Math.max(0, l.montantDu - paid);
                       const isCovered = paid >= l.montantDu - 0.001;
                       const isPartial = paid > 0 && !isCovered;
@@ -316,7 +342,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose, on
                             <div className="flex items-center justify-end gap-1">
                               <NumberInput
                                 value={paid}
-                                onChange={v => setLinePayments(prev => ({ ...prev, [l.feeTypeId]: Math.max(0, v) }))}
+                                onChange={v => setLinePayments(prev => ({ ...prev, [l.id]: Math.max(0, Math.min(v, l.montantDu)) }))}
                                 min={0}
                                 max={l.montantDu}
                                 step={0.01}
@@ -325,12 +351,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose, on
                                 style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                               />
                               <button type="button"
-                                onClick={() => setLinePayments(prev => ({ ...prev, [l.feeTypeId]: Math.round(l.montantDu * 100) / 100 }))}
+                                onClick={() => setLinePayments(prev => ({ ...prev, [l.id]: round2(l.montantDu) }))}
                                 className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 border border-emerald-500/20 cursor-pointer">
                                 Max
                               </button>
                               <button type="button"
-                                onClick={() => setLinePayments(prev => ({ ...prev, [l.feeTypeId]: 0 }))}
+                                onClick={() => setLinePayments(prev => ({ ...prev, [l.id]: 0 }))}
                                 className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 border border-rose-500/20 cursor-pointer">
                                 0
                               </button>
@@ -379,8 +405,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose, on
               <label className="block text-xs font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Montant Encaissé ({currency})</label>
               <NumberInput
                 value={linePayments['__global'] ?? totalDu}
-                onChange={v => setLinePayments({ __global: Math.max(0, v) })}
+                onChange={v => setLinePayments({ __global: Math.max(0, Math.min(v, totalDu)) })}
                 min={0}
+                max={totalDu}
                 step={0.01}
                 placeholder="0"
                 className="w-full px-3.5 py-2.5 rounded-xl border text-sm font-black"

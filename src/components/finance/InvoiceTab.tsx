@@ -26,9 +26,11 @@ import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { formatCurrency, convertCurrency } from '../../utils/currency';
 import { isFeeTypeApplicable } from '../../utils/feeFilters';
+import { getStudentOption, getOptionLabel } from '../../utils/options';
 import { getInvoiceTotal, getInvoicePaid, getPaymentAmount, getInvoiceStatus } from '../../utils/financeCalculations';
 import type { FactureEleve, TransactionPaiement, Eleve, TypeFraisScolaire, LigneFacture, AnneeScolaireConfig, ClasseScolaire } from '../../types';
 import { showToast } from '../common/ToastNotification';
+import { useSearchTarget } from '../../hooks/useSearchTarget';
 
 const CYCLE_LABELS: Record<string, string> = {
   MATERNELLE: 'Maternelle',
@@ -95,6 +97,7 @@ export const InvoiceTab: React.FC<InvoiceTabProps> = ({ activeSchoolYear, autoOp
   const [classes, setClasses] = useState<ClasseScolaire[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const { apply } = useSearchTarget('invoices');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [yearFilter, setYearFilter] = useState<string>('');
   const [classFilter, setClassFilter] = useState<string>('');
@@ -174,6 +177,13 @@ export const InvoiceTab: React.FC<InvoiceTabProps> = ({ activeSchoolYear, autoOp
 
   useEffect(() => { loadAll(); }, []);
 
+  useEffect(() => {
+    const target = apply();
+    if (target?.name) {
+      setSearch(target.name);
+    }
+  }, [apply]);
+
   const filteredInvoices = useMemo(() => {
     const lastPaymentByInvoice = new Map<string, string>();
     for (const p of payments) {
@@ -190,8 +200,9 @@ export const InvoiceTab: React.FC<InvoiceTabProps> = ({ activeSchoolYear, autoOp
       const matchesStatus = !statusFilter || invStatus === statusFilter;
       const matchesYear = !yearFilter || inv.anneeScolaireId === yearFilter || inv.anneeScolaire === yearFilter;
       const matchesClass = !classFilter || inv.nomClasse === classFilter;
-      const cls = classes.find(c => c.nom === inv.nomClasse);
-      const matchesOption = !optionFilter || cls?.optionCode === optionFilter;
+      const st = students.find(s => s.id === inv.eleveId || s.id === inv.studentId);
+      const option = getStudentOption(st as any, classes);
+      const matchesOption = !optionFilter || option === optionFilter;
       const matchesDevise = !deviseFilter || inv.devise === deviseFilter;
       const matchesDate = (!dateFrom || (inv.dateEcheance && inv.dateEcheance >= dateFrom)) && (!dateTo || (inv.dateEcheance && inv.dateEcheance <= dateTo));
       const matchesAmount = (!amountMin || inv.montantTotal >= amountMin) && (!amountMax || inv.montantTotal <= amountMax);
@@ -642,7 +653,7 @@ export const InvoiceTab: React.FC<InvoiceTabProps> = ({ activeSchoolYear, autoOp
             className="w-40"
           />
           <CustomSelect
-            options={[{ value: '', label: 'Toutes options' }, ...Array.from(new Set(classes.map(c => c.optionCode).filter((o): o is string => !!o))).sort().map(o => ({ value: o, label: o }))]}
+            options={[{ value: '', label: 'Toutes options' }, ...Array.from(new Set(students.map(s => getStudentOption(s, classes)).filter(Boolean))).sort().map(o => ({ value: o, label: getOptionLabel(o) }))]}
             value={optionFilter}
             onChange={setOptionFilter}
             className="w-36"
@@ -1127,7 +1138,7 @@ const InvoiceExportModal: React.FC<{
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in">
       <div className="w-full max-w-4xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
         <div className="p-4 border-b flex items-center justify-between shrink-0" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-2.5">
@@ -1294,7 +1305,7 @@ const CreateInvoiceModal: React.FC<{
   const applicableFeeTypes = useMemo(() => {
     if (!selectedStudent) return feeTypes;
     const cls = classes.find(c => c.id === selectedStudent.classId || c.nom === selectedStudent.nomClasse);
-    const option = cls?.optionCode || selectedStudent.optionEPST || 'TRONC_COMMUN';
+    const option = getStudentOption(selectedStudent, cls ? [cls] : []);
     const ctx = {
       schoolYearId: yearId,
       classId: cls?.id || selectedStudent.classId,
@@ -1368,7 +1379,7 @@ const CreateInvoiceModal: React.FC<{
   }, []);
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in">
       <div className="w-full max-w-2xl rounded-2xl border shadow-2xl p-6 max-h-[92vh] overflow-y-auto animate-scale-in" onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)', boxShadow: 'var(--shadow-2xl)' }}>
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
@@ -1505,7 +1516,7 @@ export const InvoiceDetailModal: React.FC<{
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in">
       <div className="w-full max-w-2xl rounded-2xl border shadow-2xl max-h-[92vh] overflow-y-auto animate-scale-in relative" onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
         <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-3">
@@ -1537,7 +1548,7 @@ export const InvoiceDetailModal: React.FC<{
           <div className="grid grid-cols-3 gap-3">
             <div className="p-3 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
               <p className="text-[10px] font-black uppercase text-slate-500">Total</p>
-              <p className="text-lg font-black" style={{ color: 'var(--text-primary)' }}>{format(invTotal, invoice.devise)}</p>
+              <p className="text-lg font-black" style={{ color: 'var(--text-primary)' }}>{format(invTotal, currency)}</p>
             </div>
             <div className="p-3 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
               <p className="text-[10px] font-black uppercase text-slate-500">Payé</p>
@@ -1578,7 +1589,7 @@ export const InvoiceDetailModal: React.FC<{
                     <p className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{p.numeroRecu}</p>
                     <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{p.moyenPaiement} · {p.dateCreation?.split('T')[0]}</p>
                   </div>
-                  <span className="font-black text-emerald-600">{format(getPaymentAmount(p, currency), p.devise)}</span>
+                  <span className="font-black text-emerald-600">{format(getPaymentAmount(p, currency), currency)}</span>
                 </div>
               ))}
               {payments.length === 0 && (
@@ -1686,7 +1697,7 @@ export const InvoiceDetailModal: React.FC<{
                 <div className="w-72 space-y-1.5 text-[11px] p-3.5 rounded-xl bg-slate-50 border border-slate-300">
                   <div className="flex justify-between border-b border-slate-200 pb-1.5 font-bold text-slate-700">
                     <span>TOTAL FACTURÉ :</span>
-                    <span className="font-mono font-black text-slate-900">{format(invTotal, invoice.devise)}</span>
+                    <span className="font-mono font-black text-slate-900">{format(invTotal, currency)}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-200 pb-1.5 font-bold text-emerald-700">
                     <span>TOTAL ENCAISSÉ :</span>

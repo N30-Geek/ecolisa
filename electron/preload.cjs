@@ -64,7 +64,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateInvoice:(id, upd)=> ipcRenderer.invoke('db-update-invoice', id, upd),
   deleteInvoice:(id)     => ipcRenderer.invoke('db-delete-invoice', id),
   cleanupDuplicateInvoices: () => ipcRenderer.invoke('db-cleanup-duplicate-invoices'),
+  cleanupDefaultInvoices: () => ipcRenderer.invoke('db-cleanup-default-invoices'),
   cleanupDuplicateFeeTypes: () => ipcRenderer.invoke('db-cleanup-duplicate-fee-types'),
+  resetFinancialData: (scope) => ipcRenderer.invoke('db-reset-financial-data', scope),
 
   // Finances — Paiements
   getPayments: (invId)   => ipcRenderer.invoke('db-get-payments', invId),
@@ -128,6 +130,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateFichePaie: (id, upd)  => ipcRenderer.invoke('db-update-fiche-paie', id, upd),
   deleteFichePaie: (id)       => ipcRenderer.invoke('db-delete-fiche-paie', id),
 
+  // Epreuves
+  getEpreuves:    (filters) => ipcRenderer.invoke('db-get-epreuves', filters),
+  addEpreuve:     (ep)      => ipcRenderer.invoke('db-add-epreuve', ep),
+  updateEpreuve:  (id, upd) => ipcRenderer.invoke('db-update-epreuve', id, upd),
+  deleteEpreuve:  (id)      => ipcRenderer.invoke('db-delete-epreuve', id),
+
   // Cotes
   getCotes:   (filters) => ipcRenderer.invoke('db-get-cotes', filters),
   addCote:    (c)       => ipcRenderer.invoke('db-add-cote', c),
@@ -143,6 +151,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSchoolEvents:   (filters) => ipcRenderer.invoke('db-get-school-events', filters),
   addSchoolEvent:    (ev)      => ipcRenderer.invoke('db-add-school-event', ev),
   deleteSchoolEvent: (id)      => ipcRenderer.invoke('db-delete-school-event', id),
+
+  // Schedule / Emploi du temps
+  getScheduleTimeSlots: (filters) => ipcRenderer.invoke('db-get-schedule-time-slots', filters),
+  addScheduleTimeSlot:  (ts)      => ipcRenderer.invoke('db-add-schedule-time-slot', ts),
+  deleteScheduleTimeSlot: (id)    => ipcRenderer.invoke('db-delete-schedule-time-slot', id),
+  getSchedules:         (filters) => ipcRenderer.invoke('db-get-schedules', filters),
+  addSchedule:          (s)       => ipcRenderer.invoke('db-add-schedule', s),
+  updateSchedule:       (id, upd) => ipcRenderer.invoke('db-update-schedule', id, upd),
+  deleteSchedule:       (id)      => ipcRenderer.invoke('db-delete-schedule', id),
 
   // Documents scolaires
   getStudentDocuments:    (studentId)       => ipcRenderer.invoke('documents-get-by-student', studentId),
@@ -160,10 +177,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
   wiaScan:        ()  => ipcRenderer.invoke('wia-scan'),
 
   // Imprimantes système
-  getPrinters:    ()       => ipcRenderer.invoke('get-printers'),
-  printReceipt:   (opts)   => ipcRenderer.invoke('print:silent', opts),
-  printSilent:    (opts)   => ipcRenderer.invoke('print:silent', opts),
+  getPrinters:    ()                => ipcRenderer.invoke('get-printers'),
+  printThermal:     (opts)            => ipcRenderer.invoke('print:thermal', opts),
+  printA4:        (opts)            => ipcRenderer.invoke('print:a4', opts),
+  printReceipt:   (opts)            => ipcRenderer.invoke('print:thermal', opts),
+  printSilent:    (opts)            => ipcRenderer.invoke('print:silent', opts),
 
   // Nettoyage de la base de données
   cleanMockData:  ()  => ipcRenderer.invoke('db:clean-mock-data'),
+
+  // Sauvegardes locales SQLite
+  getDbPath:      ()                   => ipcRenderer.invoke('db-get-db-path'),
+  listBackups:    ()                   => ipcRenderer.invoke('db-list-backups'),
+  createBackup:   (type, compressed)   => ipcRenderer.invoke('db-create-backup', type, compressed),
+  restoreBackup:  (backupId)           => ipcRenderer.invoke('db-restore-backup', backupId),
+  deleteBackup:   (backupId)           => ipcRenderer.invoke('db-delete-backup', backupId),
+
+  // Journal d'audit
+  getAuditLog:    (filters)            => ipcRenderer.invoke('db-get-audit-log', filters),
+
+  // Sauvegarde de fichier (export PDF, etc.)
+  saveFile: (opts) => ipcRenderer.invoke('save-file', opts),
 });

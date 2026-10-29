@@ -15,6 +15,7 @@ interface NumberInputProps {
   style?: React.CSSProperties;
   disabled?: boolean;
   required?: boolean;
+  title?: string;
 }
 
 /**
@@ -37,6 +38,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   style,
   disabled,
   required,
+  title,
 }) => {
   const [raw, setRaw] = useState<string>(value === 0 ? '' : String(value));
 
@@ -93,6 +95,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       placeholder={placeholder}
       disabled={disabled}
       required={required}
+      title={title}
       className={`${className} focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all`.trim()}
       style={style}
     />

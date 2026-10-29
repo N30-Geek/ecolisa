@@ -30,17 +30,25 @@ import {
   UserAccount,
   RolePermissions,
   Cote,
+  EpreuveScolaire,
   Presence,
   SchoolEvent,
+  ScheduleSlot,
+  HoraireCreneau,
   SalleConfig,
   AuditLogEntry,
   ParentTuteur,
   LigneFacture,
+  BackupEntry,
+  BackupConfig,
+  AppSettings,
 } from '../types';
 import { isFeeTypeApplicable } from '../utils/feeFilters';
-import { getInvoicePaid, getInvoiceStatus } from '../utils/financeCalculations';
-import { normalizeRole } from '../utils/permissions';
+import { getInvoicePaid, getInvoiceStatus, getInvoiceTotal, round2 } from '../utils/financeCalculations';
+import { getNextUnpaidDueTranche, getTranchesForFee } from '../utils/feeTranches';
+import { normalizeAccessCycle, normalizeRole, expandMaternellePrimaireScope, canAccessMaternelleAndPrimaire, canEditPersonalInfo, canManageCashExpense } from '../utils/permissions';
 import { OFFICIAL_EPST_COURSES } from '../data/referentielEpstData';
+import { normalizeOptionCode, getStudentOption } from '../utils/options';
 
 export type DepenseCaisse = OperationCaisse;
 
@@ -58,6 +66,11 @@ export interface UserSession {
   role: RôleSystème;
   token: string;
   pinCode?: string;
+  telephone?: string;
+  /** Cycle de travail sélectionné lors de la connexion (Maternelle/Primaire/Secondaire). */
+  cycle?: string;
+  /** Cycles assignés au compte (contexte enrichi du personnel lié). */
+  cyclesAssignes?: string[];
 }
 
 const CYCLE_LABELS: Record<string, string> = {
@@ -81,6 +94,7 @@ let syncingInvoices = false;
 // ─────────────────────────────────────────────────────────────────────────────
 const memoryDb: Record<string, any[]> = {
   schoolYears: [],
+  epreuves: [],
   classes: [],
   eleves: [],
   invoices: [],
@@ -95,6 +109,8 @@ const memoryDb: Record<string, any[]> = {
   cotes: [],
   presences: [],
   schoolEvents: [],
+  schedules: [],
+  scheduleTimeSlots: [],
   subjects: [],
   users: [],
   salles: [],
@@ -107,7 +123,10 @@ const memoryDb: Record<string, any[]> = {
 };
 
 const loadFallbackStorage = (key: string): any[] => {
-  if (typeof window === 'undefined') return [];
+  // En Electron, le localStorage n'est jamais utilisé comme source de données.
+  // La base SQLite est l'unique source de vérité. Seul le mode Web Preview
+  // (hors Electron) utilise localStorage comme fallback.
+  if (typeof window === 'undefined' || isElectron()) return [];
   try {
     const raw = localStorage.getItem('ecolisa_db_' + key);
     return raw ? JSON.parse(raw) : [];
@@ -117,7 +136,7 @@ const loadFallbackStorage = (key: string): any[] => {
 };
 
 const saveFallbackStorage = (key: string, data: any[]) => {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || isElectron()) return;
   try {
     localStorage.setItem('ecolisa_db_' + key, JSON.stringify(data));
   } catch {}
@@ -209,8 +228,15 @@ const PERMISSIONS_MAP: Record<string, RolePermissions> = {
   },
   PREFET_DIRECTEUR: {
     role: 'PREFET_DIRECTEUR' as RôleSystème,
-    label: "Préfet des Études / Directeur d'Établissement",
+    label: 'Préfet des Études',
     description: 'Pilotage pédagogique, rapports officiels, suivi des élèves, effectifs et personnel. Valide les emplois du temps et les bulletins.',
+    allowedTabs: ['dashboard','students','apprenants','classes','subjects','years','teachers','schedule','grades','examens','discipline','hr','leaves','infirmerie','cantine','transport','library','documents','messages','invoices'],
+    canEditConfig: false, canManageUsers: false, canManageFinance: false, canManagePedagogy: true, canEnterGrades: true
+  },
+  DIRECTEUR_ECOLE: {
+    role: 'DIRECTEUR_ECOLE' as RôleSystème,
+    label: 'Directeur d’école (Primaire / Maternelle)',
+    description: 'Pilotage pédagogique et administratif du cycle maternelle / primaire.',
     allowedTabs: ['dashboard','students','apprenants','classes','subjects','years','teachers','schedule','grades','examens','discipline','hr','leaves','infirmerie','cantine','transport','library','documents','messages','invoices'],
     canEditConfig: false, canManageUsers: false, canManageFinance: false, canManagePedagogy: true, canEnterGrades: true
   },
@@ -286,19 +312,104 @@ const PERMISSIONS_MAP: Record<string, RolePermissions> = {
 export class LocalDatabaseService {
   private static _currentUser: UserSession | null = null;
 
+  private static async getRawStaff(): Promise<MembrePersonnel[]> {
+    return safeElectronCall<MembrePersonnel[]>(() => api()?.getStaff(), 'staff');
+  }
+
+  /**
+   * Détermine les cycles normalisés d'un membre du personnel en combinant :
+   * - cyclesAssignes (normalisés)
+   * - cyclePrincipal (si cyclesAssignes vide ou invalide)
+   * - classes/salles/titularisation (déduction via la table classes)
+   */
+  public static resolveStaffCycles(staff: MembrePersonnel, classes: ClasseScolaire[] = []): string[] {
+    const fromList = (staff.cyclesAssignes || [])
+      .map(normalizeAccessCycle)
+      .filter(Boolean);
+
+    const fromPrincipal = staff.cyclePrincipal
+      ? [normalizeAccessCycle(staff.cyclePrincipal)].filter(Boolean)
+      : [];
+
+    const explicit = fromList.length ? fromList : fromPrincipal;
+
+    const assignmentValues = new Set(
+      [
+        ...(staff.classesAssignees || []),
+        ...(staff.classesTitularisees || []),
+        ...(staff.sallesAssignees || []),
+        staff.classeTitulaireId,
+        staff.salleUniqueId,
+      ]
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase().trim())
+    );
+
+    const inferred = classes
+      .filter((classe) =>
+        assignmentValues.has(classe.id.toLowerCase()) ||
+        assignmentValues.has(classe.nom.toLowerCase().trim()) ||
+        (!!classe.salle && assignmentValues.has(classe.salle.toLowerCase().trim()))
+      )
+      .map((classe) => normalizeAccessCycle(classe.cycleId || classe.cycleCode))
+      .filter(Boolean);
+
+    return Array.from(new Set([...explicit, ...inferred]));
+  }
+
+  /**
+   * Fait correspondre un utilisateur connecté avec son dossier personnel RH.
+   */
+  private static matchStaffForUser(user: UserSession | null, staffList: MembrePersonnel[]): MembrePersonnel | undefined {
+    if (!user) return undefined;
+    const emailLower = (user.email || '').toLowerCase().trim();
+    const nameLower = (user.nom || '').toLowerCase().trim();
+    return staffList.find((s) => {
+      if (s.email && s.email.toLowerCase().trim() === emailLower) return true;
+      if (s.id === user.id || `usr_${s.id}` === user.id) return true;
+      const staffFullName = `${s.prenom || ''} ${s.nom || ''}`.toLowerCase().trim();
+      if (staffFullName && staffFullName === nameLower) return true;
+      return false;
+    });
+  }
+
+  /**
+   * Retourne le ou les cycles de périmètre de l'utilisateur connecté.
+   * - Promoteur/Admin -> null (accès global).
+   * - Cycle sélectionné à la connexion -> [cycle].
+   * - Cycles enregistrés sur le compte -> cycles.
+   * - Cycles du dossier personnel -> cycles déduits.
+   * - Sinon [] (aucun accès).
+   */
+  private static async getCurrentUserCycleScope(classes: ClasseScolaire[]): Promise<string[] | null> {
+    const user = this.getCurrentUser();
+    if (!user || user.role === 'PROMOTEUR_ADMIN') return null;
+
+    let scope: string[] = [];
+    if (user.cycle) {
+      scope = [user.cycle];
+    } else if (user.cyclesAssignes?.length) {
+      scope = user.cyclesAssignes.map(normalizeAccessCycle).filter(Boolean);
+    } else {
+      const staff = this.matchStaffForUser(user, await this.getRawStaff());
+      if (!staff) return [];
+      scope = this.resolveStaffCycles(staff, classes);
+    }
+
+    // Un directeur d'école Maternelle/Primaire voit les deux cycles fusionnés.
+    if (canAccessMaternelleAndPrimaire(user.role)) {
+      scope = expandMaternellePrimaireScope(scope);
+    }
+
+    return scope;
+  }
+
   public static async verifyAdminPassword(inputPassword: string): Promise<boolean> {
     const clean = inputPassword.trim();
-    if (!clean) return false;
-    if (this._currentUser && (this._currentUser.pinCode === clean || (this._currentUser as any).password === clean)) {
-      return true;
-    }
-    const users = await this.getUsers();
-    const matchedUser = users.find((u: any) =>
-      (u.role === 'PROMOTEUR_ADMIN' || u.role === 'ADMIN' || u.role === 'PREFET' || u.role === 'COMPTABLE' || u.role === 'PREFET_DIRECTEUR') &&
-      (u.password === clean || u.pinCode === clean || u.pin === clean)
-    );
-    // Vérification stricte — plus de master PINs universels
-    return !!matchedUser;
+    const user = this.getCurrentUser();
+    if (!clean || !user || user.role !== 'PROMOTEUR_ADMIN') return false;
+    const verified = await this.verifyCredentials(user.email || user.id, clean);
+    return verified?.role === 'PROMOTEUR_ADMIN';
   }
 
   public static async init(): Promise<void> {
@@ -348,6 +459,8 @@ export class LocalDatabaseService {
     memoryDb.cotes = [];
     memoryDb.presences = [];
     memoryDb.expenses = [];
+    memoryDb.schedules = [];
+    memoryDb.scheduleTimeSlots = [];
     console.log('[ECOLISA] ✅ Base de données initialisée à propre (0 élève, 0 enseignant, 0 classes).');
   }
 
@@ -379,11 +492,13 @@ export class LocalDatabaseService {
     }
   }
 
-  public static async setConfig(key: string, value: any): Promise<void> {
+  public static async setConfig(key: string, value: any, strict = false): Promise<void> {
     if (isElectron()) {
       try {
-        await api()?.setConfig(key, value);
+        const saved = await api()?.setConfig(key, value);
+        if (strict && saved !== true) throw new Error('Enregistrement indisponible.');
       } catch (e) {
+        if (strict) throw e;
         console.warn(`[DB SQLite] Erreur setConfig (${key}) :`, e);
       }
       return;
@@ -391,8 +506,80 @@ export class LocalDatabaseService {
     try {
       localStorage.setItem(`ecolisa_config_${key}`, JSON.stringify(value));
     } catch (e) {
+      if (strict) throw e;
       console.warn(`[DB Web] Erreur setConfig (${key}) :`, e);
     }
+  }
+
+  // ── SAUVEGARDES LOCALES (ELECTRON) ────────────────────────────────────────
+  public static async getDbPath(): Promise<string> {
+    return safeElectronCall<string>(() => api()?.getDbPath?.()) || '';
+  }
+
+  public static async listBackups(): Promise<BackupEntry[]> {
+    return safeElectronCall<BackupEntry[]>(() => api()?.listBackups?.(), 'backups') || [];
+  }
+
+  public static async createBackup(
+    type: 'MANUAL' | 'AUTO' | 'ON_EXIT' = 'MANUAL',
+    compress = false
+  ): Promise<BackupEntry | null> {
+    return safeElectronCall<BackupEntry | null>(() => api()?.createBackup?.(type, compress)) || null;
+  }
+
+  public static async restoreBackup(backupId: string): Promise<boolean> {
+    return safeElectronCall<boolean>(() => api()?.restoreBackup?.(backupId)) || false;
+  }
+
+  public static async deleteBackup(backupId: string): Promise<boolean> {
+    return safeElectronCall<boolean>(() => api()?.deleteBackup?.(backupId)) || false;
+  }
+
+  public static async cleanupOldBackups(maxBackups: number): Promise<void> {
+    const all = await this.listBackups();
+    if (all.length <= maxBackups) return;
+    const excess = all.length - maxBackups;
+    const byAgeAsc = [...all].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+    const autoQueue = byAgeAsc.filter((e) => e.type === 'AUTO');
+    const manualQueue = byAgeAsc.filter((e) => e.type === 'MANUAL');
+    const otherQueue = byAgeAsc.filter((e) => e.type !== 'AUTO' && e.type !== 'MANUAL');
+    const toDelete: string[] = [];
+    let remaining = excess;
+    for (const queue of [autoQueue, manualQueue, otherQueue]) {
+      for (const e of queue) {
+        if (remaining <= 0) break;
+        toDelete.push(e.id);
+        remaining--;
+      }
+    }
+    await Promise.all(toDelete.map((id) => this.deleteBackup(id)));
+  }
+
+  public static async maybeAutoBackup(): Promise<BackupEntry | null> {
+    const appSettings = await this.getConfig('app_settings');
+    const cfg: BackupConfig | undefined = appSettings?.backupConfig;
+    if (!cfg?.autoBackup) return null;
+
+    const interval = cfg.autoBackupIntervalMinutes || 60;
+    const last = cfg.lastAutoBackup ? new Date(cfg.lastAutoBackup).getTime() : 0;
+    const now = Date.now();
+    if (last && now - last < interval * 60 * 1000) return null;
+
+    const backup = await this.createBackup('AUTO', cfg.compressBackups ?? true);
+    if (backup) {
+      const nextApp: AppSettings = {
+        ...appSettings,
+        backupConfig: { ...cfg, lastAutoBackup: new Date().toISOString() },
+      };
+      await this.setConfig('app_settings', nextApp);
+      try {
+        window.dispatchEvent(new Event('ecolisa:config:change'));
+      } catch {}
+      if (cfg.maxBackups) {
+        await this.cleanupOldBackups(cfg.maxBackups);
+      }
+    }
+    return backup;
   }
 
   // ── SESSION UTILISATEUR ───────────────────────────────────────────────────
@@ -412,52 +599,43 @@ export class LocalDatabaseService {
   }
 
   /**
-   * Retourne la liste des noms de classes assignées à l'utilisateur connecté.
-   * Si l'utilisateur est Administrateur, Préfet, DE, Comptable ou Secrétaire -> retourne null (aucun filtre, accès global).
-   * Si l'utilisateur est Enseignant ou Titulaire -> retourne la liste exacte de ses classes/salles assignées.
+   * Retourne la liste des noms/id/salles de classes accessibles à l'utilisateur connecté.
+   * - Promoteur/Admin -> null (accès global).
+   * - Autres rôles -> classes du cycle de la session / cycles assignés.
+   * - Enseignant/Titulaire -> ses classes spécifiques, ou toutes les classes du cycle si aucune.
    */
   public static async getCurrentUserAssignedClasses(): Promise<string[] | null> {
     const user = this.getCurrentUser();
     if (!user) return null;
+    if (user.role === 'PROMOTEUR_ADMIN') return null;
 
-    const fullAccessRoles = [
-      'PROMOTEUR_ADMIN',
-      'PREFET_DIRECTEUR',
-      'DIRECTEUR_ETUDES',
-      'DIRECTEUR_DISCIPLINE',
-      'COMPTABLE',
-      'SECRETAIRE',
-      'INTENDANT',
-      'CENSEUR',
-    ];
+    const classes = await this.getClasses();
+    const cycles = await this.getCurrentUserCycleScope(classes);
+    if (!cycles || cycles.length === 0) return [];
 
-    if (fullAccessRoles.includes(user.role as string)) {
-      return null; // Accès total sans restriction
-    }
-
-    // Pour ENSEIGNANT ou TITULAIRE : chercher le dossier RH du membre du personnel
-    const staffList = await this.getStaff();
-    const emailLower = (user.email || '').toLowerCase().trim();
-    const nameLower = (user.nom || '').toLowerCase().trim();
-
-    const teacher = staffList.find(s => {
-      if (s.email && s.email.toLowerCase().trim() === emailLower) return true;
-      if (s.id === user.id) return true;
-      const staffFullName = `${s.prenom || ''} ${s.nom || ''}`.toLowerCase().trim();
-      if (staffFullName && staffFullName === nameLower) return true;
-      return false;
-    });
-
-    if (!teacher) {
-      return []; // Enseignant sans affectation -> restriction par sécurité
-    }
+    const staffList = await this.getRawStaff();
+    const staff = this.matchStaffForUser(user, staffList);
+    const isTeacher = user.role === 'ENSEIGNANT' || user.role === 'TITULAIRE';
 
     const assignedSet = new Set<string>();
-    (teacher.classesAssignees || []).forEach(c => { if (c) assignedSet.add(c.trim()); });
-    (teacher.classesTitularisees || []).forEach(c => { if (c) assignedSet.add(c.trim()); });
-    if (teacher.salleUniqueId) assignedSet.add(teacher.salleUniqueId.trim());
-    if (teacher.classeTitulaireId) assignedSet.add(teacher.classeTitulaireId.trim());
-    if (teacher.optionTitulaireCode) assignedSet.add(teacher.optionTitulaireCode.trim());
+    if (isTeacher && staff) {
+      (staff.classesAssignees || []).forEach(c => { if (c) assignedSet.add(c.trim()); });
+      (staff.classesTitularisees || []).forEach(c => { if (c) assignedSet.add(c.trim()); });
+      (staff.sallesAssignees || []).forEach(c => { if (c) assignedSet.add(c.trim()); });
+      if (staff.salleUniqueId) assignedSet.add(staff.salleUniqueId.trim());
+      if (staff.classeTitulaireId) assignedSet.add(staff.classeTitulaireId.trim());
+    }
+
+    const cycleSet = new Set(cycles);
+    classes.forEach(classe => {
+      if (cycleSet.has(normalizeAccessCycle(classe.cycleId || classe.cycleCode))) {
+        if (!isTeacher || assignedSet.size === 0) {
+          assignedSet.add(classe.id);
+          assignedSet.add(classe.nom);
+          if (classe.salle) assignedSet.add(classe.salle);
+        }
+      }
+    });
 
     return Array.from(assignedSet);
   }
@@ -479,9 +657,10 @@ export class LocalDatabaseService {
 
   // ── UTILISATEURS (CRUD SQLITE + ENRICHISSEMENT RH) ───────────────────────
   public static async getUsers(): Promise<UserAccount[]> {
-    const [rawUsers, staffList] = await Promise.all([
+    const [rawUsers, staffList, classes] = await Promise.all([
       safeElectronCall<UserAccount[]>(() => api()?.getUsers(), 'users'),
-      this.getStaff().catch(() => []),
+      this.getRawStaff().catch(() => []),
+      safeElectronCall<ClasseScolaire[]>(() => api()?.getClasses(), 'classes').catch(() => []),
     ]);
 
     // Map canonique indexée par ID uniquement (source de vérité : table users)
@@ -497,20 +676,31 @@ export class LocalDatabaseService {
 
     // 2. Enrichir les comptes existants avec les photos/avatars et matricules RH correspondants
     usersById.forEach((u, uid) => {
+      const normalizeIdentity = (value: string | undefined) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
       const emailLower = (u.email || '').toLowerCase().trim();
-      const staffMatch = (staffList || []).find((s) =>
-        (s.id && (s.id === u.id || `usr_${s.id}` === u.id)) ||
-        (s.email && emailLower && s.email.toLowerCase().trim() === emailLower) ||
-        (s.nom && u.nom && s.nom.toLowerCase() === u.nom.toLowerCase() &&
-         s.prenom && u.prenom && s.prenom.toLowerCase() === u.prenom.toLowerCase())
-      );
+      const userNames = new Set([normalizeIdentity(u.nom), normalizeIdentity(`${u.prenom || ''} ${u.nom || ''}`), normalizeIdentity(`${u.nom || ''} ${u.prenom || ''}`)].filter(Boolean));
+      const userPhone = (u.telephone || '').replace(/\D/g, '');
+      const staffMatch = (staffList || []).find((s) => {
+        const staffNames = [s.nom, `${s.prenom || ''} ${s.nom || ''}`, `${s.nom || ''} ${s.prenom || ''}`, `${s.prenom || ''} ${s.postnom || ''} ${s.nom || ''}`].map(normalizeIdentity).filter(Boolean);
+        return (s.id && (s.id === u.id || `usr_${s.id}` === u.id)) ||
+          (s.email && emailLower && s.email.toLowerCase().trim() === emailLower) ||
+          (!!userPhone && (s.telephone || '').replace(/\D/g, '') === userPhone) ||
+          staffNames.some(name => userNames.has(name));
+      });
 
       if (staffMatch) {
+        const accountCycles = this.resolveStaffCycles(staffMatch, classes);
         usersById.set(uid, {
           ...u,
           avatarUrl: u.avatarUrl || staffMatch.avatarUrl || staffMatch.photoUrl,
           telephone: u.telephone || staffMatch.telephone || '',
           usernameGenerated: u.usernameGenerated || (staffMatch.matricule ? staffMatch.matricule.toLowerCase() : undefined),
+          staffId: staffMatch.id,
+          cyclesAssignes: accountCycles,
+          classesAssignees: staffMatch.classesAssignees || staffMatch.classesTitularisees || [],
+          sallesAssignees: staffMatch.sallesAssignees || (staffMatch.salleUniqueId ? [staffMatch.salleUniqueId] : []),
+          optionsAssignees: staffMatch.optionsAssignees || (staffMatch.optionTitulaireCode ? [staffMatch.optionTitulaireCode] : []),
+          statut: staffMatch.statut === 'SUSPENDU' ? 'SUSPENDU' : u.statut,
         });
       }
     });
@@ -526,7 +716,7 @@ export class LocalDatabaseService {
     const prenomClean = (staff.prenom || '').toLowerCase().trim();
 
     return users.find((u) =>
-      (staff.id && (u.id === staff.id || u.id === `usr_${staff.id}`)) ||
+      (staff.id && (u.staffId === staff.id || u.id === staff.id || u.id === `usr_${staff.id}`)) ||
       (emailClean && u.email && u.email.toLowerCase().trim() === emailClean) ||
       (nomClean && u.nom && u.nom.toLowerCase().trim() === nomClean &&
        prenomClean && u.prenom && u.prenom.toLowerCase().trim() === prenomClean)
@@ -538,7 +728,7 @@ export class LocalDatabaseService {
     const clean = email.toLowerCase().trim();
     const users = await this.getUsers();
     return users.find((u) =>
-      u.email.toLowerCase().trim() === clean ||
+      (u.email || '').toLowerCase().trim() === clean ||
       (u.usernameGenerated && u.usernameGenerated.toLowerCase().trim() === clean) ||
       (u.telephone && u.telephone.replace(/[^0-9]/g, '') === clean.replace(/[^0-9]/g, ''))
     ) || null;
@@ -681,7 +871,18 @@ export class LocalDatabaseService {
     if (years.length === 0) return []; // Aucune année scolaire -> 0 classe
 
     const validYearIds = new Set(years.map(y => y.id));
-    const validMerged = merged.filter(c => !c.schoolYearId || validYearIds.has(c.schoolYearId));
+    let validMerged = merged.filter(c => !c.schoolYearId || validYearIds.has(c.schoolYearId));
+
+    // Filtrer par le cycle de l'utilisateur connecté (sauf Promoteur/Admin)
+    const user = this.getCurrentUser();
+    if (user && user.role !== 'PROMOTEUR_ADMIN') {
+      const scope = await this.getCurrentUserCycleScope(validMerged);
+      if (scope) {
+        const cycleSet = new Set(scope);
+        validMerged = validMerged.filter(c => cycleSet.has(normalizeAccessCycle(c.cycleId || c.cycleCode)));
+      }
+    }
+
     return yearId ? memFilter(validMerged, { schoolYearId: yearId }) : validMerged;
   }
 
@@ -705,7 +906,21 @@ export class LocalDatabaseService {
   // ── SALLES PHYSIQUES (SQLITE EXCLUSIF) ────────────────────────────────────
   public static async getSalles(cycleCode?: string): Promise<SalleConfig[]> {
     const merged = await safeElectronCall<SalleConfig[]>(() => api()?.getSalles?.(cycleCode), 'salles');
-    return cycleCode ? memFilter(merged, { cycleCode }) : merged;
+    let result = cycleCode ? memFilter(merged, { cycleCode }) : merged;
+
+    // Filtrer par cycle de l'utilisateur connecté (sauf Promoteur/Admin)
+    const user = this.getCurrentUser();
+    if (user && user.role !== 'PROMOTEUR_ADMIN') {
+      const classes = await this.getClasses();
+      const allowedCycles = new Set(classes.map(c => normalizeAccessCycle(c.cycleId || c.cycleCode)).filter(Boolean));
+      if (allowedCycles.size > 0) {
+        result = result.filter(s => allowedCycles.has(normalizeAccessCycle(s.cycleCode)));
+      } else {
+        result = [];
+      }
+    }
+
+    return result;
   }
 
   public static async addSalle(salle: SalleConfig): Promise<SalleConfig | null> {
@@ -727,10 +942,24 @@ export class LocalDatabaseService {
 
   // ── MATIERES (SQLITE EXCLUSIF) ────────────────────────────────────────────
   public static async getSubjects(): Promise<Discipline[]> {
-    const list = await safeElectronCall<Discipline[]>(() => api()?.getSubjects(), 'subjects');
-    if (!list || list.length === 0) {
-      return this.seedOfficialEPSTSubjects();
+    let list = await safeElectronCall<Discipline[]>(() => api()?.getSubjects(), 'subjects');
+    const hasOfficial = (list || []).some(s => (s as any).cycleCode || (s as any).niveau || (s.code || '').startsWith('epst-'));
+    if (!list || list.length === 0 || !hasOfficial) {
+      list = await this.seedOfficialEPSTSubjects();
     }
+
+    // Filtrer par cycle utilisateur (sauf Promoteur/Admin)
+    const user = this.getCurrentUser();
+    if (user && user.role !== 'PROMOTEUR_ADMIN') {
+      const classes = await this.getClasses();
+      const allowedCycles = new Set(classes.map(c => normalizeAccessCycle(c.cycleId || c.cycleCode)).filter(Boolean));
+      if (allowedCycles.size > 0) {
+        list = list.filter(s => allowedCycles.has(normalizeAccessCycle(s.cycleCode || s.niveau)));
+      } else {
+        list = [];
+      }
+    }
+
     return list;
   }
 
@@ -753,6 +982,7 @@ export class LocalDatabaseService {
           volumeHoraire: item.volumeHoraire,
           cycleCode: item.cycleCode,
           optionCode: item.optionCode || 'TRONC_COMMUN',
+          niveau: item.niveau,
           groupeMaternelle: item.groupeMaternelle,
           isOptionMajora: item.isOptionMajora,
           ordre: item.ordre,
@@ -799,15 +1029,16 @@ export class LocalDatabaseService {
   // ── ELEVES (SQLITE EXCLUSIF) ──────────────────────────────────────────────
   public static async getEleves(filters?: { classId?: string; schoolYearId?: string }): Promise<Eleve[]> {
     const merged = await safeElectronCall<Eleve[]>(() => api()?.getEleves(filters), 'eleves');
-    if (!filters || (filters.schoolYearId === 'ALL' && !filters.classId)) {
-      return merged;
-    }
-
+    const normalized = (merged || []).map(e => ({
+      ...e,
+      optionCode: normalizeOptionCode(e.optionCode || e.optionEPST),
+      optionEPST: normalizeOptionCode(e.optionEPST) || e.optionEPST,
+    }));
     const years = await this.getSchoolYears();
     const activeYear = years.find(y => y.statut === 'EN_COURS') || years[0];
     const targetYearId = filters?.schoolYearId;
 
-    let result = merged;
+    let result = normalized;
     if (targetYearId && targetYearId !== 'ALL') {
       result = result.filter(e => {
         if (!e.schoolYearId) return true;
@@ -819,14 +1050,27 @@ export class LocalDatabaseService {
       });
     }
 
-    if (filters.classId) {
+    if (filters?.classId) {
       result = result.filter(e => e.classId === filters.classId || e.nomClasse === filters.classId);
+    }
+
+    const assignedClasses = await this.getCurrentUserAssignedClasses();
+    if (assignedClasses !== null) {
+      const normalizedAssignments = new Set(assignedClasses.map(value => value.toLowerCase().trim()));
+      result = result.filter(student => {
+        const values = [student.classId, student.nomClasse, (student as any).classe, (student as any).salle]
+          .filter(Boolean)
+          .map(value => String(value).toLowerCase().trim());
+        return values.some(value => normalizedAssignments.has(value));
+      });
     }
 
     return result;
   }
 
   public static async addEleve(eleve: Eleve): Promise<Eleve | null> {
+    const user = this.getCurrentUser();
+    if (!canEditPersonalInfo(user?.role)) throw new Error('Accès refusé : seuls les chefs d\'établissement peuvent inscrire un élève.');
     const years = await this.getSchoolYears();
     const activeYear = years.find(y => y.statut === 'EN_COURS') || years[0];
     if (activeYear && !eleve.schoolYearId) {
@@ -835,6 +1079,9 @@ export class LocalDatabaseService {
     if (!eleve.id) {
       eleve.id = `student_${Date.now()}`;
     }
+    const code = normalizeOptionCode(eleve.optionCode || eleve.optionEPST);
+    eleve.optionCode = code;
+    if (code) eleve.optionEPST = code;
     try {
       const fromDb = await safeElectronCall<Eleve | null>(() => api()?.addEleve(eleve));
       if (!fromDb && isElectron()) {
@@ -854,6 +1101,13 @@ export class LocalDatabaseService {
   }
 
   public static async updateEleve(id: string, updates: Partial<Eleve>): Promise<Eleve | null> {
+    const user = this.getCurrentUser();
+    if (!canEditPersonalInfo(user?.role)) throw new Error('Accès refusé : seuls les chefs d\'établissement peuvent modifier les informations d\'un élève.');
+    if (updates.optionEPST !== undefined || updates.optionCode !== undefined) {
+      const code = normalizeOptionCode(updates.optionCode || updates.optionEPST);
+      updates.optionCode = code;
+      updates.optionEPST = code || updates.optionEPST;
+    }
     const fromDb = await safeElectronCall<Eleve | null>(() => api()?.updateEleve(id, updates));
     if (fromDb) return memUpdate<Eleve>('eleves', id, fromDb);
     if (isElectron()) throw new Error("La mise à jour de l'élève en base de données a échoué.");
@@ -865,6 +1119,8 @@ export class LocalDatabaseService {
   }
 
   public static async deleteEleve(id: string): Promise<void> {
+    const user = this.getCurrentUser();
+    if (!canEditPersonalInfo(user?.role)) throw new Error('Accès refusé : seuls les chefs d\'établissement peuvent retirer un élève.');
     await safeElectronCall(() => api()?.deleteEleve(id));
     memDelete('eleves', id);
   }
@@ -874,7 +1130,7 @@ export class LocalDatabaseService {
   private static compteProduitForCategorie(categorie?: string): string {
     if (categorie === 'FRAIS_MINERVAL') return 'cpt_minerval';
     if (categorie === 'FRAIS_INSCRIPTION' || categorie === 'FRAIS_REINSCRIPTION') return 'cpt_inscript';
-    if (categorie === 'FRAIS_SCOLAIRES' || categorie === 'FRAIS_CONNEXES' || categorie === 'FRAIS_KITS_EQUIPEMENTS') return 'cpt_frais_ks';
+    if (categorie === 'FRAIS_CONNEXES' || categorie === 'FRAIS_KITS_EQUIPEMENTS') return 'cpt_frais_ks';
     return 'cpt_produit';
   }
 
@@ -897,75 +1153,204 @@ export class LocalDatabaseService {
       const activeYear = years.find(y => y.statut === 'EN_COURS') || years[0];
       const yearId = activeYear?.id || 'default_year';
 
-      const hasInvoiceForYear = (studentId: string) => invoices.some(inv =>
-      (inv.eleveId === studentId || inv.studentId === studentId) &&
-      (inv.anneeScolaireId === yearId || inv.schoolYearId === yearId || inv.anneeScolaire === activeYear?.nom)
-    );
+      for (const eleve of eleves) {
+        // Ignorer les élèves non rattachés à l'année active
+        if (eleve.schoolYearId && eleve.schoolYearId !== yearId) continue;
 
-    const missingEleves = eleves.filter(s => !hasInvoiceForYear(s.id));
+        const cls = classes.find(c => c.id === eleve.classId || c.nom === eleve.nomClasse);
+        const option = getStudentOption(eleve, [cls].filter(Boolean) as any);
 
-    for (const eleve of missingEleves) {
-      const cls = classes.find(c => c.id === eleve.classId || c.nom === eleve.nomClasse);
-      const option = cls?.optionCode || eleve.optionEPST || 'TRONC_COMMUN';
-      const applicableFees = feeTypes.filter(ft => isFeeTypeApplicable(ft, {
-        schoolYearId: yearId,
-        classId: cls?.id || eleve.classId,
-        className: cls?.nom || eleve.nomClasse,
-        cycleId: cls?.cycleId,
-        option,
-        salleId: eleve.salleId,
-        regime: eleve.regime,
-      }, CYCLE_LABELS));
+        // Frais automatiques applicables à cet élève
+        const autoFees = feeTypes
+          .filter(ft => ft.actif !== false)
+          .filter(ft => isFeeTypeApplicable(ft, {
+            schoolYearId: yearId,
+            classId: cls?.id || eleve.classId,
+            className: cls?.nom || eleve.nomClasse,
+            cycleId: cls?.cycleId,
+            option,
+            salleId: eleve.salleId,
+            regime: eleve.regime,
+          }, CYCLE_LABELS))
+          // Obligatoires OU payables à l'inscription
+          .filter(ft => ft.obligatoire !== false || ft.payeALInscription === true);
 
-      let lignes: LigneFacture[] = [];
-      if (applicableFees.length > 0) {
-        lignes = applicableFees.map(f => ({
-          id: `l_${uuid()}_${f.id}`,
-          invoiceId: '',
-          feeTypeId: f.id,
-          nom: f.nom,
-          montant: f.montant,
-          devise: f.devise,
-          categorie: f.categorie,
-        }));
-      } else {
-        lignes = [{
-          id: `l_${uuid()}_default`,
-          invoiceId: '',
-          feeTypeId: 'frais_minerval_default',
-          nom: 'Frais de Minerval Scolaire Annuel',
-          montant: 180,
-          devise: 'USD',
-          categorie: 'FRAIS_MINERVAL',
-        }];
+        if (autoFees.length === 0) continue;
+
+        const studentInvoices = invoices.filter(inv =>
+          (inv.eleveId === eleve.id || inv.studentId === eleve.id) &&
+          (inv.anneeScolaireId === yearId || inv.schoolYearId === yearId || inv.anneeScolaire === activeYear?.nom)
+        );
+
+        for (const ft of autoFees) {
+          // Génère une facture uniquement pour la prochaine tranche dûe
+          const next = getNextUnpaidDueTranche(
+            ft,
+            studentInvoices,
+            activeYear?.debut,
+            activeYear?.fin,
+            new Date(),
+            true
+          );
+          if (!next.tranche || next.alreadyInvoiced) continue;
+
+          const t = next.tranche;
+          const line: LigneFacture = {
+            id: `l_${uuid()}_${ft.id}_${t.id}`,
+            invoiceId: '',
+            feeTypeId: ft.id,
+            trancheId: t.id,
+            nom: t.nom === 'Paiement unique' ? ft.nom : `${ft.nom} — ${t.nom}`,
+            montant: t.montant,
+            devise: t.devise,
+            categorie: ft.categorie,
+          };
+
+          const newInv: FactureEleve = {
+            id: `inv_${eleve.id}_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            numeroFacture: `FAC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            studentId: eleve.id,
+            eleveId: eleve.id,
+            nomEleve: `${eleve.prenom} ${eleve.nom}`,
+            anneeScolaireId: yearId,
+            anneeScolaire: activeYear?.nom || '2025-2026',
+            nomClasse: eleve.nomClasse || cls?.nom || 'Non spécifiée',
+            statut: 'NON_PAYE',
+            devise: t.devise || ft.devise || 'USD',
+            montantTotal: line.montant,
+            montantPaye: 0,
+            dateEcheance: t.dateEcheance || new Date().toISOString().split('T')[0],
+            lignes: [line],
+          };
+
+          const saved = await this.addInvoice(newInv);
+          if (saved) {
+            invoices.push(saved);
+            studentInvoices.push(saved);
+          }
+        }
       }
-
-      const montantTotal = lignes.reduce((a, l) => a + (l.montant || 0), 0);
-      const newInv: FactureEleve = {
-        id: `inv_${eleve.id}_${Date.now()}`,
-        numeroFacture: `FAC-${Date.now()}-${Math.floor(Math.random()*1000)}`,
-        studentId: eleve.id,
-        eleveId: eleve.id,
-        nomEleve: `${eleve.prenom} ${eleve.nom}`,
-        anneeScolaireId: yearId,
-        anneeScolaire: activeYear?.nom || '2025-2026',
-        nomClasse: eleve.nomClasse || cls?.nom || 'Non spécifiée',
-        statut: 'NON_PAYE',
-        devise: 'USD',
-        montantTotal,
-        montantPaye: 0,
-        dateEcheance: new Date().toISOString().split('T')[0],
-        lignes,
-      };
-
-      await this.addInvoice(newInv);
-    }
 
     return safeElectronCall<FactureEleve[]>(() => api()?.getInvoices(), 'invoices');
   } finally {
     syncingInvoices = false;
   }
 }
+
+  /**
+   * Génère des factures pour un type de frais donné, pour tous les élèves de
+   * l'année cible auxquels ce frais s'applique. Ignore les élèves qui ont déjà
+   * une facture avec ce frais pour l'année.
+   */
+  public static async generateInvoicesForFeeType(
+    feeTypeId: string,
+    targetYearId?: string
+  ): Promise<{ success: boolean; created: number; skipped: number; error?: string }> {
+    try {
+      const [feeTypes, eleves, classes, years, allInvoices] = await Promise.all([
+        this.getFeeTypes(),
+        this.getEleves(),
+        this.getClasses(),
+        this.getSchoolYears(),
+        safeElectronCall<FactureEleve[]>(() => api()?.getInvoices(), 'invoices'),
+      ]);
+
+      const activeYear = years.find(y => y.statut === 'EN_COURS') || years[0];
+      const yearId = targetYearId || activeYear?.id || 'default_year';
+      const yearNom = activeYear?.nom || 'Année scolaire';
+
+      const ft = feeTypes.find(f => f.id === feeTypeId);
+      if (!ft) return { success: false, created: 0, skipped: 0, error: 'Type de frais introuvable.' };
+      if (ft.actif === false) return { success: false, created: 0, skipped: 0, error: 'Ce frais est inactif.' };
+
+      let created = 0;
+      let skipped = 0;
+
+      for (const eleve of eleves) {
+        if (eleve.schoolYearId && eleve.schoolYearId !== yearId) {
+          skipped++;
+          continue;
+        }
+
+        const cls = classes.find(c => c.id === eleve.classId || c.nom === eleve.nomClasse);
+        const option = getStudentOption(eleve, [cls].filter(Boolean) as any);
+
+        if (!isFeeTypeApplicable(ft, {
+          schoolYearId: yearId,
+          classId: cls?.id || eleve.classId,
+          className: cls?.nom || eleve.nomClasse,
+          cycleId: cls?.cycleId,
+          option,
+          salleId: eleve.salleId,
+          regime: eleve.regime,
+        }, CYCLE_LABELS)) {
+          skipped++;
+          continue;
+        }
+
+        const studentInvoices = allInvoices.filter(inv =>
+          (inv.eleveId === eleve.id || inv.studentId === eleve.id) &&
+          (inv.anneeScolaireId === yearId || inv.schoolYearId === yearId || inv.anneeScolaire === yearNom)
+        );
+
+        const next = getNextUnpaidDueTranche(
+          ft,
+          studentInvoices,
+          activeYear?.debut,
+          activeYear?.fin,
+          new Date(),
+          true
+        );
+        if (!next.tranche || next.alreadyInvoiced) {
+          skipped++;
+          continue;
+        }
+
+        const t = next.tranche;
+        const lignes: LigneFacture[] = [{
+          id: `l_${uuid()}_${ft.id}_${t.id}`,
+          invoiceId: '',
+          feeTypeId: ft.id,
+          trancheId: t.id,
+          nom: t.nom === 'Paiement unique' ? ft.nom : `${ft.nom} — ${t.nom}`,
+          montant: t.montant,
+          devise: t.devise,
+          categorie: ft.categorie,
+        }];
+
+        const montantTotal = lignes.reduce((a, l) => a + (l.montant || 0), 0);
+        const newInv: FactureEleve = {
+          id: `inv_${eleve.id}_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+          numeroFacture: `FAC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          studentId: eleve.id,
+          eleveId: eleve.id,
+          nomEleve: `${eleve.prenom} ${eleve.nom}`,
+          anneeScolaireId: yearId,
+          anneeScolaire: yearNom,
+          nomClasse: eleve.nomClasse || cls?.nom || 'Non spécifiée',
+          statut: 'NON_PAYE',
+          devise: t.devise || ft.devise || 'USD',
+          montantTotal,
+          montantPaye: 0,
+          dateEcheance: t.dateEcheance || new Date().toISOString().split('T')[0],
+          lignes,
+        };
+
+        const saved = await this.addInvoice(newInv);
+        if (saved) {
+          created++;
+          allInvoices.push(saved);
+        } else {
+          skipped++;
+        }
+      }
+
+      return { success: true, created, skipped };
+    } catch (err: any) {
+      console.error('[LocalDatabaseService] generateInvoicesForFeeType :', err);
+      return { success: false, created: 0, skipped: 0, error: err.message || 'Erreur inattendue.' };
+    }
+  }
 
   public static async getInvoices(yearId?: string): Promise<FactureEleve[]> {
     const years = await this.getSchoolYears();
@@ -977,20 +1362,35 @@ export class LocalDatabaseService {
     let invoices = await safeElectronCall<FactureEleve[]>(() => api()?.getInvoices(), 'invoices');
 
     const eleves = await this.getEleves();
-    const existingStudentIds = new Set(invoices.map(i => i.eleveId || i.studentId).filter(Boolean));
-    const hasMissingInvoices = eleves.some(e => !existingStudentIds.has(e.id));
+    const activeYear = years.find(y => y.statut === 'EN_COURS') || years[0];
+    const activeYearInvoices = invoices.filter(inv =>
+      !targetYearId ||
+      inv.anneeScolaireId === targetYearId ||
+      inv.schoolYearId === targetYearId ||
+      inv.anneeScolaire === activeYear?.nom
+    );
+    const existingStudentIds = new Set(activeYearInvoices.map(i => i.eleveId || i.studentId).filter(Boolean));
+    const activeYearStudents = eleves.filter(e => !e.schoolYearId || e.schoolYearId === activeYear?.id);
+    const hasMissingInvoices = activeYearStudents.some(e => !existingStudentIds.has(e.id));
     if (hasMissingInvoices && !syncingInvoices) {
       await this.syncStudentInvoices();
       invoices = await safeElectronCall<FactureEleve[]>(() => api()?.getInvoices(), 'invoices');
     }
 
+    const assignedClasses = await this.getCurrentUserAssignedClasses();
+    if (assignedClasses !== null) {
+      const accessibleStudentIds = new Set(eleves.map(e => e.id));
+      invoices = invoices.filter(inv => {
+        const studentId = inv.eleveId || inv.studentId;
+        return !!studentId && accessibleStudentIds.has(studentId);
+      });
+    }
+
     if (!targetYearId) return invoices;
-    const activeYear = years.find(y => y.statut === 'EN_COURS') || years[0];
     return invoices.filter(inv =>
       inv.anneeScolaireId === targetYearId ||
       inv.schoolYearId === targetYearId ||
-      inv.anneeScolaire === targetYearId ||
-      inv.anneeScolaire === activeYear?.nom
+      inv.anneeScolaire === targetYearId
     );
   }
 
@@ -1005,13 +1405,18 @@ export class LocalDatabaseService {
     inv.schoolYearId = inv.anneeScolaireId || activeYear?.id || inv.schoolYearId || 'default_year';
     inv.eleveId = inv.eleveId || inv.studentId || undefined;
     inv.lignes = Array.isArray(inv.lignes) ? inv.lignes : [];
+    inv.devise = inv.devise || inv.lignes?.[0]?.devise || 'USD';
     if (!inv.montantTotal && inv.lignes.length) {
-      inv.montantTotal = inv.lignes.reduce((a, l) => a + (l.montant || 0), 0);
+      inv.montantTotal = round2(getInvoiceTotal(inv, inv.devise));
     }
     inv.montantPaye = inv.montantPaye || 0;
     inv.statut = inv.statut || 'NON_PAYE';
     inv.numeroFacture = inv.numeroFacture || `F-${uuid()}`;
     const fromDb = await safeElectronCall<FactureEleve | null>(() => api()?.addInvoice(inv));
+    if (isElectron() && !fromDb) {
+      console.error('[LocalDatabaseService] addInvoice: échec de persistance IPC.');
+      return null;
+    }
     const stored = memAdd('invoices', fromDb || inv);
 
     if (!isElectron()) {
@@ -1063,13 +1468,37 @@ export class LocalDatabaseService {
     return await safeElectronCall<number>(() => api()?.cleanupDuplicateInvoices?.(), 'invoices') || 0;
   }
 
+  public static async cleanupDefaultInvoices(): Promise<number> {
+    return await safeElectronCall<number>(() => api()?.cleanupDefaultInvoices?.(), 'invoices') || 0;
+  }
+
   public static async cleanupDuplicateFeeTypes(): Promise<number> {
     return await safeElectronCall<number>(() => api()?.cleanupDuplicateFeeTypes?.(), 'feeTypes') || 0;
   }
 
+  public static async resetFinancialData(scope?: { invoices?: boolean; payments?: boolean; cash?: boolean; accounting?: boolean; expenses?: boolean; payroll?: boolean }): Promise<{ ok: boolean; error?: string }> {
+    return await safeElectronCall<{ ok: boolean; error?: string }>(() => api()?.resetFinancialData?.(scope)) || { ok: false, error: 'Pont IPC indisponible' };
+  }
+
   public static async getPayments(invoiceId?: string): Promise<TransactionPaiement[]> {
-    const items = await safeElectronCall<TransactionPaiement[]>(() => api()?.getPayments(invoiceId), 'payments');
-    return invoiceId ? items.filter(p => p.invoiceId === invoiceId) : items;
+    let items = await safeElectronCall<TransactionPaiement[]>(() => api()?.getPayments(invoiceId), 'payments');
+    const assignedClasses = await this.getCurrentUserAssignedClasses();
+    if (invoiceId) {
+      const invoicePayments = items.filter(p => p.invoiceId === invoiceId);
+      if (assignedClasses === null) return invoicePayments;
+      const invoices = await safeElectronCall<FactureEleve[]>(() => api()?.getInvoices(), 'invoices');
+      const invoice = invoices.find(item => item.id === invoiceId);
+      const accessibleStudentIds = new Set((await this.getEleves()).map(student => student.id));
+      const studentId = invoice?.eleveId || invoice?.studentId;
+      return studentId && accessibleStudentIds.has(studentId) ? invoicePayments : [];
+    }
+    if (assignedClasses !== null) {
+      const accessibleInvoices = await this.getInvoices();
+      const invoiceIds = new Set(accessibleInvoices.map(inv => inv.id));
+      const studentIds = new Set((await this.getEleves()).map(student => student.id));
+      items = items.filter(payment => invoiceIds.has(payment.invoiceId) || (!!payment.eleveId && studentIds.has(payment.eleveId)) || (!!payment.studentId && studentIds.has(payment.studentId)));
+    }
+    return items;
   }
 
   public static async addPayment(p: TransactionPaiement): Promise<TransactionPaiement | null> {
@@ -1082,6 +1511,10 @@ export class LocalDatabaseService {
     p.reference = p.reference || '';
     p.moyenPaiement = p.moyenPaiement || 'CASH';
     const fromDb = await safeElectronCall<TransactionPaiement | null>(() => api()?.addPayment(p));
+    if (isElectron() && !fromDb) {
+      console.error('[LocalDatabaseService] addPayment: échec de persistance IPC.');
+      return null;
+    }
     const stored = fromDb || p;
 
     // Recalculer montantPaye/statut de la facture depuis les vrais paiements
@@ -1091,7 +1524,7 @@ export class LocalDatabaseService {
       inv = (await this.getInvoices()).find(i => i.id === p.invoiceId);
       if (inv) {
         const allPayments = await this.getPayments(p.invoiceId);
-        const paid = getInvoicePaid(inv, allPayments, inv.devise);
+        const paid = round2(getInvoicePaid(inv, allPayments, inv.devise));
         const statut = getInvoiceStatus(inv, allPayments, inv.devise);
         await this.updateInvoice(p.invoiceId, { montantPaye: paid, statut });
       }
@@ -1137,7 +1570,7 @@ export class LocalDatabaseService {
           const ft = feeTypes.find(f => f.id === alloc.feeTypeId);
           const compteProduit = this.compteProduitForCategorie(ft?.categorie || 'PRODUIT');
           lignesEcriture.push({ compteId: 'cpt_caisse', debit: alloc.montant, credit: 0, devise: lineDevise });
-          lignesEcriture.push({ compteProduit, debit: 0, credit: alloc.montant, devise: lineDevise });
+          lignesEcriture.push({ compteId: compteProduit, debit: 0, credit: alloc.montant, devise: lineDevise });
         }
       }
       await this.addEcriture({
@@ -1155,12 +1588,30 @@ export class LocalDatabaseService {
   }
 
   public static async getExpenses(): Promise<DepenseCaisse[]> {
-    return safeElectronCall<DepenseCaisse[]>(() => api()?.getExpenses(), 'expenses');
+    const items = await safeElectronCall<DepenseCaisse[]>(() => api()?.getExpenses(), 'expenses');
+    const assignedClasses = await this.getCurrentUserAssignedClasses();
+    if (assignedClasses === null) return items;
+    const assignments = new Set(assignedClasses.map(value => value.toLowerCase().trim()));
+    const classes = await this.getClasses();
+    const classIds = new Set(classes.filter(classe => assignments.has(classe.id.toLowerCase()) || assignments.has(classe.nom.toLowerCase().trim()) || (classe.salle && assignments.has(classe.salle.toLowerCase().trim()))).map(classe => classe.id));
+    const cycleIds = new Set(classes.filter(classe => classIds.has(classe.id)).map(classe => normalizeAccessCycle(classe.cycleId || classe.cycleCode)));
+    return items.filter(expense =>
+      (!!expense.classId && classIds.has(expense.classId)) ||
+      (!!expense.cycleId && cycleIds.has(normalizeAccessCycle(expense.cycleId)))
+    );
   }
 
   public static async addExpense(e: DepenseCaisse): Promise<DepenseCaisse | null> {
     e.montant = e.montant || 0;
     e.devise = e.devise || 'USD';
+    if (!e.cycleId) {
+      const assignedClasses = await this.getCurrentUserAssignedClasses();
+      if (assignedClasses !== null) {
+        const assignments = new Set(assignedClasses.map(value => value.toLowerCase().trim()));
+        const cycles = Array.from(new Set((await this.getClasses()).filter(classe => assignments.has(classe.id.toLowerCase()) || assignments.has(classe.nom.toLowerCase().trim())).map(classe => normalizeAccessCycle(classe.cycleId || classe.cycleCode)).filter(Boolean)));
+        if (cycles.length === 1) e.cycleId = cycles[0];
+      }
+    }
     e.categorie = e.categorie || 'GENERAL';
     e.modePaiement = e.modePaiement || 'CASH';
     e.date = e.date || new Date().toISOString();
@@ -1232,8 +1683,91 @@ export class LocalDatabaseService {
 
   public static async updateFeeType(id: string, updates: Partial<TypeFraisScolaire>): Promise<TypeFraisScolaire | null> {
     const fromDb = await safeElectronCall<TypeFraisScolaire | null>(() => api()?.updateFeeType(id, updates));
-    if (fromDb) return memUpdate<TypeFraisScolaire>('feeTypes', id, fromDb);
+    if (fromDb) {
+      const updated = memUpdate<TypeFraisScolaire>('feeTypes', id, fromDb);
+      // Met à jour les factures non payées déjà générées pour ce frais
+      await this.syncUnpaidInvoicesForFeeType(fromDb).catch(() => {});
+      return updated;
+    }
     return memUpdate<TypeFraisScolaire>('feeTypes', id, updates);
+  }
+
+  // Met à jour automatiquement les factures non payées quand le montant/tranches d'un frais change
+  public static async syncUnpaidInvoicesForFeeType(ft: TypeFraisScolaire): Promise<number> {
+    try {
+      const years = await this.getSchoolYears();
+      const activeYear = years.find(y => y.id === ft.schoolYearId) || years.find(y => y.statut === 'EN_COURS') || years[0];
+      if (!activeYear) return 0;
+
+      const invoices = await this.getInvoices(activeYear.id);
+      let updatedCount = 0;
+
+      for (const inv of invoices) {
+        const lignes = inv.lignes || [];
+        const hasFee = lignes.some(l => l.feeTypeId === ft.id);
+        if (!hasFee) continue;
+
+        const invoiceTotal = getInvoiceTotal(inv, inv.devise);
+        const paid = inv.montantPaye || 0;
+        if (paid >= invoiceTotal - 0.001) continue; // facture déjà payée, on ne touche pas
+
+        const tranches = getTranchesForFee(ft, activeYear.debut, activeYear.fin);
+        let changed = false;
+
+        for (const l of lignes) {
+          if (l.feeTypeId !== ft.id) continue;
+
+          const tranche = l.trancheId ? tranches.find(t => t.id === l.trancheId) : null;
+          let targetMontant = ft.montant;
+          let targetDevise = ft.devise;
+          let targetNom = ft.nom;
+
+          if (tranche) {
+            targetMontant = tranche.montant;
+            targetDevise = tranche.devise;
+            targetNom = `${ft.nom} — ${tranche.nom}`;
+          } else if (tranches.length > 0) {
+            // Ancienne facture globale ou tranche non reconnue : on rattache à la première tranche
+            const first = tranches[0];
+            targetMontant = first.montant;
+            targetDevise = first.devise;
+            targetNom = `${ft.nom} — ${first.nom}`;
+            if (l.trancheId !== first.id) {
+              l.trancheId = first.id;
+            }
+          }
+
+          if (
+            Math.abs((l.montant || 0) - targetMontant) > 0.001 ||
+            l.devise !== targetDevise ||
+            l.nom !== targetNom
+          ) {
+            l.montant = targetMontant;
+            l.devise = targetDevise;
+            l.nom = targetNom;
+            changed = true;
+          }
+        }
+
+        const newTotal = round2(getInvoiceTotal(inv, inv.devise));
+        if (Math.abs(newTotal - (inv.montantTotal || 0)) > 0.001) {
+          changed = true;
+        }
+
+        if (changed) {
+          let newStatut: 'NON_PAYE' | 'PARTIEL' | 'PAYE' = 'NON_PAYE';
+          if (paid >= newTotal - 0.001) newStatut = 'PAYE';
+          else if (paid > 0.001) newStatut = 'PARTIEL';
+          await this.updateInvoice(inv.id, { montantTotal: newTotal, statut: newStatut, lignes });
+          updatedCount++;
+        }
+      }
+
+      return updatedCount;
+    } catch (err: any) {
+      console.error('[LocalDatabaseService] syncUnpaidInvoicesForFeeType :', err);
+      return 0;
+    }
   }
 
   public static async deleteFeeType(id: string): Promise<void> {
@@ -1243,7 +1777,21 @@ export class LocalDatabaseService {
 
   // ── CAISSE ────────────────────────────────────────────────────────────────
   public static async getCashOperations(filters?: { yearId?: string; type?: 'ENTREE' | 'SORTIE' | 'TRANSFERT' }): Promise<OperationCaisse[]> {
-    const items = await safeElectronCall<OperationCaisse[]>(() => api()?.getCashOperations(filters), 'cashOperations');
+    let items = await safeElectronCall<OperationCaisse[]>(() => api()?.getCashOperations(filters), 'cashOperations');
+    const assignedClasses = await this.getCurrentUserAssignedClasses();
+    if (assignedClasses !== null) {
+      const assignments = new Set(assignedClasses.map(value => value.toLowerCase().trim()));
+      const classes = await this.getClasses();
+      const accessibleClasses = classes.filter(classe => assignments.has(classe.id.toLowerCase()) || assignments.has(classe.nom.toLowerCase().trim()) || (classe.salle && assignments.has(classe.salle.toLowerCase().trim())));
+      const classIds = new Set(accessibleClasses.map(classe => classe.id));
+      const cycleIds = new Set(accessibleClasses.map(classe => (classe.cycleId || classe.cycleCode || '').toUpperCase()));
+      const paymentIds = new Set((await this.getPayments()).map(payment => payment.id));
+      items = items.filter(operation =>
+        (operation.origine === 'PAYMENT' && !!operation.origineId && paymentIds.has(operation.origineId)) ||
+        (!!operation.classId && classIds.has(operation.classId)) ||
+        (!!operation.cycleId && (cycleIds.has(operation.cycleId.toUpperCase()) || (operation.cycleId.toUpperCase() === 'SECONDAIRE' && Array.from(cycleIds).some(cycle => cycle === 'SECONDAIRE_CTEB' || cycle === 'CTEB' || cycle === 'HUMANITES'))))
+      );
+    }
     if (!filters) return items;
     return items.filter(op => {
       if (filters.yearId && op.schoolYearId !== filters.yearId && op.anneeScolaireId !== filters.yearId) return false;
@@ -1253,14 +1801,29 @@ export class LocalDatabaseService {
   }
 
   public static async addCashOperation(op: OperationCaisse): Promise<OperationCaisse | null> {
+    const user = this.getCurrentUser();
+    if (op.type === 'SORTIE' && !canManageCashExpense(user?.role)) {
+      throw new Error('Accès refusé : seuls le Comptable, l\'Intendant ou le Promoteur peuvent enregistrer une dépense.');
+    }
     op.id = op.id || uuid();
     op.devise = op.devise || 'USD';
     op.schoolYearId = op.schoolYearId || op.anneeScolaireId;
+    if (!op.cycleId) {
+      const assignedClasses = await this.getCurrentUserAssignedClasses();
+      if (assignedClasses !== null) {
+        const assignments = new Set(assignedClasses.map(value => value.toLowerCase().trim()));
+        const classes = (await this.getClasses()).filter(classe => assignments.has(classe.id.toLowerCase()) || assignments.has(classe.nom.toLowerCase().trim()));
+        const cycles = Array.from(new Set(classes.map(classe => classe.cycleId || classe.cycleCode).filter(Boolean)));
+        if (cycles.length === 1) op.cycleId = cycles[0];
+      }
+    }
     const fromDb = await safeElectronCall<OperationCaisse | null>(() => api()?.addCashOperation(op));
     return memAdd('cashOperations', fromDb || op);
   }
 
   public static async deleteCashOperation(id: string): Promise<void> {
+    const user = this.getCurrentUser();
+    if (!canManageCashExpense(user?.role)) throw new Error('Accès refusé : suppression de caisse réservée au Comptable / Intendant.');
     await safeElectronCall(() => api()?.deleteCashOperation(id));
     memDelete('cashOperations', id);
     const ecritures = memGet<EcritureComptable>('ecritures');
@@ -1412,14 +1975,14 @@ export class LocalDatabaseService {
 
   // ── PERSONNEL & ENSEIGNANTS (SQLITE EXCLUSIF) ──────────────────────────────
   public static async getStaff(): Promise<MembrePersonnel[]> {
-    const list = await safeElectronCall<MembrePersonnel[]>(() => api()?.getStaff(), 'staff');
+    const list = await this.getRawStaff();
     
     // Auto-sync du Promoteur / Admin dans le dossier du personnel RH si absent
     const hasAdmin = list.some(s => s.role === 'PROMOTEUR_ADMIN');
     if (!hasAdmin) {
       const cfg = await this.getConfig('school_config');
-      const users = await this.getUsers();
-      const adminUser = users.find(u => u.role === 'PROMOTEUR_ADMIN');
+      const users = await safeElectronCall<UserAccount[]>(() => api()?.getUsers(), 'users');
+      const adminUser = users.find(u => normalizeRole(u.role) === 'PROMOTEUR_ADMIN');
       if (adminUser || cfg?.promoterName) {
         const promoterName = cfg?.promoterName || `${adminUser?.prenom || ''} ${adminUser?.nom || ''}`.trim() || 'Promoteur Administrateur';
         const [prenom, ...restNom] = promoterName.trim().split(' ');
@@ -1445,15 +2008,29 @@ export class LocalDatabaseService {
         list.push(adminStaff);
       }
     }
-    return list;
+    const user = this.getCurrentUser();
+    if (!user || user.role === 'PROMOTEUR_ADMIN') return list;
+    const classes = await this.getClasses();
+    const scope = await this.getCurrentUserCycleScope(classes);
+    if (!scope || scope.length === 0) return [];
+    const userCycles = new Set(scope);
+    return list.filter(member => {
+      if (member.role === 'PROMOTEUR_ADMIN') return false;
+      const memberCycles = this.resolveStaffCycles(member, classes);
+      return memberCycles.some(cycle => userCycles.has(cycle));
+    });
   }
 
   public static async addStaff(p: MembrePersonnel): Promise<MembrePersonnel | null> {
+    const user = this.getCurrentUser();
+    if (!canEditPersonalInfo(user?.role)) throw new Error('Accès refusé : seuls les chefs d\'établissement peuvent ajouter du personnel.');
     const fromDb = await safeElectronCall<MembrePersonnel | null>(() => api()?.addStaff(p));
     return memAdd('staff', fromDb || p);
   }
 
   public static async updateStaff(id: string, updates: Partial<MembrePersonnel>): Promise<MembrePersonnel | null> {
+    const user = this.getCurrentUser();
+    if (!canEditPersonalInfo(user?.role)) throw new Error('Accès refusé : seuls les chefs d\'établissement peuvent modifier les informations personnelles.');
     if (!id) return null;
     
     // S'assurer que le tableau staff en mémoire est initialisé
@@ -1478,6 +2055,8 @@ export class LocalDatabaseService {
   }
 
   public static async deleteStaff(id: string): Promise<void> {
+    const user = this.getCurrentUser();
+    if (!canEditPersonalInfo(user?.role)) throw new Error('Accès refusé : seuls les chefs d\'établissement peuvent retirer du personnel.');
     await safeElectronCall(() => api()?.deleteStaff(id));
     memDelete('staff', id);
   }
@@ -1503,10 +2082,59 @@ export class LocalDatabaseService {
     await safeElectronCall(() => api()?.deleteFichePaie?.(id));
     memDelete('fichesPaie', id);
   }
+  public static async getEpreuves(filters?: { classeId?: string; matiereId?: string; professeurId?: string; periode?: string; statut?: string; schoolYearId?: string }): Promise<EpreuveScolaire[]> {
+    const items = filters
+      ? memFilter(await safeElectronCall<EpreuveScolaire[]>(() => api()?.getEpreuves?.(filters), 'epreuves'), filters)
+      : await safeElectronCall<EpreuveScolaire[]>(() => api()?.getEpreuves?.(filters), 'epreuves');
+    const assignedClasses = await this.getCurrentUserAssignedClasses();
+    if (assignedClasses === null) return items;
+    const assignments = new Set(assignedClasses.map(value => value.toLowerCase().trim()));
+    const classes = await this.getClasses();
+    const accessibleIds = new Set(classes.filter(classe =>
+      assignments.has(classe.id.toLowerCase()) ||
+      assignments.has(classe.nom.toLowerCase().trim()) ||
+      (classe.salle && assignments.has(classe.salle.toLowerCase().trim()))
+    ).map(classe => classe.id));
+    const user = this.getCurrentUser();
+    if (user?.role === 'ENSEIGNANT') {
+      const staff = (await this.getStaff()).find(member => member.id === user.id || `usr_${member.id}` === user.id || member.email?.toLowerCase().trim() === user.email?.toLowerCase().trim());
+      return items.filter(epreuve => accessibleIds.has(epreuve.classeId) && !!staff && epreuve.professeurId === staff.id);
+    }
+    return items.filter(epreuve => accessibleIds.has(epreuve.classeId));
+  }
+
+  public static async addEpreuve(epreuve: EpreuveScolaire): Promise<EpreuveScolaire | null> {
+    const fromDb = await safeElectronCall<EpreuveScolaire | null>(() => api()?.addEpreuve?.(epreuve));
+    return memAdd('epreuves', fromDb || epreuve);
+  }
+
+  public static async updateEpreuve(id: string, updates: Partial<EpreuveScolaire>): Promise<EpreuveScolaire | null> {
+    const fromDb = await safeElectronCall<EpreuveScolaire | null>(() => api()?.updateEpreuve?.(id, updates));
+    if (fromDb) return memUpdate<EpreuveScolaire>('epreuves', id, fromDb);
+    return memUpdate<EpreuveScolaire>('epreuves', id, updates);
+  }
+
+  public static async deleteEpreuve(id: string): Promise<void> {
+    await safeElectronCall(() => api()?.deleteEpreuve?.(id));
+    memDelete('epreuves', id);
+  }
+
   // ── COTES & BULLETINS (SQLITE EXCLUSIF) ───────────────────────────────────
-  public static async getCotes(filters?: { eleveId?: string; classeId?: string; matiereId?: string; periode?: string; type?: string; evaluationId?: string }): Promise<Cote[]> {
-    const items = await safeElectronCall<Cote[]>(() => api()?.getCotes(filters), 'cotes');
-    return memFilter(items, filters);
+  public static async getCotes(filters?: { eleveId?: string; classeId?: string; matiereId?: string; periode?: string; type?: string; statut?: Cote['statut']; evaluationId?: string }): Promise<Cote[]> {
+    const items = memFilter(await safeElectronCall<Cote[]>(() => api()?.getCotes(filters), 'cotes'), filters);
+    const assignedClasses = await this.getCurrentUserAssignedClasses();
+    if (assignedClasses === null) return items;
+    const assignments = new Set(assignedClasses.map(value => value.toLowerCase().trim()));
+    const classes = await this.getClasses();
+    const accessibleClassIds = new Set(classes.filter(classe =>
+      assignments.has(classe.id.toLowerCase()) || assignments.has(classe.nom.toLowerCase().trim()) || (classe.salle && assignments.has(classe.salle.toLowerCase().trim()))
+    ).map(classe => classe.id));
+    const user = this.getCurrentUser();
+    if (user?.role === 'ENSEIGNANT') {
+      const staff = (await this.getStaff()).find(member => member.id === user.id || `usr_${member.id}` === user.id || member.email?.toLowerCase().trim() === user.email?.toLowerCase().trim());
+      return items.filter(cote => !!cote.classeId && accessibleClassIds.has(cote.classeId) && !!staff && cote.enseignantId === staff.id);
+    }
+    return items.filter(cote => !!cote.classeId && accessibleClassIds.has(cote.classeId));
   }
 
   public static async addCote(cote: Cote): Promise<Cote | null> {
@@ -1526,17 +2154,51 @@ export class LocalDatabaseService {
   }
 
   // ── PRESENCES & REGISTRE (SQLITE EXCLUSIF) ────────────────────────────────
-  public static async getPresences(classeId?: string, dateJour?: string): Promise<Presence[]> {
-    const items = await safeElectronCall<Presence[]>(() => api()?.getPresences(classeId, dateJour), 'presences');
-    if (classeId && dateJour) return memFilter(items, { classeId, dateJour });
-    if (classeId) return memFilter(items, { classeId });
-    if (dateJour) return memFilter(items, { dateJour });
-    return items;
+  public static async getPresences(filters?: { eleveId?: string; classeId?: string; anneeScolaireId?: string; dateJour?: string; dateDebut?: string; dateFin?: string; session?: string; statut?: string }): Promise<Presence[]> {
+    const items = await safeElectronCall<Presence[]>(() => api()?.getPresences(filters), 'presences');
+    return filters ? memFilter(items, filters) : items;
   }
 
   public static async addPresence(presence: Presence): Promise<Presence | null> {
-    const fromDb = await safeElectronCall<Presence | null>(() => api()?.addPresence(presence));
-    return memAdd('presences', fromDb || presence);
+    const p = { ...presence, id: presence.id || uuid() };
+    // Upsert : un seul pointage par élève/classe/date/session.
+    const existing = (await this.getPresences({
+      eleveId: p.eleveId,
+      classeId: p.classeId,
+      dateJour: p.dateJour,
+      session: p.session,
+    })).find(x =>
+      x.eleveId === p.eleveId &&
+      x.classeId === p.classeId &&
+      x.dateJour === p.dateJour &&
+      x.session === p.session
+    );
+    if (existing) {
+      p.id = existing.id;
+    }
+    const fromDb = await safeElectronCall<Presence | null>(() => api()?.addPresence(p));
+    return memAdd('presences', fromDb || p);
+  }
+
+  public static async bulkAddPresences(presences: Presence[]): Promise<Presence[]> {
+    const results: Presence[] = [];
+    for (const p of presences) {
+      const r = await this.addPresence({ ...p, id: p.id || uuid() });
+      if (r) results.push(r);
+    }
+    return results;
+  }
+
+  public static async updatePresence(id: string, updates: Partial<Presence>): Promise<Presence | null> {
+    const existing = (await this.getPresences()).find(p => p.id === id);
+    if (!existing) return null;
+    const merged = { ...existing, ...updates, id } as Presence;
+    return this.addPresence(merged);
+  }
+
+  public static async deletePresence(id: string): Promise<void> {
+    await safeElectronCall(() => api()?.deletePresence(id));
+    memDelete('presences', id);
   }
 
   // ── CALENDRIER & ÉVÉNEMENTS (SQLITE EXCLUSIF) ──────────────────────────────
@@ -1552,6 +2214,58 @@ export class LocalDatabaseService {
   public static async deleteSchoolEvent(id: string): Promise<void> {
     await safeElectronCall(() => api()?.deleteSchoolEvent(id));
     memDelete('schoolEvents', id);
+  }
+
+  // ── EMPLOI DU TEMPS (SQLITE EXCLUSIF) ────────────────────────────────────
+  public static async getScheduleTimeSlots(filters?: Partial<{ schoolYearId: string; vacation: string }>): Promise<HoraireCreneau[]> {
+    return safeElectronCall<HoraireCreneau[]>(() => api()?.getScheduleTimeSlots(filters || {}), 'scheduleTimeSlots');
+  }
+
+  public static async addScheduleTimeSlot(ts: HoraireCreneau): Promise<HoraireCreneau | null> {
+    const fromDb = await safeElectronCall<HoraireCreneau | null>(() => api()?.addScheduleTimeSlot(ts));
+    return memAdd('scheduleTimeSlots', fromDb || ts);
+  }
+
+  public static async deleteScheduleTimeSlot(id: string): Promise<void> {
+    await safeElectronCall(() => api()?.deleteScheduleTimeSlot(id));
+    memDelete('scheduleTimeSlots', id);
+  }
+
+  public static async getSchedules(filters?: Partial<{ schoolYearId: string; classId: string; teacherId: string; vacation: string }>): Promise<ScheduleSlot[]> {
+    const items = await safeElectronCall<ScheduleSlot[]>(() => api()?.getSchedules(filters || {}), 'schedules');
+
+    // Filtrer par classes accessibles (sauf Promoteur/Admin)
+    const assignedClasses = await this.getCurrentUserAssignedClasses();
+    if (assignedClasses !== null) {
+      const classes = await this.getClasses();
+      const allowedClassIds = new Set(classes
+        .filter(classe =>
+          assignedClasses.includes(classe.id) ||
+          assignedClasses.includes(classe.nom) ||
+          (!!classe.salle && assignedClasses.includes(classe.salle))
+        )
+        .map(classe => classe.id));
+      return items.filter(slot => !slot.classeId || allowedClassIds.has(slot.classeId));
+    }
+
+    return items;
+  }
+
+  public static async addSchedule(s: ScheduleSlot): Promise<ScheduleSlot | null> {
+    const fromDb = await safeElectronCall<ScheduleSlot | null>(() => api()?.addSchedule(s));
+    return memAdd('schedules', fromDb || s);
+  }
+
+  public static async updateSchedule(id: string, updates: Partial<ScheduleSlot>): Promise<ScheduleSlot | null> {
+    const existing = (await this.getSchedules()).find(s => s.id === id);
+    if (!existing) return null;
+    const merged = { ...existing, ...updates, id } as ScheduleSlot;
+    return this.addSchedule(merged);
+  }
+
+  public static async deleteSchedule(id: string): Promise<void> {
+    await safeElectronCall(() => api()?.deleteSchedule(id));
+    memDelete('schedules', id);
   }
 
   // ── DOCUMENTS ENSEIGNANT / PERSONNEL ─────────────────────────────────────
@@ -1734,7 +2448,7 @@ export class LocalDatabaseService {
 
   // ── RÔLES & PERMISSIONS SYSTEME ───────────────────────────────────────
   public static getPermissionsForRole(role: RôleSystème): RolePermissions {
-    return PERMISSIONS_MAP[role] || PERMISSIONS_MAP['TEACHER'];
+    return PERMISSIONS_MAP[role] || PERMISSIONS_MAP['ENSEIGNANT'];
   }
 
   // ── JOURNAL D'AUDIT ─────────────────────────────────────────────────────

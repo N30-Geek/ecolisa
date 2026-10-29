@@ -20,6 +20,7 @@ export interface CourseReference {
     | 'CULTURE_GENERALE';
   cycleCode: 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES';
   optionCode?: string;
+  niveau?: string;       // Ex: '7EME', '8EME', '1ERE_HUM', '2EME_HUM', '3EME_HUM', '4EME_HUM'
   maxScore: number;      // Max Période (ou Max Trimestre pour la Maternelle)
   maxExamen: number;     // Max Examen (Max Période x 2 pour Primaire/Secondaire, 0 pour Maternelle)
   maxSemestre: number;   // Max Semestre (Max Période x 4)
@@ -45,44 +46,64 @@ export const EPST_SECTIONS_OPTIONS = [
   { value: 'AGRICULTURE', label: 'Agriculture Générale & Écologie' },
 ];
 
+/**
+ * Groupes officiels d'activités de la Maternelle — Bulletin IGE/PS.001
+ * Ministère de l'Éducation Nationale et Nouvelle Citoyenneté (RDC).
+ * Maxima : 4 points par activité et par trimestre (12 points annuels par activité).
+ * Total général : 48 points par trimestre, 144 points annuels.
+ */
 export const GROUPE_MATERNELLE_LABELS: Record<GroupeActiviteMaternelle, { label: string; maxTrimestre: number; maxAnnuel: number; desc: string }> = {
   GROUPE_I: {
-    label: 'GROUPE I : Schéma Corporel, Latéralité & Orientation',
+    label: 'GROUPE I : EDUCATION SENSORIELLE',
     maxTrimestre: 4,
     maxAnnuel: 12,
-    desc: '4 activités à Maxima 4/trimestre (Sous-Total: 16/trimestre, 48/an)',
+    desc: '2 activités à Maxima 4/trimestre (Sous-Total : 8/trimestre, 24/an)',
   },
   GROUPE_II: {
-    label: 'GROUPE II : Sensoriel, Psychomoteur, Artistique & Vie Pratique',
-    maxTrimestre: 8,
-    maxAnnuel: 24,
-    desc: '6 activités à Maxima 8/trimestre (Sous-Total: 48/trimestre, 144/an)',
+    label: 'GROUPE II : EDUCATION MOTRICE',
+    maxTrimestre: 4,
+    maxAnnuel: 12,
+    desc: '3 activités à Maxima 4/trimestre (Sous-Total : 12/trimestre, 36/an)',
   },
   GROUPE_III: {
-    label: 'GROUPE III : Exploration, Langage & Mathématiques',
-    maxTrimestre: 12,
-    maxAnnuel: 36,
-    desc: '3 activités à Maxima 12/trimestre (Sous-Total: 36/trimestre, 108/an)',
+    label: 'GROUPE III : EDUCATION SOCIALE',
+    maxTrimestre: 4,
+    maxAnnuel: 12,
+    desc: '3 activités à Maxima 4/trimestre (Sous-Total : 12/trimestre, 36/an)',
   },
   GROUPE_IV: {
-    label: 'GROUPE IV : Activités Libres & Autonomie',
-    maxTrimestre: 20,
-    maxAnnuel: 60,
-    desc: '1 activité à Maxima 20/trimestre (Sous-Total: 20/trimestre, 60/an)',
+    label: 'GROUPE IV : EDUCATION INTELLECTUELLE',
+    maxTrimestre: 4,
+    maxAnnuel: 12,
+    desc: '4 activités à Maxima 4/trimestre (Sous-Total : 16/trimestre, 48/an)',
   },
 };
 
+/**
+ * Barème officiel de conversion qualitative de la Maternelle (bas de bulletin IGE/PS.001).
+ * Pourcentages → Qualité → Couleur.
+ */
+export const BAREME_QUALITATIF_MATERNELLE = [
+  { min: 80, max: 100, plage: '100-80', qualite: 'E', couleur: 'JAUNE', hex: '#fde047' },
+  { min: 60, max: 79, plage: '79-60', qualite: 'TB', couleur: 'BLEU', hex: '#93c5fd' },
+  { min: 50, max: 59, plage: '59-50', qualite: 'B', couleur: 'VERT', hex: '#86efac' },
+  { min: 40, max: 49, plage: '49-40', qualite: 'AB', couleur: 'NOIR', hex: '#d4d4d8' },
+  { min: 0, max: 39, plage: '39-0', qualite: 'M', couleur: 'ROUGE', hex: '#fca5a5' },
+] as const;
+
 export const OFFICIAL_EPST_COURSES: CourseReference[] = [
   // ============================================================================
-  // 1. ÉCOLE MATERNELLE (14 ACTIVITÉS OFFICIELLES RÉPARTIES EN 4 GROUPES)
-  // Conforme au Bulletin Officiel de l'Enfant de Maternelle EPST RDC
-  // Maxima : Trimestre 1 = 120 | Trimestre 2 = 120 | Trimestre 3 = 120 | Total Annuel = 360
+  // 1. ECOLE MATERNELLE - 12 ACTIVITES OFFICIELLES EN 4 GROUPES
+  // Conforme au Bulletin de l'Enfant de la Maternelle IGE/PS.001
+  // Ministere de l'Education Nationale et Nouvelle Citoyennete (RDC)
+  // Maxima : 4 pts / activite / trimestre - 12 pts / activite / an
+  // Total general : 48 pts / trimestre - 144 pts / an
   // ============================================================================
 
-  // ── GROUPE I (4 activités x 4 pts = 16 pts/trimestre, 48 pts/an) ────────────
+  // -- GROUPE I : EDUCATION SENSORIELLE (2 activites -> 8/trim, 24/an) --------
   {
     code: 'MAT-ACT-01',
-    nom: 'Activités schéma corporel',
+    nom: "Activités sensorielles",
     categorie: 'EVEIL_ART',
     cycleCode: 'MATERNELLE',
     optionCode: 'TRONC_COMMUN',
@@ -97,7 +118,7 @@ export const OFFICIAL_EPST_COURSES: CourseReference[] = [
   },
   {
     code: 'MAT-ACT-02',
-    nom: 'Activités de latéralité',
+    nom: "Activités musicales",
     categorie: 'EVEIL_ART',
     cycleCode: 'MATERNELLE',
     optionCode: 'TRONC_COMMUN',
@@ -110,13 +131,15 @@ export const OFFICIAL_EPST_COURSES: CourseReference[] = [
     volumeHoraire: 2,
     ordre: 2,
   },
+
+  // -- GROUPE II : EDUCATION MOTRICE (3 activites -> 12/trim, 36/an) ----------
   {
     code: 'MAT-ACT-03',
-    nom: 'Activités de structuration spatiale',
+    nom: "Activités psychomotrices",
     categorie: 'EVEIL_ART',
     cycleCode: 'MATERNELLE',
     optionCode: 'TRONC_COMMUN',
-    groupeMaternelle: 'GROUPE_I',
+    groupeMaternelle: 'GROUPE_II',
     maxScore: 4,
     maxExamen: 0,
     maxSemestre: 8,
@@ -127,174 +150,142 @@ export const OFFICIAL_EPST_COURSES: CourseReference[] = [
   },
   {
     code: 'MAT-ACT-04',
-    nom: "Activités d'orientation temporelle",
+    nom: "Activités physiques",
     categorie: 'EVEIL_ART',
     cycleCode: 'MATERNELLE',
     optionCode: 'TRONC_COMMUN',
-    groupeMaternelle: 'GROUPE_I',
+    groupeMaternelle: 'GROUPE_II',
+    maxScore: 4,
+    maxExamen: 0,
+    maxSemestre: 8,
+    maxAnnuel: 12,
+    coefficient: 1,
+    volumeHoraire: 4,
+    ordre: 4,
+  },
+  {
+    code: 'MAT-ACT-05',
+    nom: "Activités d'arts plastiques",
+    categorie: 'EVEIL_ART',
+    cycleCode: 'MATERNELLE',
+    optionCode: 'TRONC_COMMUN',
+    groupeMaternelle: 'GROUPE_II',
+    maxScore: 4,
+    maxExamen: 0,
+    maxSemestre: 8,
+    maxAnnuel: 12,
+    coefficient: 1,
+    volumeHoraire: 3,
+    ordre: 5,
+  },
+
+  // -- GROUPE III : EDUCATION SOCIALE (3 activites -> 12/trim, 36/an) ---------
+  {
+    code: 'MAT-ACT-06',
+    nom: "Activités de comportement",
+    categorie: 'SCIENCES_HUMAINES',
+    cycleCode: 'MATERNELLE',
+    optionCode: 'TRONC_COMMUN',
+    groupeMaternelle: 'GROUPE_III',
     maxScore: 4,
     maxExamen: 0,
     maxSemestre: 8,
     maxAnnuel: 12,
     coefficient: 1,
     volumeHoraire: 2,
-    ordre: 4,
-  },
-
-  // ── GROUPE II (6 activités x 8 pts = 48 pts/trimestre, 144 pts/an) ──────────
-  {
-    code: 'MAT-ACT-05',
-    nom: 'Activités sensorielles',
-    categorie: 'SCIENCES_EXACTES',
-    cycleCode: 'MATERNELLE',
-    optionCode: 'TRONC_COMMUN',
-    groupeMaternelle: 'GROUPE_II',
-    maxScore: 8,
-    maxExamen: 0,
-    maxSemestre: 16,
-    maxAnnuel: 24,
-    coefficient: 1,
-    volumeHoraire: 3,
-    ordre: 5,
-  },
-  {
-    code: 'MAT-ACT-06',
-    nom: 'Activités physiques',
-    categorie: 'EVEIL_ART',
-    cycleCode: 'MATERNELLE',
-    optionCode: 'TRONC_COMMUN',
-    groupeMaternelle: 'GROUPE_II',
-    maxScore: 8,
-    maxExamen: 0,
-    maxSemestre: 16,
-    maxAnnuel: 24,
-    coefficient: 1,
-    volumeHoraire: 4,
     ordre: 6,
   },
   {
     code: 'MAT-ACT-07',
-    nom: "Activités d'arts plastiques",
-    categorie: 'EVEIL_ART',
+    nom: "Activités de vie pratique",
+    categorie: 'PRATIQUE',
     cycleCode: 'MATERNELLE',
     optionCode: 'TRONC_COMMUN',
-    groupeMaternelle: 'GROUPE_II',
-    maxScore: 8,
+    groupeMaternelle: 'GROUPE_III',
+    maxScore: 4,
     maxExamen: 0,
-    maxSemestre: 16,
-    maxAnnuel: 24,
+    maxSemestre: 8,
+    maxAnnuel: 12,
     coefficient: 1,
     volumeHoraire: 3,
     ordre: 7,
   },
   {
     code: 'MAT-ACT-08',
-    nom: 'Activités musicales',
-    categorie: 'EVEIL_ART',
+    nom: "Activités de promotion de la santé",
+    categorie: 'SCIENCES_HUMAINES',
     cycleCode: 'MATERNELLE',
     optionCode: 'TRONC_COMMUN',
-    groupeMaternelle: 'GROUPE_II',
-    maxScore: 8,
+    groupeMaternelle: 'GROUPE_III',
+    maxScore: 4,
     maxExamen: 0,
-    maxSemestre: 16,
-    maxAnnuel: 24,
+    maxSemestre: 8,
+    maxAnnuel: 12,
     coefficient: 1,
     volumeHoraire: 2,
     ordre: 8,
   },
+
+  // -- GROUPE IV : EDUCATION INTELLECTUELLE (4 activites -> 16/trim, 48/an) ---
   {
     code: 'MAT-ACT-09',
-    nom: 'Activités de vie pratique',
-    categorie: 'SCIENCES_HUMAINES',
+    nom: "Activités exploratoires",
+    categorie: 'SCIENCES_EXACTES',
     cycleCode: 'MATERNELLE',
     optionCode: 'TRONC_COMMUN',
-    groupeMaternelle: 'GROUPE_II',
-    maxScore: 8,
+    groupeMaternelle: 'GROUPE_IV',
+    maxScore: 4,
     maxExamen: 0,
-    maxSemestre: 16,
-    maxAnnuel: 24,
+    maxSemestre: 8,
+    maxAnnuel: 12,
     coefficient: 1,
-    volumeHoraire: 3,
+    volumeHoraire: 4,
     ordre: 9,
   },
   {
     code: 'MAT-ACT-10',
-    nom: 'Activités de comportement',
-    categorie: 'SCIENCES_HUMAINES',
+    nom: "Activités de langage",
+    categorie: 'LANGUES',
     cycleCode: 'MATERNELLE',
     optionCode: 'TRONC_COMMUN',
-    groupeMaternelle: 'GROUPE_II',
-    maxScore: 8,
+    groupeMaternelle: 'GROUPE_IV',
+    maxScore: 4,
     maxExamen: 0,
-    maxSemestre: 16,
-    maxAnnuel: 24,
+    maxSemestre: 8,
+    maxAnnuel: 12,
     coefficient: 1,
-    volumeHoraire: 2,
+    volumeHoraire: 5,
     ordre: 10,
   },
-
-  // ── GROUPE III (3 activités x 12 pts = 36 pts/trimestre, 108 pts/an) ────────
   {
     code: 'MAT-ACT-11',
-    nom: 'Activités exploratrices',
+    nom: "Activités mathématiques",
     categorie: 'SCIENCES_EXACTES',
     cycleCode: 'MATERNELLE',
     optionCode: 'TRONC_COMMUN',
-    groupeMaternelle: 'GROUPE_III',
-    maxScore: 12,
+    groupeMaternelle: 'GROUPE_IV',
+    maxScore: 4,
     maxExamen: 0,
-    maxSemestre: 24,
-    maxAnnuel: 36,
+    maxSemestre: 8,
+    maxAnnuel: 12,
     coefficient: 1,
     volumeHoraire: 4,
     ordre: 11,
   },
   {
     code: 'MAT-ACT-12',
-    nom: 'Activités de langage',
-    categorie: 'LANGUES',
-    cycleCode: 'MATERNELLE',
-    optionCode: 'TRONC_COMMUN',
-    groupeMaternelle: 'GROUPE_III',
-    maxScore: 12,
-    maxExamen: 0,
-    maxSemestre: 24,
-    maxAnnuel: 36,
-    coefficient: 1,
-    volumeHoraire: 5,
-    ordre: 12,
-  },
-  {
-    code: 'MAT-ACT-13',
-    nom: 'Activités mathématiques',
-    categorie: 'SCIENCES_EXACTES',
-    cycleCode: 'MATERNELLE',
-    optionCode: 'TRONC_COMMUN',
-    groupeMaternelle: 'GROUPE_III',
-    maxScore: 12,
-    maxExamen: 0,
-    maxSemestre: 24,
-    maxAnnuel: 36,
-    coefficient: 1,
-    volumeHoraire: 4,
-    ordre: 13,
-  },
-
-  // ── GROUPE IV (1 activité x 20 pts = 20 pts/trimestre, 60 pts/an) ───────────
-  {
-    code: 'MAT-ACT-14',
-    nom: 'Activités libres',
+    nom: "Activités libres",
     categorie: 'EVEIL_ART',
     cycleCode: 'MATERNELLE',
     optionCode: 'TRONC_COMMUN',
     groupeMaternelle: 'GROUPE_IV',
-    maxScore: 20,
+    maxScore: 4,
     maxExamen: 0,
-    maxSemestre: 40,
-    maxAnnuel: 60,
+    maxSemestre: 8,
+    maxAnnuel: 12,
     coefficient: 1,
-    volumeHoraire: 5,
-    ordre: 14,
+    volumeHoraire: 3,
+    ordre: 12,
   },
 
   // ============================================================================
@@ -1718,3 +1709,44 @@ export const OFFICIAL_EPST_COURSES: CourseReference[] = [
     ordre: 166,
   },
 ];
+
+// ── Helpers pour déterminer le niveau d'après le nom de classe ──────────────
+export const normalizeNiveau = (nom?: string): string | null => {
+  if (!nom) return null;
+  const n = nom
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/-/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const m = n.match(/\b(1|2|3|4|5|6|7|8)(?:ere|ème|eme|e)?\s*(maternelle|primaire|cteb|humanite|humanites?)\b/);
+  if (!m) return null;
+  const num = parseInt(m[1], 10);
+  const base = m[2].replace(/s?$/, '');
+  if (base.includes('humanite')) return `${num}ERE_HUM`;
+  if (base === 'cteb') return `${num}EME_CTEB`;
+  if (base === 'primaire') return `${num}ERE_PRI`;
+  if (base === 'maternelle') return `${num}ERE_MAT`;
+  return null;
+};
+
+// Filtre les cours du référentiel pour un contexte (cycle / option / niveau / groupe maternelle)
+export const getCoursesForContext = (
+  cycleCode: CourseReference['cycleCode'],
+  optionCode?: string,
+  niveau?: string | null,
+  groupeMaternelle?: GroupeActiviteMaternelle
+): CourseReference[] => {
+  return OFFICIAL_EPST_COURSES
+    .filter(c => {
+      if (c.cycleCode !== cycleCode) return false;
+      if (cycleCode === 'MATERNELLE' && groupeMaternelle && c.groupeMaternelle !== groupeMaternelle) return false;
+      if (niveau && c.niveau && c.niveau !== niveau) return false;
+      if (optionCode && optionCode !== 'ALL' && optionCode !== 'TRONC_COMMUN' && c.optionCode) {
+        if (c.optionCode !== optionCode && c.optionCode !== 'TRONC_COMMUN') return false;
+      }
+      return true;
+    })
+    .sort((a, b) => (a.ordre || 0) - (b.ordre || 0));
+};

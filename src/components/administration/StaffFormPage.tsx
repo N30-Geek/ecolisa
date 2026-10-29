@@ -5,12 +5,15 @@ import {
   ChevronRight, ChevronLeft, QrCode, AlertCircle, BadgeAlert, Baby, Droplet, Activity,
   Stethoscope, UserCheck, Sparkles, Building2, Wallet, AlertTriangle, BookOpen
 } from 'lucide-react';
-import { MembrePersonnel, TypeContratPersonnel, GradeEnseignant } from '../../types';
+import { ClasseScolaire, MembrePersonnel, TypeContratPersonnel, GradeEnseignant } from '../../types';
+import { LocalDatabaseService } from '../../services/localDatabase';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
 import { NumberInput } from '../common/NumberInput';
 import { PhoneInput } from '../common/PhoneInput';
 import { WebcamCaptureModal } from '../common/WebcamCaptureModal';
+import { useSchoolConfig } from '../../hooks/useSchoolConfig';
+import { normalizeAccessCycle } from '../../utils/permissions';
 
 interface StaffFormPageProps {
   staffToEdit?: MembrePersonnel | null;
@@ -20,13 +23,20 @@ interface StaffFormPageProps {
 }
 
 // Options pour CustomSelect
-const roleOptions: SelectOption[] = [
-  { value: 'ENSEIGNANT', label: 'Enseignant / Professeur de Cours', icon: Briefcase },
-  { value: 'DE', label: 'Directeur des Études (DE)', icon: ShieldCheck },
-  { value: 'SURVEILLANT', label: 'Directeur de Discipline (DD) / Surveillant', icon: ShieldCheck },
-  { value: 'PREFET', label: 'Préfet des Études / Dir. Établissement', icon: ShieldCheck },
-  { value: 'COMPTABLE', label: 'Comptable Intendant Général', icon: DollarSign },
-  { value: 'ADMIN', label: 'Administrateur Général / Secrétariat', icon: ShieldCheck },
+const adminRoleOptions: SelectOption[] = [
+  { value: 'PREFET_DIRECTEUR', label: 'Préfet des Études', icon: ShieldCheck },
+  { value: 'DIRECTEUR_ECOLE', label: 'Directeur d’école (Primaire / Maternelle)', icon: Building },
+  { value: 'DIRECTEUR_ETUDES', label: 'Directeur des Études (Secondaire)', icon: ShieldCheck },
+  { value: 'DIRECTEUR_DISCIPLINE', label: 'Directeur de Discipline', icon: ShieldCheck },
+  { value: 'CENSEUR', label: 'Censeur des Études', icon: ShieldCheck },
+  { value: 'SECRETAIRE', label: 'Secrétaire administratif', icon: Briefcase },
+  { value: 'COMPTABLE', label: 'Comptable', icon: DollarSign },
+  { value: 'INTENDANT', label: 'Économe / Intendant', icon: DollarSign },
+];
+
+const teacherRoleOptions: SelectOption[] = [
+  { value: 'TITULAIRE', label: 'Enseignant titulaire', icon: Briefcase },
+  { value: 'ENSEIGNANT', label: 'Enseignant / Professeur de cours', icon: Briefcase },
 ];
 
 const genderOptions: SelectOption[] = [
@@ -123,8 +133,10 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
   onBack,
   onSave,
 }) => {
+  const { currency, format } = useSchoolConfig();
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const [previewTab, setPreviewTab] = useState<'BADGE' | 'SYNTHESE'>('BADGE');
+  const [schoolClasses, setSchoolClasses] = useState<ClasseScolaire[]>([]);
 
   const [formData, setFormData] = useState<Partial<MembrePersonnel>>({
     matricule: staffToEdit?.matricule || `STF-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -148,7 +160,7 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
     nombreEnfantsEtablissement: 0,
     nomsEnfantsEtablissement: '',
     // Contrat & Rôle
-    role: targetCategory === 'ENSEIGNANT' ? 'ENSEIGNANT' : 'ADMIN',
+    role: targetCategory === 'ENSEIGNANT' ? 'ENSEIGNANT' : 'SECRETAIRE',
     statut: 'ACTIF',
     typeContrat: 'PERMANENT',
     dateEmbauche: new Date().toISOString().split('T')[0],
@@ -188,9 +200,15 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
     notesBiographiques: '',
   });
 
+  const isTeacherRole = formData.role === 'ENSEIGNANT' || formData.role === 'TITULAIRE';
+
   const [isWebcamOpen, setIsWebcamOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    LocalDatabaseService.getClasses().then(setSchoolClasses).catch(() => setSchoolClasses([]));
+  }, []);
 
   // Charger le membre en cours d'édition
   useEffect(() => {
@@ -201,9 +219,34 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
         genre: staffToEdit.genre || staffToEdit.sexe || 'M',
         photoUrl: staffToEdit.photoUrl || staffToEdit.avatarUrl || '',
         avatarUrl: staffToEdit.avatarUrl || staffToEdit.photoUrl || '',
+        cyclesAssignes: Array.from(new Set((staffToEdit.cyclesAssignes?.length ? staffToEdit.cyclesAssignes : [staffToEdit.cyclePrincipal]).map(normalizeAccessCycle).filter(Boolean))),
       });
     }
   }, [staffToEdit]);
+
+  // Pour les rôles non-enseignants, les salles sont automatiquement déduites des cycles sélectionnés
+  useEffect(() => {
+    const cycles = formData.cyclesAssignes || [];
+    if (cycles.length === 0) return;
+    if (isTeacherRole) {
+      if ((formData.sallesAssignees || []).length > 0) {
+        setFormData((prev) => ({ ...prev, classesAssignees: [], sallesAssignees: [] }));
+      }
+      return;
+    }
+    const expectedSalles = Array.from(
+      new Set(
+        schoolClasses
+          .filter((c) => cycles.includes(normalizeAccessCycle(c.cycleId || c.cycleCode)))
+          .map((c) => c.salle)
+          .filter(Boolean) as string[]
+      )
+    );
+    const current = formData.sallesAssignees || [];
+    if (JSON.stringify([...current].sort()) !== JSON.stringify([...expectedSalles].sort())) {
+      setFormData((prev) => ({ ...prev, classesAssignees: [], sallesAssignees: expectedSalles }));
+    }
+  }, [isTeacherRole, formData.cyclesAssignes, formData.sallesAssignees, schoolClasses]);
 
   // Calcul du taux de complétude du dossier
   const completionPercentage = React.useMemo(() => {
@@ -233,6 +276,17 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
     if (!formData.telephone) {
       setErrorMessage('Le numéro de téléphone principal est obligatoire.');
       setCurrentStep(1);
+      return;
+    }
+
+    if (!formData.cyclesAssignes?.length) {
+      setErrorMessage('Sélectionnez au moins un cycle d’affectation pour définir le périmètre d’accès.');
+      setCurrentStep(2);
+      return;
+    }
+    if ((formData.role === 'ENSEIGNANT' || formData.role === 'TITULAIRE') && !formData.classesAssignees?.length) {
+      setErrorMessage('Affectez au moins une classe ou une salle à cet enseignant.');
+      setCurrentStep(2);
       return;
     }
 
@@ -278,6 +332,11 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
         disciplines: formData.disciplines || [],
         classesAssignees: formData.classesAssignees || [],
         cyclesAssignes: formData.cyclesAssignes || [],
+        sallesAssignees: formData.sallesAssignees || [],
+        optionsAssignees: formData.optionsAssignees || [],
+        cyclePrincipal: formData.cyclePrincipal,
+        salleUniqueId: formData.salleUniqueId,
+        classeTitulaireId: formData.classeTitulaireId,
         personnelEnCharge: formData.personnelEnCharge || '',
         // Paie
         modeVersementSalaire: formData.modeVersementSalaire || 'BANQUE',
@@ -331,16 +390,26 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
     switch (roleStr) {
       case 'ENSEIGNANT':
         return { label: 'Enseignant / Professeur', bg: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30' };
-      case 'PREFET':
+      case 'TITULAIRE':
+        return { label: 'Enseignant Titulaire', bg: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30' };
+      case 'PREFET_DIRECTEUR':
         return { label: 'Préfet des Études', bg: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30' };
-      case 'DE':
+      case 'DIRECTEUR_ECOLE':
+        return { label: 'Directeur d’école (P/M)', bg: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30' };
+      case 'DIRECTEUR_ETUDES':
         return { label: 'Directeur des Études', bg: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30' };
-      case 'SURVEILLANT':
-        return { label: 'Dir. Discipline / Surveillant', bg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30' };
+      case 'DIRECTEUR_DISCIPLINE':
+        return { label: 'Dir. Discipline', bg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30' };
+      case 'CENSEUR':
+        return { label: 'Censeur', bg: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30' };
       case 'COMPTABLE':
-        return { label: 'Comptable Intendant', bg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' };
+        return { label: 'Comptable', bg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' };
+      case 'INTENDANT':
+        return { label: 'Intendant', bg: 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/30' };
+      case 'SECRETAIRE':
+        return { label: 'Secrétaire', bg: 'bg-pink-500/10 text-pink-600 dark:text-pink-400 border-pink-500/30' };
       default:
-        return { label: 'Administrateur', bg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30' };
+        return { label: 'Personnel administratif', bg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30' };
     }
   };
 
@@ -798,8 +867,8 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                         Rôle / Fonction Principale <span className="text-rose-500">*</span>
                       </label>
                       <CustomSelect
-                        options={roleOptions}
-                        value={formData.role || 'ENSEIGNANT'}
+                        options={targetCategory === 'ENSEIGNANT' ? teacherRoleOptions : adminRoleOptions}
+                        value={formData.role || (targetCategory === 'ENSEIGNANT' ? 'ENSEIGNANT' : 'SECRETAIRE')}
                         onChange={(val) => setFormData({ ...formData, role: val as any })}
                       />
                     </div>
@@ -814,6 +883,90 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                         onChange={(val) => setFormData({ ...formData, statut: val as any })}
                       />
                     </div>
+                  </div>
+
+                  <div className="p-4 rounded-2xl space-y-4" style={{ background: 'var(--bg-sunken)' }}>
+                    <div>
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <label className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Cycles d’affectation et d’accès *</label>
+                        <span className="text-[9px] font-black uppercase text-indigo-500">Périmètre persistant</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {[
+                          { id: 'MATERNELLE', label: 'Maternelle' },
+                          { id: 'PRIMAIRE', label: 'Primaire' },
+                          { id: 'SECONDAIRE', label: 'Secondaire · CTEB & Humanités' },
+                        ].map(cycle => {
+                          const selected = (formData.cyclesAssignes || []).includes(cycle.id);
+                          return (
+                            <button key={cycle.id} type="button" onClick={() => {
+                              const values = new Set(formData.cyclesAssignes || []);
+                              if (selected) values.delete(cycle.id); else values.add(cycle.id);
+                              const cycles = Array.from(values);
+                              let newSalles: string[] = [];
+                              if (!isTeacherRole && cycles.length > 0) {
+                                newSalles = Array.from(
+                                  new Set(
+                                    schoolClasses
+                                      .filter((c) => cycles.includes(normalizeAccessCycle(c.cycleId || c.cycleCode)))
+                                      .map((c) => c.salle)
+                                      .filter(Boolean) as string[]
+                                  )
+                                );
+                              }
+                              setFormData({ ...formData, cyclesAssignes: cycles, cyclePrincipal: cycles[0] as any, classesAssignees: [], sallesAssignees: newSalles });
+                            }} className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${selected ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-indigo-500/10'}`}>
+                              {cycle.label}{selected && <Check className="w-4 h-4" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {!!formData.cyclesAssignes?.length && (
+                      <div>
+                        {isTeacherRole ? (
+                          <>
+                            <label className="block text-xs font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Classes et salles spécifiques</label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-48 overflow-y-auto sidebar-scroll">
+                              {schoolClasses.filter(classe => {
+                                const code = (classe.cycleId || classe.cycleCode || '').toUpperCase();
+                                const group = code === 'CTEB' || code === 'SECONDAIRE_CTEB' || code === 'HUMANITES' ? 'SECONDAIRE' : code;
+                                return formData.cyclesAssignes?.includes(group);
+                              }).map(classe => {
+                                const selected = (formData.classesAssignees || []).includes(classe.nom);
+                                return (
+                                  <button key={classe.id} type="button" onClick={() => {
+                                    const values = new Set(formData.classesAssignees || []);
+                                    if (selected) values.delete(classe.nom); else values.add(classe.nom);
+                                    const selectedClasses = schoolClasses.filter(item => values.has(item.nom));
+                                    setFormData({ ...formData, classesAssignees: Array.from(values), sallesAssignees: Array.from(new Set(selectedClasses.map(item => item.salle).filter(Boolean))) });
+                                  }} className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-left text-xs transition-all ${selected ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}>
+                                    <span className="min-w-0"><strong className="block truncate">{classe.nom}</strong><span className="block text-[9px] opacity-70 truncate">{classe.salle || 'Salle non définie'}{classe.optionCode && classe.optionCode !== 'TRONC_COMMUN' ? ` · ${classe.optionCode}` : ''}</span></span>
+                                    {selected && <Check className="w-4 h-4 shrink-0" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-2">Sélectionnez les classes que l'enseignant gère. Sans classe spécifique, l’accès couvre toutes les classes du cycle sélectionné.</p>
+                          </>
+                        ) : (
+                          <>
+                            <label className="block text-xs font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Salles concernées automatiquement</label>
+                            <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto sidebar-scroll">
+                              {(formData.sallesAssignees || []).length > 0 ? (formData.sallesAssignees || []).map(salle => (
+                                <span key={salle} className="px-2 py-1 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold border border-indigo-500/20">
+                                  {salle}
+                                </span>
+                              )) : (
+                                <span className="text-[10px] text-slate-400 italic">Aucune salle dans les cycles sélectionnés.</span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-2">Pour un rôle administratif, l'accès couvre automatiquement toutes les salles des cycles sélectionnés. Le Promoteur/Admin reste le seul profil global.</p>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -939,7 +1092,7 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
 
                       <div>
                         <label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-primary)' }}>
-                          Taux Horaire ($ / h)
+                          Taux horaire ({currency}/h)
                         </label>
                         <NumberInput
                           value={formData.tauxHoraireBase || 6.5}
@@ -958,7 +1111,7 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                       <div className="p-2.5 rounded-lg border bg-emerald-500/10 border-emerald-500/20 flex flex-col justify-center">
                         <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400">Paie Mensuelle Estimée</span>
                         <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
-                          {Math.round((formData.volumeHoraireHebdo || 18) * 4 * (formData.tauxHoraireBase || 6.5))} {formData.devise || 'USD'}
+                          {format(Math.round((formData.volumeHoraireHebdo || 18) * 4 * (formData.tauxHoraireBase || 6.5)), formData.devise || 'USD')}
                         </span>
                         <span className="text-[9.5px] text-slate-400 font-semibold">({(formData.volumeHoraireHebdo || 18) * 4}h prestées / mois)</span>
                       </div>
@@ -1486,7 +1639,7 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                     <div>
                       <span className="text-slate-400 block">Salaire Base:</span>
                       <span className="font-black text-emerald-600 dark:text-emerald-400">
-                        {formData.salaireBase || 0} {formData.devise || 'USD'}
+                        {format(formData.salaireBase || 0, formData.devise || 'USD')}
                       </span>
                     </div>
                     <div className="col-span-2">
@@ -1499,6 +1652,38 @@ export const StaffFormPage: React.FC<StaffFormPageProps> = ({
                           : 'Paiement Cash en Caisse'}
                       </span>
                     </div>
+                  </div>
+                </div>
+
+                {/* Bloc 2b : Périmètre d'accès (cycle + classes) */}
+                <div className="p-3 rounded-xl border space-y-1.5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                  <div className="flex items-center justify-between text-[11px] font-black uppercase text-indigo-600 dark:text-indigo-400">
+                    <span>Périmètre d'accès</span>
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="grid grid-cols-1 gap-1.5 text-[11px]">
+                    <div>
+                      <span className="text-slate-400 block">Cycles assignés:</span>
+                      <div className="flex flex-wrap gap-1 mt-0.5">
+                        {(formData.cyclesAssignes || []).length > 0 ? (
+                          (formData.cyclesAssignes || []).map(c => (
+                            <span key={c} className="px-1.5 py-0.5 rounded-md bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-500/20">
+                              {c}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-amber-600 dark:text-amber-400 font-semibold">Aucun cycle défini</span>
+                        )}
+                      </div>
+                    </div>
+                    {(formData.role === 'ENSEIGNANT' || formData.role === 'TITULAIRE') && (
+                      <div>
+                        <span className="text-slate-400 block">Classes/salles:</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200 truncate block">
+                          {(formData.classesAssignees || []).join(', ') || (formData.sallesAssignees || []).join(', ') || 'Non précisé'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 

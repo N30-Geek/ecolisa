@@ -84,7 +84,17 @@ export interface CardCustomization {
   cardTheme: 'blue' | 'indigo' | 'emerald' | 'gold' | 'burgundy' | 'violet' | 'light_rdc';
   cardLayout: 'portrait' | 'landscape';
   /** personnalisation par cycle (PRIMAIRE, CTEB, HUMANITES, ...) */
-  byCycle?: Record<string, Partial<CardFieldOverride>>;
+  byCycle?: Record<string, Partial<Omit<CardCustomization, 'byCycle' | 'selectedFields'>> & Partial<Omit<CardFieldOverride, 'cardTheme' | 'filigreeType'>>>;
+  rendererModel?: 'rdc_epst' | 'custom';
+  templateId?: 'rdc_classic' | 'modern' | 'prestige' | 'minimal';
+  headerTitle?: string;
+  headerSubtitle?: string;
+  footerText?: string;
+  photoShape?: 'square' | 'rounded' | 'circle';
+  borderStyle?: 'none' | 'solid' | 'double';
+  borderColor?: string;
+  cornerRadius?: number;
+  fontFamily?: 'sans' | 'serif' | 'mono';
   filigreeType: 'pattern' | 'text' | 'shape' | 'image' | 'guilloche' | 'mesh_grid' | 'epst_seal_repeating';
   filigreeText: string;
   filigreeShape: 'circles' | 'lines' | 'dots' | 'diamonds' | 'cross' | 'waves' | 'stars';
@@ -147,6 +157,7 @@ export interface SchoolConfig {
   hwid: string;
   cardCustomization?: CardCustomization;
   thermalPrinterName?: string;
+  a4PrinterName?: string;
   directSilentPrint?: boolean;
   numberFormat?: NumberFormatConfig;
 }
@@ -188,7 +199,8 @@ const REGIME_TEACHING_OPTIONS: SelectOption[] = [
 
 const ROLE_OPTIONS: SelectOption[] = [
   { value: 'PROMOTEUR_ADMIN', label: 'Promoteur & Fondateur Général' },
-  { value: 'PREFET_DIRECTEUR', label: 'Préfet des Études / Directeur' },
+  { value: 'PREFET_DIRECTEUR', label: 'Préfet des Études' },
+  { value: 'DIRECTEUR_ECOLE', label: 'Directeur d’école (Primaire / Maternelle)' },
   { value: 'DIRECTEUR_ETUDES', label: 'Directeur des Études (DE)' },
   { value: 'COMPTABLE', label: 'Comptable Intendant Général' },
 ];
@@ -264,13 +276,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
     }
 
     // Charger la configuration existante si déjà créée (pour édition)
-    LocalDatabaseService.getConfig('school_config').then((cfg: SchoolConfig | null) => {
-      const existing = cfg || (() => {
-        try {
-          const raw = localStorage.getItem('ecolisa_school_config');
-          return raw ? JSON.parse(raw) : null;
-        } catch { return null; }
-      })();
+    LocalDatabaseService.getConfig('school_config').then((existing: SchoolConfig | null) => {
 
       if (existing) {
         if (existing.schoolName) setSchoolName(existing.schoolName);
@@ -506,12 +512,10 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
       } as any);
     }
 
-    // 3. Sauvegarder la config dans SQLite via IPC
+    // 3. Sauvegarder la config dans SQLite via IPC (unique source de vérité)
     await LocalDatabaseService.setConfig('school_config', fullConfig);
     await LocalDatabaseService.setConfig('onboarding_completed', true);
-    // Garder une copie légère dans localStorage pour la compatibilité UI
-    localStorage.setItem('ecolisa_school_config', JSON.stringify(fullConfig));
-    localStorage.setItem('ecolisa_user_display_currency', currency || 'USD');
+    await LocalDatabaseService.setConfig('user_display_currency', currency || 'USD');
 
     // Déclencher les événements globaux de synchronisation
     try {
@@ -527,8 +531,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
       {/* HEADER SUPÉRIEUR AVEC HAUTE LISIBILITÉ ET BADGE LOCAL-FIRST */}
       <header className="px-6 py-3.5 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 shadow-xs">
         <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-xs shrink-0">
-            <School className="w-5 h-5 text-white" />
+          <div className="w-12 h-12 rounded-3xl bg-gradient-to-br from-indigo-600 to-indigo-800 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25 shrink-0">
+            <School className="w-6 h-6 text-white" />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -551,7 +555,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
           {toggleTheme && (
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:text-indigo-600 transition-all cursor-pointer shadow-2xs"
+              className="w-10 h-10 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:text-indigo-600 transition-all cursor-pointer shadow-sm flex items-center justify-center"
               title="Basculer entre Mode Clair et Mode Sombre"
             >
               {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
@@ -561,7 +565,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
           {onSkip && (
             <button
               onClick={onSkip}
-              className="text-xs font-black px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-200 transition-all cursor-pointer"
+              className="text-sm font-black px-5 py-2.5 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-200 transition-all cursor-pointer"
             >
               Passer
             </button>
@@ -577,20 +581,20 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
           return (
             <div key={s.number} className="flex items-center gap-2.5">
               <div
-                className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black transition-all ${
+                className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-black transition-all ${
                   isDone
-                    ? 'bg-emerald-600 text-white shadow-xs'
+                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/25'
                     : isActive
-                    ? 'bg-indigo-600 text-white ring-4 ring-indigo-500/20 shadow-xs'
+                    ? 'bg-indigo-600 text-white ring-4 ring-indigo-500/20 shadow-lg shadow-indigo-500/25'
                     : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700'
                 }`}
               >
                 {isDone ? <Check className="w-4 h-4" /> : s.number}
               </div>
               <div className="hidden sm:flex flex-col">
-                <span className="text-[9.5px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Étape 0{s.number}</span>
+                <span className="text-[10px] uppercase tracking-wider font-black text-slate-500 dark:text-slate-400">Étape 0{s.number}</span>
                 <span
-                  className={`text-xs font-black ${
+                  className={`text-sm font-black ${
                     isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-800 dark:text-slate-200'
                   }`}
                 >
@@ -604,7 +608,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
 
       {/* MESSAGE D'ERREUR */}
       {errorMsg && (
-        <div className="mx-6 mt-3 p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400 text-xs font-black flex items-center gap-2.5">
+        <div className="mx-6 mt-3 p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400 text-xs font-black flex items-center gap-2.5">
           <span>⚠️</span>
           <span>{errorMsg}</span>
         </div>
@@ -625,8 +629,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
             </div>
 
             {/* SÉLECTION DU LOGO DEPUIS L'EXPLORATEUR DE FICHIERS (LOCAL-FIRST) */}
-            <div className="p-5 rounded-2xl border flex flex-col sm:flex-row items-center gap-5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-              <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-center shrink-0 shadow-xs">
+            <div className="p-5 rounded-3xl border flex flex-col sm:flex-row items-center gap-5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+              <div className="w-24 h-24 rounded-3xl overflow-hidden border-2 border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-center shrink-0 shadow-xs">
                 {logoUrl ? (
                   <img src={logoUrl} alt="Logo École" className="w-full h-full object-cover" />
                 ) : (
@@ -655,7 +659,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-xs flex items-center gap-2 transition-all cursor-pointer"
+                    className="px-5 py-2.5 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm shadow-lg shadow-indigo-500/25 flex items-center gap-2 transition-all cursor-pointer"
                   >
                     <FolderOpen className="w-4 h-4" />
                     <span>Choisir depuis l'explorateur de fichiers...</span>
@@ -665,7 +669,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                     <button
                       type="button"
                       onClick={() => setLogoUrl('')}
-                      className="px-3 py-2 text-xs font-bold rounded-xl border border-red-300 dark:border-red-900/40 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 transition-all cursor-pointer"
+                      className="px-4 py-2.5 text-sm font-black rounded-full border border-red-300 dark:border-red-900/40 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 transition-all cursor-pointer"
                     >
                       Effacer le logo
                     </button>
@@ -685,7 +689,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                     value={schoolName}
                     onChange={(e) => setSchoolName(e.target.value)}
                     placeholder="Saisissez le nom officiel de l'école (ex: Complexe Scolaire ACADEMIA)"
-                    className="w-full px-4 py-2.5 rounded-xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    className="w-full px-4 py-2.5 rounded-2xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                     style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
@@ -699,7 +703,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                     value={secopeCode}
                     onChange={(e) => setSecopeCode(e.target.value)}
                     placeholder="ex: SECOPE-99201-KIN"
-                    className="w-full px-4 py-2.5 rounded-xl border font-mono font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    className="w-full px-4 py-2.5 rounded-2xl border font-mono font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                     style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
@@ -753,7 +757,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                     value={arreteAgrement}
                     onChange={(e) => setArreteAgrement(e.target.value)}
                     placeholder="ex: Arrêté MINEPST/N°0451/2022"
-                    className="w-full px-4 py-2.5 rounded-xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    className="w-full px-4 py-2.5 rounded-2xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                     style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
@@ -781,7 +785,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                     value={subDivision}
                     onChange={(e) => setSubDivision(e.target.value)}
                     placeholder="ex: Kinshasa-Lukunga / Gombe"
-                    className="w-full px-4 py-2.5 rounded-xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    className="w-full px-4 py-2.5 rounded-2xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                     style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
@@ -796,7 +800,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="ex: 12, Avenue de la Justice, Q. Golf, C. Gombe, Kinshasa"
-                  className="w-full px-4 py-2.5 rounded-xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  className="w-full px-4 py-2.5 rounded-2xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                   style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                 />
               </div>
@@ -822,7 +826,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="contact@votre-ecole.cd"
-                    className="w-full px-4 py-2.5 rounded-xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    className="w-full px-4 py-2.5 rounded-2xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                     style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
@@ -836,7 +840,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                     value={motto}
                     onChange={(e) => setMotto(e.target.value)}
                     placeholder="ex: Discipline - Travail - Excellence"
-                    className="w-full px-4 py-2.5 rounded-xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    className="w-full px-4 py-2.5 rounded-2xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                     style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
@@ -875,7 +879,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                       key={c.code}
                       type="button"
                       onClick={() => toggleCycle(c.code)}
-                      className={`p-4 rounded-xl border text-left flex items-start justify-between transition-all cursor-pointer ${
+                      className={`p-4 rounded-2xl border text-left flex items-start justify-between transition-all cursor-pointer ${
                         isSelected
                           ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 text-slate-900 dark:text-indigo-200 font-bold ring-1 ring-indigo-500/30'
                           : 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -922,7 +926,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                   <button
                     type="button"
                     onClick={addOptionFromDropdown}
-                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-xs flex items-center gap-2 transition-all cursor-pointer shrink-0"
+                    className="px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-xs flex items-center gap-2 transition-all cursor-pointer shrink-0"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Ajouter l'Option</span>
@@ -939,7 +943,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                       return (
                         <div
                           key={optCode}
-                          className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-300 dark:border-indigo-800 text-indigo-800 dark:text-indigo-300 font-bold text-xs shadow-2xs"
+                          className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-300 dark:border-indigo-800 text-indigo-800 dark:text-indigo-300 font-bold text-xs shadow-2xs"
                         >
                           <span>{optDetail ? optDetail.label : optCode}</span>
                           <button
@@ -982,7 +986,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                     value={promoterName}
                     onChange={(e) => setPromoterName(e.target.value)}
                     placeholder="ex: Dr. Jean-Baptiste KABANGE"
-                    className="w-full px-4 py-2.5 rounded-xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    className="w-full px-4 py-2.5 rounded-2xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                     style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
@@ -1010,7 +1014,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                     value={promoterEmail}
                     onChange={(e) => setPromoterEmail(e.target.value)}
                     placeholder="admin@votre-ecole.cd"
-                    className="w-full px-4 py-2.5 rounded-xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    className="w-full px-4 py-2.5 rounded-2xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                     style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
@@ -1025,7 +1029,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                     value={promoterPhone2FA}
                     onChange={(e) => setPromoterPhone2FA(e.target.value)}
                     placeholder="+243 81 000 0000"
-                    className="w-full px-4 py-2.5 rounded-xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                    className="w-full px-4 py-2.5 rounded-2xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                     style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                   />
                 </div>
@@ -1043,7 +1047,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                       value={promoterPassword}
                       onChange={(e) => setPromoterPassword(e.target.value)}
                       placeholder="••••••••••••"
-                      className="w-full pl-4 pr-10 py-2.5 rounded-xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                      className="w-full pl-4 pr-10 py-2.5 rounded-2xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                       style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                     />
                     <button
@@ -1066,7 +1070,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••••••"
-                      className={`w-full pl-4 pr-10 py-2.5 rounded-xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 ${
+                      className={`w-full pl-4 pr-10 py-2.5 rounded-2xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 ${
                         confirmPassword && confirmPassword !== promoterPassword
                           ? 'border-red-500 focus:ring-red-500/40'
                           : 'focus:ring-indigo-500/40'
@@ -1096,7 +1100,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                       value={promoterPinCode}
                       onChange={(e) => setPromoterPinCode(e.target.value)}
                       placeholder="6 chiffres"
-                      className="w-full pl-4 pr-10 py-2.5 rounded-xl border font-mono font-black text-center text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                      className="w-full pl-4 pr-10 py-2.5 rounded-2xl border font-mono font-black text-center text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                       style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                     />
                     <button
@@ -1109,7 +1113,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                   </div>
                 </div>
 
-                <div className="sm:col-span-6 p-3.5 rounded-xl border bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800 space-y-1">
+                <div className="sm:col-span-6 p-3.5 rounded-2xl border bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800 space-y-1">
                   <div className="flex items-center gap-2 text-xs font-bold text-indigo-700 dark:text-indigo-400">
                     <Cpu className="w-4 h-4" /> Empreinte HWID Matérielle Détectée
                   </div>
@@ -1150,7 +1154,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                         key={p.id}
                         type="button"
                         onClick={() => setSubscriptionPlan(p.id as any)}
-                        className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
+                        className={`p-4 rounded-3xl border text-left transition-all cursor-pointer ${
                           isSelected
                             ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 text-slate-900 dark:text-white ring-2 ring-indigo-500/30 shadow-xs'
                             : 'border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
@@ -1177,7 +1181,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                   <button
                     type="button"
                     onClick={() => setCurrency('USD')}
-                    className={`p-4 rounded-xl border text-center transition-all cursor-pointer ${
+                    className={`p-4 rounded-2xl border text-center transition-all cursor-pointer ${
                       currency === 'USD'
                         ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold ring-1 ring-emerald-500/30'
                         : 'border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
@@ -1190,7 +1194,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                   <button
                     type="button"
                     onClick={() => setCurrency('CDF')}
-                    className={`p-4 rounded-xl border text-center transition-all cursor-pointer ${
+                    className={`p-4 rounded-2xl border text-center transition-all cursor-pointer ${
                       currency === 'CDF'
                         ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold ring-1 ring-emerald-500/30'
                         : 'border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
@@ -1202,7 +1206,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl border bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+              <div className="p-4 rounded-2xl border bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <span>Validation automatique FlexPay Mobile Money (M-Pesa, Orange, Airtel)</span>
@@ -1218,7 +1222,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         {/* ── ÉTAPE 5 : RECAPITULATIF & VALIDATION PERSISTANTE ── */}
         {currentStep === 5 && (
           <div className="space-y-6 animate-fade-in text-center py-4 max-w-5xl mx-auto">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-xs">
+            <div className="w-16 h-16 rounded-3xl bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-xs">
               <Sparkles className="w-8 h-8 text-emerald-500" />
             </div>
 
@@ -1231,7 +1235,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
               </p>
             </div>
 
-            <div className="p-6 rounded-2xl border text-left text-xs space-y-3 font-semibold max-w-xl mx-auto shadow-xs" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+            <div className="p-6 rounded-3xl border text-left text-xs space-y-3 font-semibold max-w-xl mx-auto shadow-xs" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
               <div className="flex justify-between border-b pb-2" style={{ borderColor: 'var(--border)' }}>
                 <span className="text-slate-500 dark:text-slate-400 uppercase font-black text-[10px]">Établissement :</span>
                 <span className="font-black text-indigo-600 dark:text-indigo-400 text-sm">{schoolName || 'N/A'}</span>
@@ -1274,7 +1278,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
             <button
               type="button"
               onClick={handlePrev}
-              className="px-5 py-2.5 rounded-xl text-xs font-black border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer flex items-center gap-2"
+              className="px-6 py-3 rounded-full text-sm font-black border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer flex items-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Précédent</span>
@@ -1285,7 +1289,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
             <button
               type="button"
               onClick={handleNext}
-              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md flex items-center gap-2 transition-all cursor-pointer"
+              className="px-7 py-3 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black shadow-lg shadow-indigo-500/25 flex items-center gap-2 transition-all cursor-pointer"
             >
               <span>Continuer l'Assistant</span>
               <ArrowRight className="w-4 h-4" />
@@ -1294,9 +1298,9 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
             <button
               type="button"
               onClick={handleFinish}
-              className="px-7 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md flex items-center gap-2 transition-all cursor-pointer"
+              className="px-8 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-black shadow-lg shadow-emerald-500/25 flex items-center gap-2 transition-all cursor-pointer"
             >
-              <CheckCircle2 className="w-4.5 h-4.5" />
+              <CheckCircle2 className="w-5 h-5" />
               <span>Valider & Aller à la Connexion</span>
             </button>
           )}

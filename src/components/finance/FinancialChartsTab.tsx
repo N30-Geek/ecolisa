@@ -17,9 +17,12 @@ const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6'
 const CYCLES_ORDER = ['MATERNELLE', 'PRIMAIRE', 'SECONDAIRE_CTEB', 'HUMANITES'];
 
 // ─── Tooltip personnalisé ─────────────────────────────────────────────────────
+// Les valeurs reçues sont DÉJÀ converties dans la devise d'affichage :
+// on formate sans reconvertir (source = devise d'affichage).
 const ChartTooltip: React.FC<any> = ({ active, payload, label }) => {
+  const { displayCurrency, currencies, numberFormat } = useSchoolConfig();
   if (!active || !payload?.length) return null;
-  const { format } = useSchoolConfig();
+  const format = (n: number) => formatCurrencyFromList(n, displayCurrency, displayCurrency, currencies, numberFormat);
   return (
     <div className="rounded-xl border p-3 shadow-lg text-xs" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
       <p className="font-black mb-2" style={{ color: 'var(--text-primary)' }}>{label}</p>
@@ -41,8 +44,10 @@ interface Props {
 }
 
 export const FinancialChartsTab: React.FC<Props> = ({ activeSchoolYear }) => {
-  const { displayCurrency, currencies, referenceCurrency } = useSchoolConfig();
-  const fmt = (n: number, src?: string) => formatCurrencyFromList(n, displayCurrency, src || referenceCurrency, currencies);
+  const { displayCurrency, currencies, referenceCurrency, numberFormat } = useSchoolConfig();
+  // Tous les agrégats de ce tableau de bord sont déjà convertis en `displayCurrency`.
+  // `fmt` ne doit donc PAS reconvertir depuis la devise de référence (double conversion).
+  const fmt = (n: number, src?: string) => formatCurrencyFromList(n, displayCurrency, src || displayCurrency, currencies, numberFormat);
   const conv = (n: number, src?: string) => convertCurrencyFromList(n, src || referenceCurrency, displayCurrency, currencies);
 
   const [invoices, setInvoices] = useState<FactureEleve[]>([]);
@@ -126,27 +131,50 @@ export const FinancialChartsTab: React.FC<Props> = ({ activeSchoolYear }) => {
     return Array.from(map.values()).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
   }, [filteredPayments, feeTypes, displayCurrency, currencies]);
 
+  // ─── Résolution de la classe d'une facture ────────────────────────────────
+  // Les factures stockent souvent uniquement `nomClasse` (pas de `classeId`).
+  const normalizeName = (value?: string) => (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+  const classByName = useMemo(() => {
+    const map = new Map<string, ClasseScolaire>();
+    classes.forEach(c => { if (c.nom) map.set(normalizeName(c.nom), c); });
+    return map;
+  }, [classes]);
+
+  const resolveInvoiceClass = useCallback((inv?: FactureEleve): ClasseScolaire | undefined => {
+    if (!inv) return undefined;
+    if (inv.classeId) {
+      const byId = classes.find(c => c.id === inv.classeId);
+      if (byId) return byId;
+    }
+    return classByName.get(normalizeName(inv.nomClasse));
+  }, [classes, classByName]);
+
   // ─── Recouvrement par classe (Bar horizontal) ─────────────────────────────
   const classBarData = useMemo(() => {
     const classMap = new Map<string, { nom: string; attendu: number; paye: number }>();
-    classes.forEach(c => {
-      if (activeYearId && c.schoolYearId !== activeYearId) return;
-      classMap.set(c.id, { nom: c.nom, attendu: 0, paye: 0 });
-    });
+    const bucket = (inv?: FactureEleve) => {
+      const cls = resolveInvoiceClass(inv);
+      const key = cls?.id || normalizeName(inv?.nomClasse);
+      const nom = cls?.nom || inv?.nomClasse;
+      if (!key || !nom) return undefined;
+      if (!classMap.has(key)) classMap.set(key, { nom, attendu: 0, paye: 0 });
+      return classMap.get(key);
+    };
     filteredInvoices.forEach(inv => {
-      const cd = classMap.get(inv.classeId || '');
+      const cd = bucket(inv);
       if (cd) cd.attendu += getInvoiceTotal(inv, displayCurrency);
     });
     filteredPayments.forEach(p => {
       const inv = filteredInvoices.find(i => i.id === p.invoiceId || i.id === (p as any).factureId);
-      const cd = classMap.get(inv?.classeId || '');
+      const cd = bucket(inv);
       if (cd) cd.paye += getPaymentAmount(p, displayCurrency);
     });
     return Array.from(classMap.values())
-      .filter(d => d.attendu > 0)
+      .filter(d => d.attendu > 0 || d.paye > 0)
       .sort((a, b) => b.attendu - a.attendu)
       .slice(0, 12);
-  }, [classes, filteredInvoices, filteredPayments, activeYearId, displayCurrency, currencies]);
+  }, [filteredInvoices, filteredPayments, resolveInvoiceClass, displayCurrency, currencies]);
 
   // ─── Évolution mensuelle (Area) ───────────────────────────────────────────
   const areaData = useMemo(() => {
@@ -168,22 +196,34 @@ export const FinancialChartsTab: React.FC<Props> = ({ activeSchoolYear }) => {
     const cycleMap: Record<string, { attendu: number; paye: number }> = {};
     CYCLES_ORDER.forEach(c => { cycleMap[c] = { attendu: 0, paye: 0 }; });
 
+    // Déduit le cycle depuis la classe, sinon depuis le nom de la classe de la facture.
+    const resolveCycle = (inv?: FactureEleve): string | undefined => {
+      const cls = resolveInvoiceClass(inv);
+      const raw = ((cls as any)?.cycleCode || cls?.cycleId || '').toUpperCase();
+      const direct = CYCLES_ORDER.find(c => c === raw || (!!raw && raw.includes(c)));
+      if (direct) return direct;
+      if (raw === 'CTEB' || raw === 'SECONDAIRE') return 'SECONDAIRE_CTEB';
+      const label = normalizeName(inv?.nomClasse);
+      if (!label) return undefined;
+      if (label.includes('maternelle')) return 'MATERNELLE';
+      if (label.includes('primaire')) return 'PRIMAIRE';
+      if (label.includes('humanites') || label.includes('humanite')) return 'HUMANITES';
+      if (label.includes('cteb') || label.includes('eme ')) return 'SECONDAIRE_CTEB';
+      return undefined;
+    };
+
     filteredInvoices.forEach(inv => {
-      const cls = classes.find(c => c.id === inv.classeId);
-      const cycleCode = ((cls as any)?.cycleCode || cls?.cycleId || 'AUTRE').toUpperCase();
-      const found = CYCLES_ORDER.find(c => c === cycleCode || cycleCode.includes(c));
+      const found = resolveCycle(inv);
       if (found) cycleMap[found].attendu += getInvoiceTotal(inv, displayCurrency);
     });
     filteredPayments.forEach(p => {
       const inv = filteredInvoices.find(i => i.id === p.invoiceId || i.id === (p as any).factureId);
-      const cls = classes.find(c => c.id === inv?.classeId);
-      const cycleCode = ((cls as any)?.cycleCode || cls?.cycleId || 'AUTRE').toUpperCase();
-      const found = CYCLES_ORDER.find(c => c === cycleCode || cycleCode.includes(c));
+      const found = resolveCycle(inv);
       if (found) cycleMap[found].paye += getPaymentAmount(p, displayCurrency);
     });
     const CYCLE_LABELS: Record<string, string> = { MATERNELLE: 'Maternel', PRIMAIRE: 'Primaire', SECONDAIRE_CTEB: 'CTEB', HUMANITES: 'Human.' };
-    return CYCLES_ORDER.map(c => ({ cycle: CYCLE_LABELS[c] || c, ...cycleMap[c] })).filter(d => d.attendu > 0);
-  }, [filteredInvoices, filteredPayments, classes, displayCurrency, currencies]);
+    return CYCLES_ORDER.map(c => ({ cycle: CYCLE_LABELS[c] || c, ...cycleMap[c] })).filter(d => d.attendu > 0 || d.paye > 0);
+  }, [filteredInvoices, filteredPayments, resolveInvoiceClass, displayCurrency, currencies]);
 
   if (loading) {
     return (

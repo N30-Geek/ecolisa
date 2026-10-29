@@ -17,6 +17,7 @@
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "core-js": "^3.50.0",
+    "docx": "^8.5.0",
     "drizzle-orm": "^0.45.2",
     "html2pdf.js": "^0.14.0",
     "jspdf-autotable": "^5.0.8",
@@ -27,7 +28,8 @@
     "react-qr-code": "^2.2.0",
     "recharts": "^2.15.0",
     "tailwind-merge": "^2.6.0",
-    "tweetnacl": "^1.0.3"
+    "tweetnacl": "^1.0.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",

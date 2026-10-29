@@ -4,10 +4,13 @@ import {
   Award, Calendar, Download, Edit3, GraduationCap, Plus, Save, Search,
   Trash2, Users, X, TrendingUp, FileText, BarChart3, BookOpen,
   CheckCircle2, AlertCircle, Clock, Sparkles, User, ClipboardList,
-  Target, Layers, ArrowRight, RefreshCw, CheckCircle, Minus
+  Target, Layers, ArrowRight, RefreshCw, CheckCircle, Minus, Filter
 } from 'lucide-react';
-import { LocalDatabaseService } from '../../services/localDatabase';
-import type { Cote, ClasseScolaire, Discipline, Eleve, TypeEvaluation, MembrePersonnel } from '../../types';
+import { LocalDatabaseService, UserSession } from '../../services/localDatabase';
+import type { Cote, ClasseScolaire, Discipline, Eleve, TypeEvaluation, MembrePersonnel, EpreuveScolaire } from '../../types';
+import { getAllowedOptionsForClass, getAvailableSubjectsForContext } from '../../utils/academicContext';
+import { EPST_SECTIONS_OPTIONS } from '../../data/referentielEpstData';
+import { getOptionLabel } from '../../utils/options';
 import { CustomSelect } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
 import { NumberInput } from '../common/NumberInput';
@@ -36,14 +39,14 @@ const EVAL_TYPES: { value: TypeEvaluation; label: string; color: string; icon: s
 ];
 
 const PERIODS = [
-  { value: '1ere Periode',         label: '1ère Période'           },
-  { value: '2eme Periode',         label: '2ème Période'           },
-  { value: 'Examen 1er Semestre',  label: 'Examen 1er Semestre'    },
-  { value: '3eme Periode',         label: '3ème Période'           },
-  { value: '4eme Periode',         label: '4ème Période'           },
-  { value: 'Examen 2eme Semestre', label: 'Examen 2ème Semestre'   },
-  { value: "Examen d'Etat",        label: "Examen d'État (EXETAT)" },
-  { value: 'Rattrapage',           label: 'Session de Rattrapage'  },
+  { value: 'P1',  label: '1ère Période'           },
+  { value: 'P2',  label: '2ème Période'           },
+  { value: 'EX1', label: 'Examen 1er Semestre'    },
+  { value: 'P3',  label: '3ème Période'           },
+  { value: 'P4',  label: '4ème Période'           },
+  { value: 'EX2', label: 'Examen 2ème Semestre'   },
+  { value: 'EXETAT', label: "Examen d'État (EXETAT)" },
+  { value: 'RATTRAPAGE', label: 'Session de Rattrapage'  },
 ];
 
 const STATUTS: { value: StatutEvaluation; label: string; color: string; bg: string }[] = [
@@ -58,10 +61,13 @@ const STATUTS: { value: StatutEvaluation; label: string; color: string; bg: stri
 interface EpreuveEnrichi {
   id: string; titre: string; type: TypeEvaluation; periode: string;
   classeId: string; nomClasse: string; matiereId: string; nomMatiere: string;
-  professeurId?: string; nomProfesseur?: string; dateEvaluation: string;
+  optionCode?: string; professeurId?: string; nomProfesseur?: string; dateEvaluation: string;
   baremeMax: number; statut: StatutEvaluation; remarques?: string; cotes: Cote[];
   moyenne: number; moyennePct: number; nbParticipants: number;
   nbReussi: number; nbEchoue: number; tauxReussite: number;
+  validationStatut?: EpreuveScolaire['validationStatut'];
+  valideParNom?: string;
+  integreeRegistre?: boolean;
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -81,9 +87,32 @@ const perfBadge = (score: number, max: number) => {
 const AVATAR_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4'];
 
 const buildEpreuves = (
-  cotes: Cote[], classes: ClasseScolaire[], subjects: Discipline[], teachers: MembrePersonnel[]
+  savedEpreuves: EpreuveScolaire[], cotes: Cote[], classes: ClasseScolaire[], subjects: Discipline[], teachers: MembrePersonnel[]
 ): EpreuveEnrichi[] => {
   const map = new Map<string, EpreuveEnrichi>();
+  for (const ep of savedEpreuves) {
+    map.set(ep.id, {
+      id: ep.id,
+      titre: ep.titre,
+      type: ep.type === 'TRAVAIL_PRATIQUE' ? 'PRATIQUE' : ep.type,
+      periode: ep.periode,
+      classeId: ep.classeId,
+      nomClasse: ep.nomClasse,
+      matiereId: ep.matiereId,
+      nomMatiere: ep.nomMatiere,
+      optionCode: ep.optionCode,
+      professeurId: ep.professeurId,
+      nomProfesseur: ep.nomProfesseur,
+      dateEvaluation: ep.dateEpreuve,
+      baremeMax: ep.maxPoints,
+      statut: ep.statut === 'PROGRAMMEE' ? 'PLANIFIEE' : ep.statut,
+      remarques: ep.remarques,
+      cotes: [], moyenne: 0, moyennePct: 0, nbParticipants: 0, nbReussi: 0, nbEchoue: 0, tauxReussite: 0,
+      validationStatut: ep.validationStatut,
+      valideParNom: ep.valideParNom,
+      integreeRegistre: ep.integreeRegistre,
+    });
+  }
   for (const c of cotes) {
     const evId = c.evaluationId || `ev-${c.type}-${c.classeId}-${c.matiereId}-${c.periode}-${c.dateCote}`;
     let g = map.get(evId);
@@ -97,12 +126,15 @@ const buildEpreuves = (
         id: evId, titre: c.titre || typeInfo(c.type).label, type: c.type, periode: c.periode,
         classeId: c.classeId || '', nomClasse: cls?.nom || c.classeId || '—',
         matiereId: c.matiereId || '', nomMatiere: subj?.nom || c.matiereId || '—',
+        optionCode: c.optionCode || cls?.optionCode || raw.optionCode || '',
         professeurId: profId,
         nomProfesseur: prof ? `${prof.prenom} ${prof.nom}` : (raw.nomProfesseur || ''),
         dateEvaluation: c.dateCote || '', baremeMax: c.maxScore,
-        statut: (raw.statut as StatutEvaluation) || 'CORRIGEE',
+        statut: raw.statut === 'VALIDE_DE' ? 'PUBLIEE' : raw.statut === 'SOUMIS' ? 'CORRIGEE' : 'PLANIFIEE',
         remarques: raw.remarques || '',
         cotes: [], moyenne: 0, moyennePct: 0, nbParticipants: 0, nbReussi: 0, nbEchoue: 0, tauxReussite: 0,
+        validationStatut: raw.statut === 'VALIDE_DE' ? 'VALIDEE' : 'EN_ATTENTE',
+        integreeRegistre: raw.statut === 'VALIDE_DE',
       };
       map.set(evId, g);
     }
@@ -183,13 +215,16 @@ interface EvalModalProps {
   teachers: MembrePersonnel[];
   students: Eleve[];
   saving: boolean;
+  currentUser?: UserSession | null;
+  currentStaff?: MembrePersonnel | null;
 }
 
-const EvalModal: React.FC<EvalModalProps> = ({ isOpen, onClose, onSave, initialEval, classes, subjects, teachers, students, saving }) => {
+const EvalModal: React.FC<EvalModalProps> = ({ isOpen, onClose, onSave, initialEval, classes, subjects, teachers, students, saving, currentUser, currentStaff }) => {
   const [titre,        setTitre]        = useState('');
   const [type,         setType]         = useState<TypeEvaluation>('INTERROGATION');
-  const [periode,      setPeriode]      = useState('1ere Periode');
+  const [periode,      setPeriode]      = useState('P1');
   const [classeId,     setClasseId]     = useState('');
+  const [optionCode,   setOptionCode]   = useState<string>('');
   const [matiereId,    setMatiereId]    = useState('');
   const [professeurId, setProfesseurId] = useState('');
   const [dateEval,     setDateEval]     = useState(new Date().toISOString().split('T')[0]);
@@ -207,12 +242,31 @@ const EvalModal: React.FC<EvalModalProps> = ({ isOpen, onClose, onSave, initialE
       .sort((a, b) => a.nom.localeCompare(b.nom));
   }, [classeId, students, classes]);
 
+  const isTeacher = currentUser?.role === 'ENSEIGNANT' || currentUser?.role === 'TITULAIRE';
+
+  const selectedClassObj = useMemo(() => classes.find(c => c.id === classeId), [classes, classeId]);
+
+  const optionOptions = useMemo(() => {
+    const base = [{ value: '', label: '— Tronc commun / Toutes options —' }];
+    const opts = selectedClassObj
+      ? getAllowedOptionsForClass(selectedClassObj, classes, isTeacher ? currentStaff : null)
+      : [];
+    return [...base, ...opts];
+  }, [selectedClassObj, classes, currentStaff, isTeacher]);
+
+  const availableSubjects = useMemo(() => {
+    if (!selectedClassObj) return subjects;
+    return getAvailableSubjectsForContext(subjects, selectedClassObj, optionCode || 'TRONC_COMMUN', isTeacher ? currentStaff : null, classes);
+  }, [subjects, selectedClassObj, optionCode, currentStaff, isTeacher, classes]);
+
   useEffect(() => {
     if (!isOpen) return;
     if (initialEval) {
       setTitre(initialEval.titre); setType(initialEval.type); setPeriode(initialEval.periode);
-      setClasseId(initialEval.classeId); setMatiereId(initialEval.matiereId);
-      setProfesseurId(initialEval.professeurId || '');
+      setClasseId(initialEval.classeId);
+      setOptionCode(initialEval.optionCode || '');
+      setMatiereId(initialEval.matiereId);
+      setProfesseurId(initialEval.professeurId || (isTeacher ? currentStaff?.id || '' : ''));
       setDateEval(initialEval.dateEvaluation || new Date().toISOString().split('T')[0]);
       setBaremeMax(initialEval.baremeMax); setStatut(initialEval.statut);
       setRemarques(initialEval.remarques || '');
@@ -220,22 +274,38 @@ const EvalModal: React.FC<EvalModalProps> = ({ isOpen, onClose, onSave, initialE
       for (const c of initialEval.cotes) sm[c.eleveId] = c.score;
       setScoreMap(sm);
     } else {
-      setTitre(''); setType('INTERROGATION'); setPeriode('1ere Periode');
-      setClasseId(classes[0]?.id || ''); setMatiereId(subjects[0]?.id || '');
-      setProfesseurId(''); setDateEval(new Date().toISOString().split('T')[0]);
+      const firstClass = classes[0];
+      setTitre(''); setType('INTERROGATION'); setPeriode('P1');
+      setClasseId(firstClass?.id || '');
+      setOptionCode(firstClass?.optionCode && firstClass.optionCode !== 'TRONC_COMMUN' ? firstClass.optionCode : '');
+      setMatiereId('');
+      setProfesseurId(isTeacher ? currentStaff?.id || '' : '');
+      setDateEval(new Date().toISOString().split('T')[0]);
       setBaremeMax(10); setStatut('PLANIFIEE'); setRemarques(''); setScoreMap({});
     }
     setError('');
-  }, [isOpen, initialEval]);
+  }, [isOpen, initialEval, classes, isTeacher, currentStaff]);
+
+  // Lorsque la classe change, réinitialiser l'option et la matière si elles ne sont plus valides
+  useEffect(() => {
+    if (!isOpen) return;
+    if (selectedClassObj) {
+      const classOpt = selectedClassObj.optionCode && selectedClassObj.optionCode !== 'TRONC_COMMUN' ? selectedClassObj.optionCode : '';
+      setOptionCode(prev => prev || classOpt || '');
+    }
+    if (!availableSubjects.some(s => s.id === matiereId)) {
+      setMatiereId(availableSubjects[0]?.id || '');
+    }
+  }, [classeId, selectedClassObj, availableSubjects, isOpen]);
 
   useEffect(() => {
     if (!matiereId) return;
-    const subj = subjects.find(s => s.id === matiereId);
+    const subj = availableSubjects.find(s => s.id === matiereId);
     if (!subj) return;
     if (type === 'EXAMEN' || type === 'EXAMEN_BLANC' || type === 'COMPOSITION')
       setBaremeMax(subj.maxExamen || subj.maxScore * 2);
     else setBaremeMax(subj.maxScore);
-  }, [type, matiereId, subjects]);
+  }, [type, matiereId, availableSubjects]);
 
   const avgScore = useMemo(() => {
     const vals = classStudents.map(s => scoreMap[s.id]).filter((v): v is number => typeof v === 'number');
@@ -249,17 +319,19 @@ const EvalModal: React.FC<EvalModalProps> = ({ isOpen, onClose, onSave, initialE
     const sm: Record<string, number> = {};
     for (const [k, v] of Object.entries(scoreMap))
       sm[k] = v === 'ABS' ? 0 : Math.min(baremeMax, Math.max(0, Number(v) || 0));
-    await onSave({ titre, type, periode, classeId, matiereId, professeurId, dateEvaluation: dateEval, baremeMax, statut, remarques, scoreMap: sm });
+    await onSave({ titre, type, periode, classeId, optionCode, matiereId, professeurId, dateEvaluation: dateEval, baremeMax, statut, remarques, scoreMap: sm });
   };
 
   if (!isOpen) return null;
 
   const classOpts   = classes.map(c  => ({ value: c.id,    label: c.nom }));
-  const subjectOpts = subjects.map(s => ({ value: s.id,    label: `${s.nom} (max ${s.maxScore})` }));
-  const teacherOpts = [{ value: '', label: '— Non assigné —' }, ...teachers.map(t => ({ value: t.id, label: `${t.prenom} ${t.nom}` }))];
+  const subjectOpts = [{ value: '', label: '— Choisir un cours —' }, ...availableSubjects.map(s => ({ value: s.id, label: `${s.nom} (max ${s.maxScore})` }))];
+  const teacherOpts = isTeacher
+    ? [{ value: currentStaff?.id || '', label: `${currentStaff?.prenom || ''} ${currentStaff?.nom || ''}`.trim() || '— Moi —' }]
+    : [{ value: '', label: '— Non assigné —' }, ...teachers.map(t => ({ value: t.id, label: `${t.prenom} ${t.nom}` }))];
   const periodOpts  = PERIODS.map(p    => ({ value: p.value,  label: p.label }));
   const typeOpts    = EVAL_TYPES.map(t => ({ value: t.value,  label: `${t.icon} ${t.label}` }));
-  const statutOpts  = STATUTS.map(s   => ({ value: s.value,  label: s.label }));
+  const statutOpts  = STATUTS.filter(s => s.value === 'PLANIFIEE' || s.value === 'EN_COURS').map(s => ({ value: s.value, label: s.label }));
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-md animate-fade-in" onClick={onClose}>
@@ -308,19 +380,23 @@ const EvalModal: React.FC<EvalModalProps> = ({ isOpen, onClose, onSave, initialE
               </div>
             </div>
 
-            {/* Classe + Matière + Professeur */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Classe + Option + Matière + Professeur */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>Classe <span className="text-rose-500">*</span></label>
                 <CustomSelect options={classOpts} value={classeId} onChange={setClasseId} placeholder="Sélectionner..." />
               </div>
               <div>
-                <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>Matière <span className="text-rose-500">*</span></label>
+                <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>Option</label>
+                <CustomSelect options={optionOptions} value={optionCode} onChange={setOptionCode} placeholder="Option..." />
+              </div>
+              <div>
+                <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>Matière <span className="text-rose-500">*</span> <span className="text-[10px] text-slate-400 font-normal">({availableSubjects.length})</span></label>
                 <CustomSelect options={subjectOpts} value={matiereId} onChange={setMatiereId} placeholder="Sélectionner..." />
               </div>
               <div>
                 <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>Professeur Évaluateur</label>
-                <CustomSelect options={teacherOpts} value={professeurId} onChange={setProfesseurId} placeholder="Non assigné" />
+                <CustomSelect options={teacherOpts} value={professeurId} onChange={setProfesseurId} placeholder="Non assigné" disabled={isTeacher} />
               </div>
             </div>
 
@@ -475,8 +551,11 @@ export const EvaluationsExamsManager: React.FC = () => {
   const [students, setStudents] = useState<Eleve[]>([]);
   const [teachers, setTeachers] = useState<MembrePersonnel[]>([]);
   const [allCotes, setAllCotes] = useState<Cote[]>([]);
+  const [savedEpreuves, setSavedEpreuves] = useState<EpreuveScolaire[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [saving,   setSaving]   = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserSession | null>(null);
+  const [currentStaff, setCurrentStaff] = useState<MembrePersonnel | null>(null);
 
   const [activeTab,   setActiveTab]   = useState<Tab>('overview');
   const [showModal,   setShowModal]   = useState(false);
@@ -489,20 +568,40 @@ export const EvaluationsExamsManager: React.FC = () => {
   const [typeFilter,    setTypeFilter]    = useState('');
   const [statutFilter,  setStatutFilter]  = useState('');
   const [profFilter,    setProfFilter]    = useState('');
+  const [optionFilter,  setOptionFilter]  = useState('');
+  const [roomFilter,    setRoomFilter]    = useState('');
+  const [registerFilter, setRegisterFilter] = useState('');
+  const [dateFilter,    setDateFilter]    = useState('');
   const [search,        setSearch]        = useState('');
   const [byClassId,     setByClassId]     = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [cls, subs, sts, stf, cots, userAssigned] = await Promise.all([
+      const [cls, subs, sts, stf, cots, userAssigned, storedEpreuves] = await Promise.all([
         LocalDatabaseService.getClasses(),
         LocalDatabaseService.getSubjects(),
         LocalDatabaseService.getEleves(),
         LocalDatabaseService.getStaff(),
         LocalDatabaseService.getCotes(),
         LocalDatabaseService.getCurrentUserAssignedClasses(),
+        LocalDatabaseService.getEpreuves(),
       ]);
+
+      const user = LocalDatabaseService.getCurrentUser();
+      setCurrentUser(user);
+      let staffMatch: MembrePersonnel | null = null;
+      if (user) {
+        const userFullName = (user.nom || '').toLowerCase().trim();
+        staffMatch = (stf || []).find(s =>
+          (s.email && s.email.toLowerCase() === user.email?.toLowerCase()) ||
+          (userFullName === `${(s.prenom || '').toLowerCase().trim()} ${(s.nom || '').toLowerCase().trim()}`.trim() ||
+           userFullName === (s.nom || '').toLowerCase().trim())
+        ) || null;
+      }
+      setCurrentStaff(staffMatch);
+
+      const isTeacher = user?.role === 'ENSEIGNANT' || user?.role === 'TITULAIRE';
 
       let filteredCls = cls || [];
       let filteredSts = sts || [];
@@ -525,18 +624,29 @@ export const EvaluationsExamsManager: React.FC = () => {
         });
       }
 
+      let filteredCots = cots || [];
+      if (userAssigned !== null) {
+        filteredCots = (cots || []).filter(c =>
+          filteredCls.some(fc => fc.id === c.classeId || (c.classeId && fc.id === c.classeId)) &&
+          (!isTeacher || !staffMatch || c.enseignantId === staffMatch.id)
+        );
+      }
+
       setClasses(filteredCls);
       setSubjects(subs || []);
       setStudents(filteredSts);
       setTeachers(stf || []);
-      setAllCotes(cots || []);
+      setAllCotes(filteredCots);
+      setSavedEpreuves(isTeacher && staffMatch
+        ? (storedEpreuves || []).filter(ep => ep.professeurId === staffMatch!.id)
+        : isTeacher ? [] : (storedEpreuves || []));
     } catch (err) { console.error('[EvaluationsExamsManager] load error:', err); }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const epreuves = useMemo(() => buildEpreuves(allCotes, classes, subjects, teachers), [allCotes, classes, subjects, teachers]);
+  const epreuves = useMemo(() => buildEpreuves(savedEpreuves, allCotes, classes, subjects, teachers), [savedEpreuves, allCotes, classes, subjects, teachers]);
 
   const filteredEpreuves = useMemo(() => epreuves.filter(ev => {
     if (classFilter   && ev.classeId    !== classFilter)   return false;
@@ -545,6 +655,12 @@ export const EvaluationsExamsManager: React.FC = () => {
     if (typeFilter    && ev.type        !== typeFilter)    return false;
     if (statutFilter  && ev.statut      !== statutFilter)  return false;
     if (profFilter    && ev.professeurId !== profFilter)   return false;
+    if (optionFilter  && ev.optionCode !== optionFilter)   return false;
+    const evaluationClass = classes.find(c => c.id === ev.classeId);
+    if (roomFilter && evaluationClass?.salle !== roomFilter && !(evaluationClass?.salles || []).includes(roomFilter)) return false;
+    if (registerFilter === 'INTEGRE' && !ev.integreeRegistre) return false;
+    if (registerFilter === 'NON_INTEGRE' && ev.integreeRegistre) return false;
+    if (dateFilter && ev.dateEvaluation !== dateFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       if (!ev.titre.toLowerCase().includes(q) &&
@@ -553,7 +669,7 @@ export const EvaluationsExamsManager: React.FC = () => {
           !(ev.nomProfesseur || '').toLowerCase().includes(q)) return false;
     }
     return true;
-  }), [epreuves, classFilter, subjectFilter, periodFilter, typeFilter, statutFilter, profFilter, search]);
+  }), [epreuves, classes, classFilter, subjectFilter, periodFilter, typeFilter, statutFilter, profFilter, optionFilter, roomFilter, registerFilter, dateFilter, search]);
 
   const { paginated, ...pagination } = usePagination(filteredEpreuves, { defaultPageSize: 12 });
 
@@ -581,19 +697,45 @@ export const EvaluationsExamsManager: React.FC = () => {
       const cls = classes.find(c => c.id === data.classeId);
       const classStudents = students.filter(s => s.classId === data.classeId || (cls && s.nomClasse === cls.nom));
       const prof = teachers.find(t => t.id === data.professeurId);
-      const toSave: any[] = classStudents.map(st => ({
-        id: uuid(), evaluationId: evId, eleveId: st.id, anneeScolaireId: st.schoolYearId,
-        matiereId: data.matiereId || '', classeId: data.classeId || '',
-        periode: data.periode || '1ere Periode', type: data.type || 'INTERROGATION',
-        score: Math.min(data.baremeMax || 10, Math.max(0, data.scoreMap[st.id] ?? 0)),
-        maxScore: data.baremeMax || 10,
-        dateCote: data.dateEvaluation || new Date().toISOString().split('T')[0],
-        titre: data.titre || '', libelle: data.titre || '',
+      const hasScores = classStudents.some(st => data.scoreMap[st.id] !== undefined);
+      const evaluationStatus: StatutEvaluation = hasScores ? 'CORRIGEE' : (data.statut || 'PLANIFIEE');
+      const storedEvaluation: EpreuveScolaire = {
+        id: evId,
+        titre: data.titre || '',
+        type: data.type === 'PRATIQUE' ? 'TRAVAIL_PRATIQUE' : (data.type || 'INTERROGATION') as EpreuveScolaire['type'],
+        cible: data.type === 'EXAMEN' || data.type === 'EXAMEN_BLANC' || data.type === 'COMPOSITION' ? 'EXAMEN' : 'PERIODE',
+        periode: (data.periode || 'P1') as EpreuveScolaire['periode'],
+        cycleId: cls?.cycleId || '',
+        classeId: data.classeId || '',
+        nomClasse: cls?.nom || 'Classe',
+        optionCode: data.optionCode || cls?.optionCode,
+        matiereId: data.matiereId || '',
+        nomMatiere: subjects.find(s => s.id === data.matiereId)?.nom || 'Cours',
         professeurId: data.professeurId || '',
         nomProfesseur: prof ? `${prof.prenom} ${prof.nom}` : '',
-        statut: data.statut || 'CORRIGEE',
-        remarques: data.remarques || '',
-      }));
+        schoolYearId: cls?.schoolYearId,
+        dateEpreuve: data.dateEvaluation || new Date().toISOString().split('T')[0],
+        maxPoints: data.baremeMax || 10,
+        statut: evaluationStatus === 'PLANIFIEE' ? 'PROGRAMMEE' : evaluationStatus,
+        validationStatut: hasScores ? 'EN_ATTENTE' : editingEval?.validationStatut,
+        integreeRegistre: hasScores ? false : (editingEval?.integreeRegistre || false),
+        remarques: data.remarques,
+      };
+      if (editingEval && savedEpreuves.some(ep => ep.id === evId)) await LocalDatabaseService.updateEpreuve(evId, storedEvaluation);
+      else await LocalDatabaseService.addEpreuve(storedEvaluation);
+      const toSave: Cote[] = classStudents
+        .filter(st => data.scoreMap[st.id] !== undefined)
+        .map(st => ({
+          id: uuid(), evaluationId: evId, eleveId: st.id, anneeScolaireId: st.schoolYearId,
+          matiereId: data.matiereId || '', classeId: data.classeId || '',
+          enseignantId: data.professeurId || '', optionCode: data.optionCode || cls?.optionCode || '',
+          periode: data.periode || 'P1', type: data.type || 'INTERROGATION',
+          score: Math.min(data.baremeMax || 10, Math.max(0, data.scoreMap[st.id])),
+          maxScore: data.baremeMax || 10,
+          dateCote: data.dateEvaluation || new Date().toISOString().split('T')[0],
+          titre: data.titre || '', libelle: data.titre || '',
+          statut: 'SOUMIS',
+        }));
       await Promise.all(toSave.map(c => LocalDatabaseService.addCote(c)));
       setShowModal(false); setEditingEval(null); await load();
     } catch (err) { console.error('[handleSave]', err); }
@@ -603,11 +745,54 @@ export const EvaluationsExamsManager: React.FC = () => {
   const handleDelete = async (id: string) => {
     const cotes = await LocalDatabaseService.getCotes({ evaluationId: id });
     await Promise.all(cotes.map(c => LocalDatabaseService.deleteCote(c.id)));
+    if (savedEpreuves.some(ep => ep.id === id)) await LocalDatabaseService.deleteEpreuve(id);
     setDeleteId(null); await load();
+  };
+
+  const isTeacherView = currentUser?.role === 'ENSEIGNANT' || currentUser?.role === 'TITULAIRE';
+  const isAdminView = !isTeacherView;
+
+  const handleValidate = async (ev: EpreuveEnrichi, approved: boolean) => {
+    if (!isAdminView) return;
+    const now = new Date().toISOString();
+    const stored = savedEpreuves.find(ep => ep.id === ev.id);
+    if (stored) {
+      await LocalDatabaseService.updateEpreuve(ev.id, approved ? {
+        statut: 'PUBLIEE', validationStatut: 'VALIDEE', integreeRegistre: true,
+        valideParId: currentUser?.id, valideParNom: currentUser?.nom || 'Administration', valideLe: now,
+      } : {
+        statut: 'CORRIGEE', validationStatut: 'REJETEE', integreeRegistre: false,
+        valideParId: currentUser?.id, valideParNom: currentUser?.nom || 'Administration', valideLe: now,
+      });
+    }
+    await Promise.all(ev.cotes.map(cote => LocalDatabaseService.updateCote(cote.id, {
+      statut: approved ? 'VALIDE_DE' : 'REJETE_DE',
+      valideDELe: approved ? now : undefined,
+      valideParDEId: approved ? currentUser?.id : undefined,
+    })));
+    await load();
   };
 
   const openCreate = () => { setEditingEval(null); setShowModal(true); };
   const openEdit   = (ev: EpreuveEnrichi) => { setEditingEval(ev); setShowModal(true); };
+
+  const exportPDF = async () => {
+    const { jsPDF } = await import('jspdf');
+    const autoTableModule = await import('jspdf-autotable');
+    const autoTable = (autoTableModule as any).default || autoTableModule;
+    const doc = new jsPDF('landscape', 'mm', 'a4');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
+    doc.text('Répertoire des évaluations et examens', 14, 16);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    doc.text(`Généré le ${new Date().toLocaleDateString('fr-CD')} · ${filteredEpreuves.length} évaluation(s)`, 14, 23);
+    autoTable(doc, {
+      startY: 29,
+      head: [['Évaluation', 'Classe / Option', 'Cours', 'Professeur', 'Date', 'Période', 'Participants', 'Performance', 'Statut', 'Registre']],
+      body: filteredEpreuves.map(ev => [ev.titre, `${ev.nomClasse}${ev.optionCode ? ` · ${getOptionLabel(ev.optionCode)}` : ''}`, ev.nomMatiere, ev.nomProfesseur || '—', ev.dateEvaluation, ev.periode, ev.nbParticipants, `${ev.moyennePct}%`, statutInfo(ev.statut).label, ev.integreeRegistre ? 'Intégrée' : 'Non intégrée']),
+      theme: 'grid', styles: { fontSize: 8, cellPadding: 2.4 }, headStyles: { fillColor: [67, 56, 202], textColor: 255 },
+    });
+    doc.save(`Evaluations_ECOLISA_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
 
   const exportCSV = () => {
     let csv = 'Evaluation,Type,Classe,Matière,Période,Professeur,Date,Élève,Matricule,Score,Bareme,Pct\n';
@@ -625,12 +810,59 @@ export const EvaluationsExamsManager: React.FC = () => {
     a.click(); URL.revokeObjectURL(url);
   };
 
-  const classOpts   = [{ value: '', label: 'Toutes les classes'   }, ...classes.map(c  => ({ value: c.id,    label: c.nom  }))];
-  const subjectOpts = [{ value: '', label: 'Toutes les matières'  }, ...subjects.map(s => ({ value: s.id,    label: s.nom  }))];
-  const periodOpts  = [{ value: '', label: 'Toutes les périodes'  }, ...PERIODS.map(p    => ({ value: p.value, label: p.label }))];
-  const typeOpts    = [{ value: '', label: 'Tous les types'        }, ...EVAL_TYPES.map(t => ({ value: t.value, label: `${t.icon} ${t.label}` }))];
-  const statutOpts  = [{ value: '', label: 'Tous les statuts'      }, ...STATUTS.map(s   => ({ value: s.value, label: s.label }))];
-  const profOpts    = [{ value: '', label: 'Tous les professeurs'  }, ...teachers.map(t  => ({ value: t.id,    label: `${t.prenom} ${t.nom}` }))];
+  const smartFilterOptions = useMemo(() => {
+    const roomClassIds = new Set(classes.filter(c => !roomFilter || c.salle === roomFilter || (c.salles || []).includes(roomFilter)).map(c => c.id));
+    const byRoom = roomFilter ? epreuves.filter(ev => roomClassIds.has(ev.classeId)) : epreuves;
+    const byTeacher = profFilter ? byRoom.filter(ev => ev.professeurId === profFilter) : byRoom;
+    const byOption = optionFilter ? byTeacher.filter(ev => ev.optionCode === optionFilter) : byTeacher;
+    const byClass = classFilter ? byOption.filter(ev => ev.classeId === classFilter) : byOption;
+    const bySubject = subjectFilter ? byClass.filter(ev => ev.matiereId === subjectFilter) : byClass;
+    const byPeriod = periodFilter ? bySubject.filter(ev => ev.periode === periodFilter) : bySubject;
+    const availableClassIds = new Set(byOption.map(ev => ev.classeId));
+    const availableSubjectIds = new Set(byClass.map(ev => ev.matiereId));
+    const availableTeacherIds = new Set((classFilter || optionFilter || subjectFilter ? epreuves.filter(ev =>
+      (!classFilter || ev.classeId === classFilter) &&
+      (!optionFilter || ev.optionCode === optionFilter) &&
+      (!subjectFilter || ev.matiereId === subjectFilter)
+    ) : epreuves).map(ev => ev.professeurId).filter(Boolean));
+    const availableOptions = new Set((classFilter ? epreuves.filter(ev => ev.classeId === classFilter) : byTeacher).map(ev => ev.optionCode).filter(Boolean) as string[]);
+    const availablePeriods = new Set(bySubject.map(ev => ev.periode));
+    const availableDates = Array.from(new Set(byPeriod.map(ev => ev.dateEvaluation).filter(Boolean))).sort().reverse();
+    const contextualClasses = classes.filter(c => availableClassIds.size === 0 || availableClassIds.has(c.id));
+    const contextualClassIds = new Set(contextualClasses.map(c => c.id));
+    const availableRooms = Array.from(new Set(contextualClasses.flatMap(c => [c.salle, ...(c.salles || [])]).filter(Boolean)));
+    return {
+      classes: [{ value: '', label: `Toutes les classes (${contextualClasses.length})` }, ...contextualClasses.map(c => ({ value: c.id, label: c.nom }))],
+      subjects: [{ value: '', label: `Tous les cours (${availableSubjectIds.size})` }, ...subjects.filter(s => availableSubjectIds.size === 0 || availableSubjectIds.has(s.id)).map(s => ({ value: s.id, label: s.nom }))],
+      periods: [{ value: '', label: 'Toutes les périodes' }, ...PERIODS.filter(p => availablePeriods.size === 0 || availablePeriods.has(p.value)).map(p => ({ value: p.value, label: p.label }))],
+      teachers: [{ value: '', label: `Tous les professeurs (${availableTeacherIds.size})` }, ...teachers.filter(t => availableTeacherIds.size === 0 || availableTeacherIds.has(t.id)).map(t => ({ value: t.id, label: `${t.prenom} ${t.nom}` }))],
+      options: [{ value: '', label: 'Toutes les options' }, ...Array.from(availableOptions).map(value => ({ value, label: getOptionLabel(value) }))],
+      rooms: [{ value: '', label: 'Toutes les salles' }, ...availableRooms.map(value => ({ value, label: value }))],
+      dates: [{ value: '', label: 'Toutes les dates' }, ...availableDates.map(value => ({ value, label: new Date(`${value}T00:00:00`).toLocaleDateString('fr-CD') }))],
+      classIds: contextualClassIds,
+    };
+  }, [epreuves, classes, subjects, teachers, profFilter, optionFilter, roomFilter, classFilter, subjectFilter, periodFilter]);
+
+  const classOpts = smartFilterOptions.classes;
+  const subjectOpts = smartFilterOptions.subjects;
+  const periodOpts = smartFilterOptions.periods;
+  const profOpts = smartFilterOptions.teachers;
+  const optionOpts = smartFilterOptions.options;
+  const roomOpts = smartFilterOptions.rooms;
+  const dateOpts = smartFilterOptions.dates;
+  const typeOpts = [{ value: '', label: 'Tous les types' }, ...EVAL_TYPES.map(t => ({ value: t.value, label: `${t.icon} ${t.label}` }))];
+  const statutOpts = [{ value: '', label: 'Tous les statuts' }, ...STATUTS.map(s => ({ value: s.value, label: s.label }))];
+  const registerOpts = [{ value: '', label: 'Tous les registres' }, { value: 'INTEGRE', label: 'Intégrées au registre' }, { value: 'NON_INTEGRE', label: 'Non intégrées' }];
+
+  useEffect(() => {
+    if (classFilter && !classOpts.some(option => option.value === classFilter)) setClassFilter('');
+    if (subjectFilter && !subjectOpts.some(option => option.value === subjectFilter)) setSubjectFilter('');
+    if (periodFilter && !periodOpts.some(option => option.value === periodFilter)) setPeriodFilter('');
+    if (profFilter && !profOpts.some(option => option.value === profFilter)) setProfFilter('');
+    if (optionFilter && !optionOpts.some(option => option.value === optionFilter)) setOptionFilter('');
+    if (roomFilter && !roomOpts.some(option => option.value === roomFilter)) setRoomFilter('');
+    if (dateFilter && !dateOpts.some(option => option.value === dateFilter)) setDateFilter('');
+  }, [classFilter, subjectFilter, periodFilter, profFilter, optionFilter, roomFilter, dateFilter, classOpts, subjectOpts, periodOpts, profOpts, optionOpts, roomOpts, dateOpts]);
 
   const byClassEpreuves = useMemo(() => byClassId ? epreuves.filter(e => e.classeId === byClassId) : [], [epreuves, byClassId]);
   const byClassStudents = useMemo(() => {
@@ -650,9 +882,10 @@ export const EvaluationsExamsManager: React.FC = () => {
 
   const clearFilters = () => {
     setClassFilter(''); setSubjectFilter(''); setPeriodFilter('');
-    setTypeFilter('');  setStatutFilter('');  setProfFilter(''); setSearch('');
+    setTypeFilter(''); setStatutFilter(''); setProfFilter(''); setOptionFilter('');
+    setRoomFilter(''); setRegisterFilter(''); setDateFilter(''); setSearch('');
   };
-  const hasFilters = !!(classFilter || subjectFilter || periodFilter || typeFilter || statutFilter || profFilter || search);
+  const hasFilters = !!(classFilter || subjectFilter || periodFilter || typeFilter || statutFilter || profFilter || optionFilter || roomFilter || registerFilter || dateFilter || search);
 
   // ── RENDER ─────────────────────────────────────────────────────────────────
   return (
@@ -666,18 +899,27 @@ export const EvaluationsExamsManager: React.FC = () => {
               <Award className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Évaluations & Examens</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">EPST RDC · Interrogations, Devoirs, Examens & Travaux Pratiques</p>
+              <h1 className="text-xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                {isTeacherView ? 'Mes Évaluations & Examens' : 'Pilotage des Évaluations & Examens'}
+              </h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                {isTeacherView ? 'Créer, corriger et transmettre mes évaluations.' : 'Contrôler, valider et analyser les évaluations de l’établissement.'}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
+            <button onClick={exportPDF}
+              className="px-3.5 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer">
+              <FileText className="w-3.5 h-3.5" /> Exporter PDF
+            </button>
             <button onClick={exportCSV}
               className="px-3.5 py-2.5 rounded-xl border text-xs font-black flex items-center gap-1.5 hover:bg-slate-500/10 transition-all cursor-pointer"
               style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
-              <Download className="w-3.5 h-3.5" /> Exporter CSV
+              <Download className="w-3.5 h-3.5" /> CSV
             </button>
-            <button onClick={openCreate}
-              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white text-xs font-black shadow-md shadow-indigo-500/25 flex items-center gap-1.5 transition-all cursor-pointer">
+            <button onClick={openCreate} disabled={isTeacherView && !currentStaff}
+              title={isTeacherView && !currentStaff ? 'Aucun dossier enseignant lié à ce compte.' : undefined}
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white text-xs font-black shadow-md shadow-indigo-500/25 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
               <Plus className="w-4 h-4" /> Nouvelle Évaluation
             </button>
           </div>
@@ -821,21 +1063,32 @@ export const EvaluationsExamsManager: React.FC = () => {
         <div className="space-y-4 animate-fade-in">
           {/* Filtres */}
           <div className="p-4 rounded-2xl border shadow-xs" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-              <CustomSelect options={classOpts}   value={classFilter}   onChange={setClassFilter}   placeholder="Filtrer par classe"  />
-              <CustomSelect options={subjectOpts} value={subjectFilter} onChange={setSubjectFilter} placeholder="Filtrer par matière" />
-              <CustomSelect options={periodOpts}  value={periodFilter}  onChange={setPeriodFilter}  placeholder="Filtrer par période" />
-              <CustomSelect options={typeOpts}    value={typeFilter}    onChange={setTypeFilter}    placeholder="Filtrer par type"    />
+            <div className="flex items-center gap-2 mb-3">
+              <Filter className="w-4 h-4 text-indigo-500" />
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>Filtres contextuels intelligents</h3>
+                <p className="text-[10px] text-slate-400">Chaque sélection adapte automatiquement les listes suivantes.</p>
+              </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <CustomSelect options={statutOpts} value={statutFilter} onChange={setStatutFilter} placeholder="Filtrer par statut"     />
-              <CustomSelect options={profOpts}   value={profFilter}   onChange={setProfFilter}   placeholder="Filtrer par professeur" />
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                <input value={search} onChange={e => setSearch(e.target.value)}
-                  placeholder="Rechercher titre, classe, matière..."
-                  className="w-full pl-9 pr-3.5 py-2 rounded-lg border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+            <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${isAdminView ? 'xl:grid-cols-4' : 'xl:grid-cols-2'}`}>
+              <div><label className="block text-[10px] font-bold text-slate-400 mb-1">1. Classe</label><CustomSelect options={classOpts} value={classFilter} onChange={setClassFilter} /></div>
+              {isAdminView && <div><label className="block text-[10px] font-bold text-slate-400 mb-1">2. Option</label><CustomSelect options={optionOpts} value={optionFilter} onChange={setOptionFilter} /></div>}
+              {isAdminView && <div><label className="block text-[10px] font-bold text-slate-400 mb-1">3. Enseignant</label><CustomSelect options={profOpts} value={profFilter} onChange={setProfFilter} searchable /></div>}
+              {isAdminView && <div><label className="block text-[10px] font-bold text-slate-400 mb-1">4. Salle</label><CustomSelect options={roomOpts} value={roomFilter} onChange={setRoomFilter} /></div>}
+              <div><label className="block text-[10px] font-bold text-slate-400 mb-1">{isAdminView ? '5' : '2'}. Cours</label><CustomSelect options={subjectOpts} value={subjectFilter} onChange={setSubjectFilter} searchable /></div>
+              <div><label className="block text-[10px] font-bold text-slate-400 mb-1">{isAdminView ? '6' : '3'}. Période</label><CustomSelect options={periodOpts} value={periodFilter} onChange={setPeriodFilter} /></div>
+              <div><label className="block text-[10px] font-bold text-slate-400 mb-1">{isAdminView ? '7' : '4'}. Date</label><CustomSelect options={dateOpts} value={dateFilter} onChange={setDateFilter} /></div>
+              <div><label className="block text-[10px] font-bold text-slate-400 mb-1">Type</label><CustomSelect options={typeOpts} value={typeFilter} onChange={setTypeFilter} /></div>
+              <div><label className="block text-[10px] font-bold text-slate-400 mb-1">Statut</label><CustomSelect options={statutOpts} value={statutFilter} onChange={setStatutFilter} /></div>
+              {isAdminView && <div><label className="block text-[10px] font-bold text-slate-400 mb-1">Registre de cotation</label><CustomSelect options={registerOpts} value={registerFilter} onChange={setRegisterFilter} /></div>}
+              <div className={isAdminView ? 'xl:col-span-2' : ''}>
+                <label className="block text-[10px] font-bold text-slate-400 mb-1">Recherche libre</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Titre, classe, cours ou enseignant..."
+                    className="w-full h-10 pl-9 pr-3.5 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t" style={{ borderColor: 'var(--border)' }}>
@@ -883,6 +1136,9 @@ export const EvaluationsExamsManager: React.FC = () => {
                             <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-sky-400" />{ev.periode}</span>
                             {ev.nomProfesseur && <span className="flex items-center gap-1"><User className="w-3 h-3 text-emerald-400" />{ev.nomProfesseur}</span>}
                             {ev.dateEvaluation && <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-amber-400" />{ev.dateEvaluation}</span>}
+                            <span className={`flex items-center gap-1 font-bold ${ev.integreeRegistre ? 'text-emerald-500' : 'text-amber-500'}`}>
+                              <FileText className="w-3 h-3" />{ev.integreeRegistre ? 'Au registre' : 'Hors registre'}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -904,7 +1160,17 @@ export const EvaluationsExamsManager: React.FC = () => {
                           <p className="text-sm font-black" style={{ color: ev.tauxReussite >= 50 ? '#10b981' : '#ef4444' }}>{ev.tauxReussite}%</p>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <button onClick={() => openEdit(ev)} className="p-2 rounded-xl text-indigo-500 hover:bg-indigo-500/10 active:scale-[0.95] transition-all cursor-pointer" title="Modifier">
+                          {isAdminView && ev.statut === 'CORRIGEE' && (
+                            <>
+                              <button onClick={() => handleValidate(ev, true)} className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-black flex items-center gap-1" title="Valider et intégrer au registre">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Valider
+                              </button>
+                              <button onClick={() => handleValidate(ev, false)} className="p-2 rounded-xl text-rose-500 hover:bg-rose-500/10" title="Rejeter l’évaluation">
+                                <X className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                          <button onClick={() => openEdit(ev)} className="p-2 rounded-xl text-indigo-500 hover:bg-indigo-500/10 active:scale-[0.95] transition-all cursor-pointer" title={isAdminView ? 'Consulter ou modifier' : 'Modifier'}>
                             <Edit3 className="w-4 h-4" />
                           </button>
                           <button onClick={() => setDeleteId(ev.id)} className="p-2 rounded-xl text-rose-500 hover:bg-rose-500/10 active:scale-[0.95] transition-all cursor-pointer" title="Supprimer">
@@ -1148,6 +1414,8 @@ export const EvaluationsExamsManager: React.FC = () => {
         initialEval={editingEval}
         classes={classes} subjects={subjects} teachers={teachers} students={students}
         saving={saving}
+        currentUser={currentUser}
+        currentStaff={currentStaff}
       />
 
       {/* ═══ CONFIRMATION SUPPRESSION ═══ */}

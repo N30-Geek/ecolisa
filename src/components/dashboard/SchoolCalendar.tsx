@@ -32,24 +32,17 @@ import {
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { CustomSelect } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
-
-export interface CalendarEventData {
-  id: string;
-  titre: string;
-  subtitre?: string;
-  dateDebut: string;
-  dateFin?: string;
-  categorie: string;
-  publicCible?: 'TOUS' | 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_EXETAT';
-  highlight?: boolean;
-}
-
-const MONTHS_FR = [
-  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
-];
-
-const WEEKDAYS_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+import { CalendarExportModal } from './CalendarExportModal';
+import {
+  CalendarEventData,
+  MONTHS_FR,
+  WEEKDAYS_SHORT,
+  categoryInfo,
+  parseAnyDate,
+  formatFrenchDateRange,
+  getEventStatus,
+  isBetween,
+} from '../../utils/calendarHelpers';
 
 export const OFFICIAL_RDC_EVENTS: CalendarEventData[] = [
   {
@@ -182,132 +175,8 @@ export const OFFICIAL_RDC_EVENTS: CalendarEventData[] = [
   },
 ];
 
-export const parseAnyDate = (d?: string): Date | null => {
-  if (!d) return null;
-  const iso = d.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) {
-    const date = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
-    return isNaN(date.getTime()) ? null : date;
-  }
-  const fr = d.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (fr) {
-    const date = new Date(Number(fr[3]), Number(fr[2]) - 1, Number(fr[1]));
-    return isNaN(date.getTime()) ? null : date;
-  }
-  const fallback = new Date(d);
-  return isNaN(fallback.getTime()) ? null : fallback;
-};
-
-export const formatFrenchDate = (dStr: string): string => {
-  const d = parseAnyDate(dStr);
-  if (!d) return dStr;
-  const day = d.getDate();
-  const month = MONTHS_FR[d.getMonth()];
-  const year = d.getFullYear();
-  return `${day === 1 ? '1er' : day} ${month} ${year}`;
-};
-
-export const formatFrenchDateRange = (startStr: string, endStr?: string): string => {
-  const s = parseAnyDate(startStr);
-  if (!s) return startStr;
-  if (!endStr || endStr === startStr) return formatFrenchDate(startStr);
-  const e = parseAnyDate(endStr);
-  if (!e) return formatFrenchDate(startStr);
-
-  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
-    return `Du ${s.getDate() === 1 ? '1er' : s.getDate()} au ${e.getDate()} ${MONTHS_FR[s.getMonth()]} ${s.getFullYear()}`;
-  }
-  return `Du ${s.getDate()} ${MONTHS_FR[s.getMonth()]} au ${e.getDate()} ${MONTHS_FR[e.getMonth()]} ${e.getFullYear()}`;
-};
-
-export const getEventStatus = (startStr: string, endStr?: string) => {
-  const today = new Date();
-  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  const sDate = parseAnyDate(startStr);
-  if (!sDate) return { label: 'Date indéfinie', type: 'UNKNOWN', diffDays: 0 };
-  const s = new Date(sDate.getFullYear(), sDate.getMonth(), sDate.getDate()).getTime();
-  const eDate = endStr ? parseAnyDate(endStr) : sDate;
-  const e = eDate ? new Date(eDate.getFullYear(), eDate.getMonth(), eDate.getDate()).getTime() : s;
-
-  if (t >= s && t <= e) {
-    return { label: 'En cours aujourd\'hui', type: 'CURRENT', diffDays: 0 };
-  }
-  if (t > e) {
-    const diff = Math.round((t - e) / (1000 * 60 * 60 * 24));
-    return { label: `Échu (il y a ${diff} j)`, type: 'PAST', diffDays: -diff };
-  }
-  const diff = Math.round((s - t) / (1000 * 60 * 60 * 24));
-  if (diff === 1) return { label: 'Demain', type: 'UPCOMING', diffDays: 1 };
-  if (diff <= 30) return { label: `Dans ${diff} jours`, type: 'UPCOMING', diffDays: diff };
-  const diffMonths = Math.round(diff / 30);
-  return { label: `Dans ~${diffMonths} mois`, type: 'UPCOMING', diffDays: diff };
-};
-
 const sameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-
-const isBetween = (date: Date, start: Date, end: Date) => {
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  const s = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
-  const e = new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime();
-  return d >= s && d <= e;
-};
-
-export const categoryInfo = (cat: string) => {
-  if (cat === 'EXAMENS_JURY') {
-    return {
-      label: 'Examens & Jury',
-      bg: 'bg-indigo-500/12 dark:bg-indigo-500/20',
-      text: 'text-indigo-700 dark:text-indigo-300',
-      border: 'border-indigo-500/30',
-      dot: 'bg-indigo-500',
-      gradient: 'from-indigo-500 to-indigo-600',
-      glow: 'rgba(99, 102, 241, 0.12)',
-    };
-  }
-  if (cat === 'VACANCES') {
-    return {
-      label: 'Vacances & Congés',
-      bg: 'bg-amber-500/12 dark:bg-amber-500/20',
-      text: 'text-amber-700 dark:text-amber-300',
-      border: 'border-amber-500/30',
-      dot: 'bg-amber-500',
-      gradient: 'from-amber-500 to-amber-600',
-      glow: 'rgba(245, 158, 11, 0.12)',
-    };
-  }
-  if (cat === 'FÉRIÉ') {
-    return {
-      label: 'Jour Férié RDC',
-      bg: 'bg-rose-500/12 dark:bg-rose-500/20',
-      text: 'text-rose-700 dark:text-rose-300',
-      border: 'border-rose-500/30',
-      dot: 'bg-rose-500',
-      gradient: 'from-rose-500 to-rose-600',
-      glow: 'rgba(239, 68, 68, 0.12)',
-    };
-  }
-  if (cat === 'RENTRÉE_CLÔTURE') {
-    return {
-      label: 'Rentrée / Clôture',
-      bg: 'bg-emerald-500/12 dark:bg-emerald-500/20',
-      text: 'text-emerald-700 dark:text-emerald-300',
-      border: 'border-emerald-500/30',
-      dot: 'bg-emerald-500',
-      gradient: 'from-emerald-500 to-emerald-600',
-      glow: 'rgba(16, 185, 129, 0.12)',
-    };
-  }
-  return {
-    label: 'Autre Activité',
-    bg: 'bg-slate-500/12 dark:bg-slate-500/20',
-    text: 'text-slate-700 dark:text-slate-300',
-    border: 'border-slate-500/30',
-    dot: 'bg-slate-500',
-    gradient: 'from-slate-500 to-slate-600',
-    glow: 'rgba(100, 116, 139, 0.12)',
-  };
-};
 
 interface SchoolCalendarProps {
   events?: CalendarEventData[];
@@ -330,11 +199,10 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
   const [activeEventDetail, setActiveEventDetail] = useState<CalendarEventData | null>(null);
 
   const allEvents = useMemo(() => {
-    const base = events.length > 0 ? events : OFFICIAL_RDC_EVENTS;
-    const merged = [...base, ...localEvents];
+    const merged = [...OFFICIAL_RDC_EVENTS, ...events, ...localEvents];
     const map = new Map<string, CalendarEventData>();
     for (const ev of merged) if (ev.id) map.set(ev.id, ev);
-    return Array.from(map.values());
+    return Array.from(map.values()).sort((a, b) => (parseAnyDate(a.dateDebut)?.getTime() || 0) - (parseAnyDate(b.dateDebut)?.getTime() || 0));
   }, [events, localEvents]);
 
   const filteredEvents = useMemo(() => {
@@ -412,30 +280,9 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
     setSelectedDate(now);
   };
 
-  const handleExportPDF = () => {
-    const element = document.getElementById('school-calendar-print-section');
-    if (!element) {
-      window.print();
-      return;
-    }
-    try {
-      import('html2pdf.js').then((html2pdfModule) => {
-        const html2pdf = html2pdfModule.default || html2pdfModule;
-        const opt = {
-          margin: 8,
-          filename: `Calendrier_Scolaire_ECOLISA_${year}_${year + 1}.pdf`,
-          image: { type: 'jpeg' as const, quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
-          jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'landscape' as const },
-        };
-        html2pdf().set(opt).from(element).save();
-      }).catch(() => {
-        window.print();
-      });
-    } catch {
-      window.print();
-    }
-  };
+  const [showExportModal, setShowExportModal] = useState(false);
+
+  const handleExportPDF = () => setShowExportModal(true);
 
   const toISODate = (d: Date) => {
     const y = d.getFullYear();
@@ -506,11 +353,11 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
   return (
     <div
       id="school-calendar-print-section"
-      className="p-4 sm:p-6 rounded-2xl border space-y-4 animate-fade-in transition-all"
+      className="p-4 sm:p-6 rounded-2xl border space-y-4 animate-fade-in transition-all hover:shadow-lg"
       style={{
         background: 'var(--bg-surface)',
         borderColor: 'var(--border)',
-        boxShadow: 'var(--elevation-1)',
+        boxShadow: 'var(--elevation-2)',
       }}
     >
       {/* ═══ HEADER OFFICIEL RDC ET CONTRÔLES ═══ */}
@@ -541,14 +388,14 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
         {/* Boutons d'Action & Bascule de Vue */}
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Segmented View Mode */}
-          <div className="flex items-center p-1 rounded-xl border bg-slate-500/5 shadow-xs" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center p-1 rounded-xl border shadow-sm" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
             <button
               type="button"
               onClick={() => setViewMode('list')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer active:scale-95 ${
                 viewMode === 'list'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-indigo-600'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-indigo-600 hover:shadow-sm'
               }`}
             >
               <List className="w-3.5 h-3.5" />
@@ -557,10 +404,10 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
             <button
               type="button"
               onClick={() => setViewMode('grid')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer active:scale-95 ${
                 viewMode === 'grid'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-indigo-600'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-indigo-600 hover:shadow-sm'
               }`}
             >
               <Grid className="w-3.5 h-3.5" />
@@ -571,7 +418,7 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
           <button
             type="button"
             onClick={() => openModal(today)}
-            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 active:scale-95 text-white font-bold text-xs shadow-md hover:shadow-lg flex items-center gap-1.5 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4 text-white" />
             <span>Ajouter Événement</span>
@@ -580,8 +427,8 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
           <button
             type="button"
             onClick={handleExportPDF}
-            className="px-3.5 py-2 rounded-xl border font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer hover:bg-slate-500/10 no-print"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+            className="px-3.5 py-2 rounded-xl border font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 hover:shadow-md no-print"
+            style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)', boxShadow: 'var(--elevation-1)' }}
             title="Exporter le calendrier en PDF"
           >
             <Download className="w-4 h-4 text-indigo-500" />
@@ -591,7 +438,7 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
       </div>
 
       {/* ═══ BARRE DE RECHERCHE & FILTRES RAPIDES ═══ */}
-      <div className="p-3.5 rounded-2xl border space-y-3" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+      <div className="p-3.5 rounded-2xl border space-y-3" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Search bar */}
           <div className="relative flex-1 min-w-[220px]">
@@ -602,7 +449,7 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Rechercher un examen, une session, une vacance..."
               className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+              style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
             />
             {searchQuery && (
               <button
@@ -617,48 +464,104 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
           {/* Status Filter Buttons */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 sidebar-scroll">
             {[
-              { id: 'ALL', label: 'Tout le calendrier' },
-              { id: 'UPCOMING', label: 'À venir' },
-              { id: 'CURRENT', label: 'En cours' },
-              { id: 'PAST', label: 'Échues' },
-            ].map(st => (
-              <button
-                key={st.id}
-                type="button"
-                onClick={() => setStatusFilter(st.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  statusFilter === st.id
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-500/10'
-                }`}
-              >
-                {st.label}
-              </button>
-            ))}
+              { id: 'ALL', label: 'Tout le calendrier', color: '#64748b' },
+              { id: 'UPCOMING', label: 'À venir', color: '#6366f1' },
+              { id: 'CURRENT', label: 'En cours', color: '#10b981' },
+              { id: 'PAST', label: 'Échues', color: '#94a3b8' },
+            ].map(st => {
+              const active = statusFilter === st.id;
+              return (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => setStatusFilter(st.id)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap active:scale-95"
+                  style={{
+                    background: active ? st.color : 'var(--bg-surface)',
+                    color: active ? '#ffffff' : 'var(--text-secondary)',
+                    border: `1px solid ${active ? st.color : 'var(--border)'}`,
+                    boxShadow: active ? 'var(--elevation-2)' : 'var(--elevation-0)',
+                  }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.boxShadow = 'var(--elevation-1)'; }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.boxShadow = 'var(--elevation-0)'; }}
+                >
+                  {st.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Catégories Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pt-1 border-t sidebar-scroll" style={{ borderColor: 'var(--border)' }}>
-          {CATEGORY_TABS.map(f => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => setCatFilter(f.id)}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer select-none ${
-                catFilter === f.id
-                  ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30'
-                  : 'hover:bg-slate-500/10 text-slate-600 dark:text-slate-400'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+          {CATEGORY_TABS.map(f => {
+            const active = catFilter === f.id;
+            const color = f.id === 'EXAMENS_JURY' ? '#6366f1' : f.id === 'VACANCES' ? '#f59e0b' : f.id === 'FÉRIÉ' ? '#ef4444' : f.id === 'RENTRÉE_CLÔTURE' ? '#10b981' : '#6366f1';
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setCatFilter(f.id)}
+                className="px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer select-none active:scale-95 flex items-center gap-1.5"
+                style={{
+                  background: active ? `${color}10` : 'var(--bg-surface)',
+                  color: active ? color : 'var(--text-secondary)',
+                  border: `1px solid ${active ? `${color}30` : 'var(--border)'}`,
+                  boxShadow: active ? 'var(--elevation-2)' : 'var(--elevation-0)',
+                }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.boxShadow = 'var(--elevation-1)'; }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.boxShadow = 'var(--elevation-0)'; }}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ background: color }} />
+                {f.label}
+              </button>
+            );
+          })}
           <span className="text-[11px] font-bold text-slate-400 ml-auto whitespace-nowrap">
             {filteredEvents.length} échéance{filteredEvents.length > 1 ? 's' : ''}
           </span>
         </div>
       </div>
+
+      {/* ═══ PROCHAINES ÉCHÉANCES À VENIR ═══ */}
+      {upcomingEvents.length > 0 && (
+        <div className="p-3.5 rounded-2xl border space-y-2" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}>
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center border" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}>
+              <Clock className="w-3.5 h-3.5 text-indigo-500" />
+            </div>
+            <h3 className="text-xs font-extrabold uppercase tracking-wide" style={{ color: 'var(--text-primary)' }}>Prochaines échéances</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {upcomingEvents.slice(0, 6).map(ev => {
+              const cInfo = categoryInfo(ev.categorie);
+              const sDate = parseAnyDate(ev.dateDebut);
+              const status = getEventStatus(ev.dateDebut, ev.dateFin);
+              return (
+                <button
+                  key={ev.id}
+                  onClick={() => setActiveEventDetail(ev)}
+                  className="text-left p-2.5 rounded-xl border transition-all hover:shadow-md active:scale-[0.99] cursor-pointer"
+                  style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border" style={{ background: 'var(--bg-surface)', borderColor: `${cInfo.hex}30`, color: cInfo.hex, boxShadow: 'var(--elevation-1)' }}>
+                      <span className="text-[11px] font-black">{sDate?.getDate()}</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>{ev.titre}</p>
+                      <p className="text-[10px] font-medium truncate" style={{ color: 'var(--text-muted)' }}>{formatFrenchDateRange(ev.dateDebut, ev.dateFin)}</p>
+                    </div>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md shrink-0" style={{ background: `${cInfo.hex}10`, color: cInfo.hex }}>
+                      {status.label}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ═══ VUE 1 : LISTE DES ÉCHÉANCES INTERACTIVE & MODERNE ═══ */}
       {viewMode === 'list' && (
@@ -682,28 +585,23 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
                   <div
                     key={ev.id}
                     onClick={() => setActiveEventDetail(ev)}
-                    className="animate-fade-in p-5 rounded-2xl border transition-all duration-300 relative overflow-hidden group flex flex-col justify-between cursor-pointer select-none"
+                    className="animate-fade-in p-5 rounded-2xl border transition-all duration-300 relative overflow-hidden group flex flex-col justify-between cursor-pointer select-none active:scale-[0.99]"
                     style={{
                       background: 'var(--bg-surface)',
                       borderColor: 'var(--border)',
-                      boxShadow: 'var(--elevation-1)',
+                      boxShadow: 'var(--elevation-2)',
                     }}
                     onMouseEnter={e => {
                       e.currentTarget.style.boxShadow = 'var(--elevation-3)';
-                      e.currentTarget.style.borderColor = 'rgba(99,102,241,0.35)';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.borderColor = `${cInfo.hex}40`;
+                      e.currentTarget.style.transform = 'translateY(-3px)';
                     }}
                     onMouseLeave={e => {
-                      e.currentTarget.style.boxShadow = 'var(--elevation-1)';
+                      e.currentTarget.style.boxShadow = 'var(--elevation-2)';
                       e.currentTarget.style.borderColor = 'var(--border)';
                       e.currentTarget.style.transform = 'translateY(0)';
                     }}
                   >
-                    {/* Top glowing aura */}
-                    <div
-                      className="absolute -top-12 -right-12 w-32 h-32 rounded-full pointer-events-none blur-2xl opacity-50 group-hover:opacity-90 transition-opacity"
-                      style={{ background: cInfo.glow }}
-                    />
 
                     <div className="relative z-10">
                       {/* Top bar: Category Chip + Public Target Badge */}
@@ -714,7 +612,7 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
                         </span>
 
                         {ev.publicCible && ev.publicCible !== 'TOUS' && (
-                          <span className="px-2 py-0.5 rounded-md text-[9.5px] font-black bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20 shrink-0">
+                          <span className="px-2 py-0.5 rounded-md text-[9.5px] font-black shrink-0" style={{ background: 'var(--bg-surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', boxShadow: 'var(--elevation-0)' }}>
                             {ev.publicCible === 'SECONDAIRE_EXETAT' ? 'Secondaire / EXETAT' : ev.publicCible}
                           </span>
                         )}
@@ -724,20 +622,20 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
                       <div className="flex items-start gap-3.5 my-1">
                         {/* Calendar Tear-off Badge */}
                         <div
-                          className="w-13 rounded-2xl overflow-hidden border shrink-0 shadow-sm flex flex-col items-center transition-transform duration-300 group-hover:scale-105"
-                          style={{ borderColor: 'var(--border)' }}
+                          className="w-13 rounded-2xl overflow-hidden border shrink-0 flex flex-col items-center transition-transform duration-300 group-hover:scale-105"
+                          style={{ borderColor: `${cInfo.hex}40`, boxShadow: 'var(--elevation-1)' }}
                         >
-                          <div className={`w-full py-1 text-center text-[9px] font-black uppercase tracking-wider text-white bg-gradient-to-r ${cInfo.gradient}`}>
+                          <div className="w-full py-1 text-center text-[9px] font-black uppercase tracking-wider text-white" style={{ background: cInfo.hex }}>
                             {sDate ? MONTHS_FR[sDate.getMonth()].slice(0, 3) : '—'}
                           </div>
-                          <div className="w-full py-1.5 text-center text-lg font-black tracking-tight leading-none" style={{ background: 'var(--bg-sunken)', color: 'var(--text-primary)' }}>
+                          <div className="w-full py-1.5 text-center text-lg font-black tracking-tight leading-none" style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
                             {sDate ? sDate.getDate() : '—'}
                           </div>
                         </div>
 
                         {/* Title & Subtitle */}
                         <div className="min-w-0 flex-1">
-                          <h4 className="text-[13px] font-black tracking-tight leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" style={{ color: 'var(--text-primary)' }}>
+                          <h4 className="text-[13px] font-black tracking-tight leading-snug transition-colors" style={{ color: 'var(--text-primary)' }} onMouseEnter={e => { e.currentTarget.style.color = cInfo.hex; }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-primary)'; }}>
                             {ev.titre}
                           </h4>
                           {ev.subtitre && (
@@ -759,21 +657,18 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
                       <div className="flex items-center gap-2 shrink-0">
                         {/* Countdown Tag */}
                         <span
-                          className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black border ${
-                            status.type === 'CURRENT'
-                              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 animate-pulse'
-                              : status.diffDays > 0 && status.diffDays <= 30
-                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
-                              : status.type === 'UPCOMING'
-                              ? 'bg-indigo-500/12 text-indigo-700 dark:text-indigo-300 border-indigo-500/25'
-                              : 'bg-slate-500/10 text-slate-500 border-slate-500/20'
-                          }`}
+                          className="px-2.5 py-0.5 rounded-lg text-[10px] font-black"
+                          style={{
+                            background: 'var(--bg-surface)',
+                            color: status.type === 'CURRENT' ? '#10b981' : status.diffDays > 0 && status.diffDays <= 30 ? '#f59e0b' : status.type === 'UPCOMING' ? '#6366f1' : 'var(--text-muted)',
+                            border: `1px solid ${status.type === 'CURRENT' ? 'rgba(16,185,129,0.35)' : status.diffDays > 0 && status.diffDays <= 30 ? 'rgba(245,158,11,0.35)' : status.type === 'UPCOMING' ? 'rgba(99,102,241,0.35)' : 'var(--border)'}`,
+                          }}
                         >
                           {status.label}
                         </span>
 
                         {/* Interactive Arrow Capsule */}
-                        <div className="w-6 h-6 rounded-lg bg-slate-500/10 group-hover:bg-indigo-600 group-hover:text-white flex items-center justify-center text-slate-500 dark:text-slate-400 transition-all duration-200">
+                        <div className="w-6 h-6 rounded-lg flex items-center justify-center transition-all duration-200" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-muted)', boxShadow: 'var(--elevation-0)' }}>
                           <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                         </div>
                       </div>
@@ -796,29 +691,33 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
       {viewMode === 'grid' && (
         <div className="space-y-4">
           {/* Header Navigation Mois */}
-          <div className="flex items-center justify-between p-3 rounded-2xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+          <div className="flex items-center justify-between p-3 rounded-2xl border" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handlePrevMonth}
-                className="w-8 h-8 rounded-xl border flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-indigo-600 hover:bg-indigo-500/10 transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-xl border flex items-center justify-center transition-all cursor-pointer active:scale-95"
                 title="Mois précédent"
-                style={{ borderColor: 'var(--border)' }}
+                style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-secondary)', boxShadow: 'var(--elevation-0)' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.color = '#6366f1'; e.currentTarget.style.boxShadow = 'var(--elevation-1)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.boxShadow = 'var(--elevation-0)'; }}
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <div
                 className="px-4 py-1.5 rounded-xl border text-xs font-black min-w-[150px] text-center"
-                style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)', boxShadow: 'var(--elevation-0)' }}
               >
                 {MONTHS_FR[month]} {year}
               </div>
               <button
                 type="button"
                 onClick={handleNextMonth}
-                className="w-8 h-8 rounded-xl border flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-indigo-600 hover:bg-indigo-500/10 transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-xl border flex items-center justify-center transition-all cursor-pointer active:scale-95"
                 title="Mois suivant"
-                style={{ borderColor: 'var(--border)' }}
+                style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-secondary)', boxShadow: 'var(--elevation-0)' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.color = '#6366f1'; e.currentTarget.style.boxShadow = 'var(--elevation-1)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.boxShadow = 'var(--elevation-0)'; }}
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -827,22 +726,24 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
             <button
               type="button"
               onClick={handleToday}
-              className="px-3.5 py-1.5 rounded-xl text-xs font-bold border hover:bg-indigo-500/10 transition-all cursor-pointer text-indigo-600 dark:text-indigo-400 shadow-xs"
-              style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-95"
+              style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)', color: '#6366f1', boxShadow: 'var(--elevation-1)' }}
+              onMouseEnter={e => { e.currentTarget.style.boxShadow = 'var(--elevation-2)'; e.currentTarget.style.borderColor = '#6366f1'; }}
+              onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--elevation-1)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
             >
               Aller à Aujourd'hui
             </button>
           </div>
 
           <div
-            className="border rounded-2xl overflow-hidden shadow-xs"
-            style={{ borderColor: 'var(--border)' }}
+            className="border rounded-2xl overflow-hidden"
+            style={{ borderColor: 'var(--border)', boxShadow: 'var(--elevation-2)' }}
           >
             {/* Jours de la Semaine Header */}
             <div
               className="grid grid-cols-7 text-center py-2.5 text-[11px] font-black uppercase tracking-wider border-b"
               style={{
-                background: 'var(--bg-sunken)',
+                background: 'var(--bg-surface)',
                 borderColor: 'var(--border)',
                 color: 'var(--text-secondary)',
               }}
@@ -869,11 +770,11 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
                     onClick={() => setSelectedDate(date)}
                     onDoubleClick={() => openModal(date)}
                     className={`relative min-h-[105px] sm:min-h-[115px] p-2 border-b border-r text-left flex flex-col justify-between transition-all cursor-pointer group select-none ${
-                      isCurrentMonth ? '' : 'opacity-35 bg-slate-500/[0.02]'
+                      isCurrentMonth ? '' : 'opacity-35'
                     } ${
                       isSelected
-                        ? 'bg-indigo-500/10 ring-2 ring-inset ring-indigo-500'
-                        : 'hover:bg-indigo-500/5'
+                        ? 'bg-indigo-500/5 ring-2 ring-inset ring-indigo-500'
+                        : 'hover:bg-slate-500/[0.03]'
                     } ${isWeekend && isCurrentMonth ? 'bg-amber-500/[0.015]' : ''}`}
                     style={{ borderColor: 'var(--border)' }}
                   >
@@ -906,10 +807,11 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
                               e.stopPropagation();
                               setActiveEventDetail(ev);
                             }}
-                            className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold truncate border flex items-center gap-1 cursor-pointer hover:scale-[1.02] transition-transform ${cInfo.bg} ${cInfo.text} ${cInfo.border}`}
+                            className="px-1.5 py-0.5 rounded-md text-[10px] font-bold truncate border flex items-center gap-1 cursor-pointer hover:scale-[1.02] transition-transform"
                             title={ev.titre}
+                            style={{ background: 'var(--bg-surface)', borderColor: `${cInfo.hex}40`, color: cInfo.hex, boxShadow: 'var(--elevation-0)' }}
                           >
-                            <span className={`w-1.5 h-1.5 rounded-full ${cInfo.dot} shrink-0`} />
+                            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: cInfo.hex }} />
                             <span className="truncate">{ev.titre}</span>
                           </div>
                         );
@@ -974,36 +876,35 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
 
                     {/* Metadata Grid */}
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                      <div className="p-3 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}>
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Date & Période</span>
                         <p className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>
                           {formatFrenchDateRange(activeEventDetail.dateDebut, activeEventDetail.dateFin)}
                         </p>
                       </div>
 
-                      <div className="p-3 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                      <div className="p-3 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}>
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Statut Échéance</span>
-                        <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-black border ${
-                          status.type === 'CURRENT'
-                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
-                            : status.type === 'UPCOMING'
-                            ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30'
-                            : 'bg-slate-500/10 text-slate-500 border-slate-500/20'
-                        }`}>
+                        <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-black" style={{
+                          background: 'var(--bg-surface)',
+                          color: status.type === 'CURRENT' ? '#10b981' : status.type === 'UPCOMING' ? '#6366f1' : 'var(--text-muted)',
+                          border: `1px solid ${status.type === 'CURRENT' ? 'rgba(16,185,129,0.35)' : status.type === 'UPCOMING' ? 'rgba(99,102,241,0.35)' : 'var(--border)'}`,
+                          boxShadow: 'var(--elevation-0)',
+                        }}>
                           {status.label}
                         </span>
                       </div>
 
-                      <div className="p-3 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                      <div className="p-3 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}>
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Public Cible</span>
                         <p className="text-xs font-black" style={{ color: 'var(--text-primary)' }}>
                           {activeEventDetail.publicCible ? activeEventDetail.publicCible.replace('_', ' ') : 'Tous les cycles'}
                         </p>
                       </div>
 
-                      <div className="p-3 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                      <div className="p-3 rounded-xl border space-y-1" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-1)' }}>
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Source & Référence</span>
-                        <p className="text-xs font-black text-indigo-600 dark:text-indigo-400">
+                        <p className="text-xs font-black" style={{ color: '#6366f1' }}>
                           Arrêté MINEDU-NC RDC
                         </p>
                       </div>
@@ -1030,6 +931,15 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
       )}
 
       {/* ═══ MODAL AJOUT D'ÉVÉNEMENT ═══ */}
+      {showExportModal && (
+        <CalendarExportModal
+          events={allEvents}
+          title="Calendrier Scolaire Ecolisa"
+          anneeScolaire={`${year}-${year + 1}`}
+          onClose={() => setShowExportModal(false)}
+        />
+      )}
+
       {showModal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
           <div
@@ -1037,9 +947,9 @@ export const SchoolCalendar: React.FC<SchoolCalendarProps> = ({ events = [], def
             style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
             onClick={e => e.stopPropagation()}
           >
-            <div className="p-4 border-b flex items-center justify-between" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+            <div className="p-4 border-b flex items-center justify-between" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', boxShadow: 'var(--elevation-0)' }}>
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center border" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: '#6366f1', boxShadow: 'var(--elevation-1)' }}>
                   <CalendarIcon className="w-4 h-4" />
                 </div>
                 <div>

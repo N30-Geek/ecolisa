@@ -29,6 +29,7 @@ import {
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { convertCurrency, formatCurrency } from '../../utils/currency';
+import { canManageCashExpense } from '../../utils/permissions';
 import { CustomSelect } from '../common/CustomSelect';
 import { DatePicker } from '../common/DatePicker';
 import { NumberInput } from '../common/NumberInput';
@@ -37,6 +38,8 @@ import { PaginationBar } from '../common/PaginationBar';
 import { SortableTh } from '../common/SortableTh';
 import { showToast } from '../common/ToastNotification';
 import { Barcode128 } from './ReceiptModal';
+import { FinancialReportsGeneratorModal } from './FinancialReportsGeneratorModal';
+import { useSearchTarget } from '../../hooks/useSearchTarget';
 import type { OperationCaisse, AnneeScolaireConfig } from '../../types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 
@@ -84,15 +87,19 @@ export const CashTab: React.FC<CashTabProps> = ({ activeSchoolYear, autoOpenForm
     setYearFilter(activeYearId || '');
   }, [activeYearId]);
 
+  const currentUser = LocalDatabaseService.getCurrentUser();
+  const canCreateExpense = canManageCashExpense(currentUser?.role);
+
   useEffect(() => {
-    if (autoOpenForm) {
+    if (autoOpenForm && canCreateExpense) {
       setShowForm(true);
       onActionConsumed?.();
     }
-  }, [autoOpenForm, onActionConsumed]);
+  }, [autoOpenForm, onActionConsumed, canCreateExpense]);
 
   // State des filtres & tri
   const [search, setSearch] = useState('');
+  const { apply } = useSearchTarget('cash');
   const [typeFilter, setTypeFilter] = useState<'ENTREE' | 'SORTIE' | 'TRANSFERT' | ''>('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [modeFilter, setModeFilter] = useState('');
@@ -113,6 +120,7 @@ export const CashTab: React.FC<CashTabProps> = ({ activeSchoolYear, autoOpenForm
   // Modales & Détails
   const [showForm, setShowForm] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showDocGenerator, setShowDocGenerator] = useState(false);
   const [detailOp, setDetailOp] = useState<OperationCaisse | null>(null);
 
   // Pagination
@@ -131,6 +139,13 @@ export const CashTab: React.FC<CashTabProps> = ({ activeSchoolYear, autoOpenForm
   };
 
   useEffect(() => { load(); }, [yearFilter]);
+
+  useEffect(() => {
+    const target = apply();
+    if (target?.name) {
+      setSearch(target.name);
+    }
+  }, [apply]);
 
   // Counts pour les onglets rapides
   const counts = useMemo(() => {
@@ -269,12 +284,17 @@ export const CashTab: React.FC<CashTabProps> = ({ activeSchoolYear, autoOpenForm
           <button onClick={() => setShowExportModal(true)} className="btn-secondary flex items-center gap-2 text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer">
             <FileDown className="w-4 h-4 text-indigo-500" /> Rapport PDF
           </button>
+          <button onClick={() => setShowDocGenerator(true)} className="btn-secondary flex items-center gap-2 text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer">
+            <FileText className="w-4 h-4 text-emerald-500" /> Documents comptables
+          </button>
           <button onClick={exportCSV} className="btn-secondary flex items-center gap-2 text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer">
             <Download className="w-4 h-4 text-emerald-500" /> Exporter CSV
           </button>
-          <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 text-xs font-black px-4 py-2.5 rounded-xl shadow-lg cursor-pointer">
-            <Plus className="w-4.5 h-4.5" /> Saisir une Dépense
-          </button>
+          {canCreateExpense && (
+            <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 text-xs font-black px-4 py-2.5 rounded-xl shadow-lg cursor-pointer">
+              <Plus className="w-4.5 h-4.5" /> Saisir une Dépense
+            </button>
+          )}
         </div>
       </div>
 
@@ -562,6 +582,13 @@ export const CashTab: React.FC<CashTabProps> = ({ activeSchoolYear, autoOpenForm
           totalSorties={totalSorties}
           solde={solde}
           onClose={() => setShowExportModal(false)}
+        />
+      )}
+
+      {showDocGenerator && (
+        <FinancialReportsGeneratorModal
+          activeSchoolYear={yearFilter || activeSchoolYear}
+          onClose={() => setShowDocGenerator(false)}
         />
       )}
     </div>

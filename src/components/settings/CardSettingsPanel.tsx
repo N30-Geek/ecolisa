@@ -43,7 +43,7 @@ import {
 } from 'lucide-react';
 import { CustomSelect } from '../common/CustomSelect';
 import { CardCustomization, CardFieldOverride } from '../onboarding/OnboardingWizard';
-import { IdCardRenderer, defaultCardCustomization } from '../academic/IdCardRenderer';
+import { IdCardRenderer, defaultCardCustomization, resolveCardConfig } from '../academic/IdCardRenderer';
 import { RDCEleveCardTemplate } from '../academic/RDCEleveCardTemplate';
 import { Eleve, CodeCycle } from '../../types';
 import { ZoomIn, ZoomOut, Sparkles } from 'lucide-react';
@@ -148,6 +148,13 @@ const FIELD_LAYOUT_OPTIONS = [
   { value: 'compact', label: 'Compact', icon: Columns2 },
 ];
 
+const CARD_PRESETS: { id: NonNullable<CardCustomization['templateId']>; name: string; description: string; color: string; patch: Partial<CardCustomization> }[] = [
+  { id: 'rdc_classic', name: 'Institutionnel RDC', description: 'Format bancaire fixe, identité scolaire et repères nationaux.', color: '#0369a1', patch: { rendererModel: 'rdc_epst', cardLayout: 'landscape', cardTheme: 'light_rdc', photoShape: 'rounded', cornerRadius: 14, borderStyle: 'solid', fontFamily: 'sans' } },
+  { id: 'modern', name: 'Campus moderne', description: 'Carte paysage, lecture rapide et photo arrondie.', color: '#4338ca', patch: { rendererModel: 'custom', cardLayout: 'landscape', cardTheme: 'indigo', fieldsLayout: 'grid', photoShape: 'circle', cornerRadius: 16, borderStyle: 'solid', fontFamily: 'sans' } },
+  { id: 'prestige', name: 'Académie prestige', description: 'Portrait, tons dorés et cadre double.', color: '#b45309', patch: { rendererModel: 'custom', cardLayout: 'portrait', cardTheme: 'gold', fieldsLayout: 'list', photoShape: 'rounded', cornerRadius: 10, borderStyle: 'double', fontFamily: 'serif' } },
+  { id: 'minimal', name: 'Essentiel', description: 'Présentation sobre, sans filigrane ni décor superflu.', color: '#047857', patch: { rendererModel: 'custom', cardLayout: 'landscape', cardTheme: 'emerald', fieldsLayout: 'compact', photoShape: 'square', cornerRadius: 0, borderStyle: 'none', fontFamily: 'sans', showFiligree: false, showMiniLogos: false, showTricolor: false } },
+];
+
 export const CardSettingsPanel: React.FC<CardSettingsPanelProps> = ({
   value,
   onChange,
@@ -159,14 +166,15 @@ export const CardSettingsPanel: React.FC<CardSettingsPanelProps> = ({
   logoUrl,
   secopeCode,
 }) => {
-  const [previewModel, setPreviewModel] = useState<'rdc_epst' | 'custom'>('rdc_epst');
+  const previewModel = value.rendererModel ?? 'rdc_epst';
+  const setPreviewModel = (rendererModel: 'rdc_epst' | 'custom') => onChange({ ...value, rendererModel });
   const [previewFace, setPreviewFace] = useState<'front' | 'back'>('front');
   const [previewCycle, setPreviewCycle] = useState<CodeCycle>('PRIMAIRE');
   const [previewZoom, setPreviewZoom] = useState<number>(0.95);
   const [activeCycleTab, setActiveCycleTab] = useState<CodeCycle | null>(null);
   const [fieldSearch, setFieldSearch] = useState('');
   const [fieldDropdownOpen, setFieldDropdownOpen] = useState(false);
-  const [activeCard, setActiveCard] = useState<'general' | 'filigrane' | 'cycles'>('general');
+  const [activeCard, setActiveCard] = useState<'templates' | 'composition' | 'general' | 'filigrane' | 'cycles'>('templates');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -194,6 +202,7 @@ export const CardSettingsPanel: React.FC<CardSettingsPanelProps> = ({
   const previewStudent = useMemo(
     () => ({
       ...PREVIEW_STUDENT,
+      cycleCode: previewCycle,
       nomClasse:
         previewCycle === 'PRIMAIRE'
           ? '6ème Primaire'
@@ -222,7 +231,7 @@ export const CardSettingsPanel: React.FC<CardSettingsPanelProps> = ({
   };
 
   const getOverride = (cycle: CodeCycle): Partial<CardFieldOverride> | undefined =>
-    value.byCycle?.[cycle];
+    value.byCycle?.[cycle] as Partial<CardFieldOverride> | undefined;
 
   const isCycleEnabled = (cycle: CodeCycle) => !!getOverride(cycle);
 
@@ -852,21 +861,23 @@ export const CardSettingsPanel: React.FC<CardSettingsPanelProps> = ({
     <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 animate-fade-in h-full">
       {/* COLONNE CONFIGURATION */}
       <div className="xl:col-span-7 space-y-4 overflow-y-auto pr-1" style={{ maxHeight: 'calc(100vh - 220px)' }}>
-        <div className="flex items-center gap-3 pb-2 border-b" style={{ borderColor: 'var(--border)' }}>
-          <div className="p-2 rounded-xl bg-indigo-600/20 text-indigo-500 border border-indigo-500/30">
-            <SlidersHorizontal className="w-4 h-4" />
+        <div className="flex items-center gap-3 pb-3" style={{ borderBottom: '1px solid var(--md-sys-color-outline-variant)' }}>
+          <div className="p-2.5 rounded-2xl" style={{ background: 'var(--md-sys-color-primary-container)', color: 'var(--md-sys-color-on-primary-container)' }}>
+            <SlidersHorizontal className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-sm font-black uppercase tracking-wider text-indigo-400">Préférences de la Carte Élève</h3>
-            <p className="text-[10px] text-slate-500 font-bold">
+            <h3 className="text-lg font-black" style={{ color: 'var(--md-sys-color-on-surface)' }}>Atelier de la carte élève</h3>
+            <p className="text-xs" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
               {value.selectedFields.length} champs · {activeToolsCount} éléments actifs · {value.cardLayout === 'portrait' ? 'Portrait' : 'Paysage'}
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 p-1 rounded-xl border" style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}>
+        <div className="md3-segmented-btn w-full">
           {[
-            { id: 'general', label: 'Général', icon: LayoutTemplate },
+            { id: 'templates', label: 'Modèles', icon: Layers },
+            { id: 'composition', label: 'Composition', icon: Type },
+            { id: 'general', label: 'Mise en page', icon: LayoutTemplate },
             { id: 'filigrane', label: 'Filigrane', icon: ScanLine },
             { id: 'cycles', label: 'Par cycle', icon: GraduationCap },
           ].map((t) => {
@@ -876,9 +887,7 @@ export const CardSettingsPanel: React.FC<CardSettingsPanelProps> = ({
               <button
                 key={t.id}
                 onClick={() => setActiveCard(t.id as any)}
-                className={`flex-1 px-3 py-2 rounded-lg text-[10px] font-black flex items-center justify-center gap-1.5 transition-all ${
-                  active ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-700/20'
-                }`}
+                className={`flex items-center justify-center gap-1.5 ${active ? 'active' : ''}`}
               >
                 <Icon className="w-3.5 h-3.5" /> {t.label}
               </button>
@@ -886,6 +895,61 @@ export const CardSettingsPanel: React.FC<CardSettingsPanelProps> = ({
           })}
         </div>
 
+        {activeCard === 'templates' && <div className="space-y-4">
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Choisissez une base, adaptez sa composition puis enregistrez la carte. Vos textes, champs et exceptions par cycle sont conservés.</p>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {CARD_PRESETS.map(preset => {
+              const active = value.templateId === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => updateValue({ showFiligree: true, showMiniLogos: true, showTricolor: true, ...preset.patch, templateId: preset.id })}
+                  className={`text-left p-4 rounded-2xl border space-y-3 hover:shadow-md transition-all ${active ? 'border-transparent' : ''}`}
+                  style={{
+                    background: active ? 'var(--md-sys-color-primary-container)' : 'var(--md-sys-color-surface-container-low)',
+                    borderColor: active ? 'transparent' : 'var(--md-sys-color-outline)',
+                    color: active ? 'var(--md-sys-color-on-primary-container)' : 'var(--md-sys-color-on-surface)',
+                  }}
+                >
+                  <div aria-hidden="true" className="rounded-lg border bg-white p-3 space-y-2 h-24" style={{ borderColor: preset.color }}>
+                    <div className="h-2 w-3/4 rounded" style={{ background: preset.color }} />
+                    <div className="flex gap-3">
+                      <div className="w-9 h-11 rounded bg-slate-100" />
+                      <div className="flex-1 space-y-2 pt-1">
+                        <div className="h-1 bg-slate-200 rounded" />
+                        <div className="h-1 bg-slate-200 rounded w-2/3" />
+                        <div className="h-1 bg-slate-200 rounded" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="font-semibold text-sm">{preset.name}</div>
+                  <p className="text-xs leading-relaxed" style={{ color: active ? 'var(--md-sys-color-on-primary-container)' : 'var(--md-sys-color-on-surface-variant)' }}>{preset.description}</p>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Le modèle RDC conserve son format bancaire et ses champs fixes. Les trois autres modèles permettent la mise en page et la sélection des champs.</p>
+        </div>}
+        {activeCard === 'composition' && <div className="space-y-5 p-4 border rounded-2xl" style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}>
+          <h4 className="font-semibold">En-tête, pied de page et formes</h4>
+          {([
+            ['headerTitle', 'Première ligne de l’en-tête', 80],
+            ['headerSubtitle', 'Sous-titre institutionnel', 100],
+            ['footerText', 'Pied de carte', 100],
+          ] as const).map(([key, label, max]) => <label key={key} className="block text-sm space-y-2"><span>{label}</span><input value={value[key] ?? defaultCardCustomization[key] ?? ''} maxLength={max} onChange={e => updateValue({ [key]: e.target.value })} className="w-full px-3 py-2 rounded-xl border" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} /></label>)}
+          <div className="grid sm:grid-cols-2 gap-4">
+            {([
+              ['photoShape', 'Forme de la photo', [['square', 'Carrée'], ['rounded', 'Arrondie'], ['circle', 'Ovale']]],
+              ['borderStyle', 'Cadre', [['none', 'Sans cadre'], ['solid', 'Simple'], ['double', 'Double']]],
+              ['fontFamily', 'Typographie', [['sans', 'Sans empattement'], ['serif', 'Classique'], ['mono', 'Monospace']]],
+            ] as const).map(([key, label, options]) => <label key={key} className="text-sm space-y-2"><span>{label}</span><select value={value[key] ?? defaultCardCustomization[key]} onChange={e => updateValue({ [key]: e.target.value })} className="w-full p-2 rounded-xl border" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>{options.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>)}
+            <label className="text-sm space-y-2"><span>Arrondi des coins : {value.cornerRadius ?? 14} px</span><input type="range" min={0} max={24} value={value.cornerRadius ?? 14} onChange={e => updateValue({ cornerRadius: Number(e.target.value) })} className="w-full" /></label>
+            {([['headerBgColor', 'Fond de l’en-tête'], ['cardBgColor', 'Fond de la carte'], ['borderColor', 'Couleur du cadre']] as const).map(([key, label]) => <label key={key} className="flex items-center justify-between text-sm gap-3"><span>{label}</span><input type="color" aria-label={label} value={value[key] || (key === 'borderColor' ? '#cbd5e1' : '#ffffff')} onChange={e => updateValue({ [key]: e.target.value })} /></label>)}
+          </div>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Les réglages globaux sont hérités par les cycles sans exception. Le nom et les coordonnées de l’école proviennent du profil de l’établissement.</p>
+        </div>}
         {activeCard === 'general' && renderGeneralPanel()}
         {activeCard === 'filigrane' && renderFiligranePanel()}
         {activeCard === 'cycles' && renderCyclesPanel()}
@@ -893,7 +957,7 @@ export const CardSettingsPanel: React.FC<CardSettingsPanelProps> = ({
         <div className="flex items-center gap-2 pt-2">
           <button
             onClick={() => onChange(defaultCardCustomization)}
-            className="px-3 py-2 rounded-xl text-[10px] font-black text-slate-400 border border-slate-600/40 hover:bg-slate-700/30 transition-all flex items-center gap-1.5"
+            className="md3-outlined-btn text-[10px] py-2.5 px-3"
           >
             <RefreshCw className="w-3.5 h-3.5" /> Réinitialiser
           </button>
@@ -902,81 +966,71 @@ export const CardSettingsPanel: React.FC<CardSettingsPanelProps> = ({
 
       {/* COLONNE PRÉVISUALISATION DYNAMIQUE */}
       <div className="xl:col-span-5 relative">
-        <div className="xl:sticky xl:top-4 space-y-3">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-indigo-400">
-                <Monitor className="w-4 h-4" />
-                <h3 className="text-xs font-black uppercase tracking-wider">Aperçu Live Carte</h3>
-              </div>
-
-              {/* Contrôles de Zoom */}
-              <div className="flex items-center gap-1 p-0.5 rounded-xl border bg-slate-100 dark:bg-slate-900" style={{ borderColor: 'var(--border)' }}>
-                <button
-                  onClick={() => setPreviewZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 100) / 100))}
-                  className="p-1 rounded-lg hover:bg-slate-700/20 text-slate-400"
-                  title="Zoom Arrière"
-                >
-                  <ZoomOut className="w-3.5 h-3.5" />
-                </button>
-                <span className="text-[10px] font-mono font-black text-indigo-500 px-1">
-                  {Math.round(previewZoom * 100)}%
-                </span>
-                <button
-                  onClick={() => setPreviewZoom((z) => Math.min(1.8, Math.round((z + 0.1) * 100) / 100))}
-                  className="p-1 rounded-lg hover:bg-slate-700/20 text-slate-400"
-                  title="Zoom Avant"
-                >
-                  <ZoomIn className="w-3.5 h-3.5" />
-                </button>
-              </div>
+        <div className="xl:sticky xl:top-4 space-y-3 md3-card p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+              <Monitor className="w-4 h-4" />
+              <h3 className="text-sm font-black">Aperçu live</h3>
             </div>
 
-            {/* Sélecteur de Modèle et Face */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex rounded-xl border p-0.5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                <button
-                  onClick={() => setPreviewModel('rdc_epst')}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all flex items-center gap-1 ${
-                    previewModel === 'rdc_epst' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Sparkles className="w-3 h-3" /> Modèle Officiel RDC
-                </button>
-                <button
-                  onClick={() => setPreviewModel('custom')}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${
-                    previewModel === 'custom' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Modèle Personnalisé
-                </button>
-              </div>
+            <div className="flex items-center gap-1 p-0.5 rounded-xl" style={{ background: 'var(--md-sys-color-surface-container-low)', border: '1px solid var(--md-sys-color-outline)' }}>
+              <button
+                onClick={() => setPreviewZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 100) / 100))}
+                className="p-1.5 rounded-lg transition-all"
+                style={{ color: 'var(--md-sys-color-on-surface-variant)' }}
+                title="Zoom Arrière"
+              >
+                <ZoomOut className="w-3.5 h-3.5" />
+              </button>
+              <span className="text-[10px] font-mono font-black px-1" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                {Math.round(previewZoom * 100)}%
+              </span>
+              <button
+                onClick={() => setPreviewZoom((z) => Math.min(1.8, Math.round((z + 0.1) * 100) / 100))}
+                className="p-1.5 rounded-lg transition-all"
+                style={{ color: 'var(--md-sys-color-on-surface-variant)' }}
+                title="Zoom Avant"
+              >
+                <ZoomIn className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
 
-              <div className="flex rounded-xl border p-0.5" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                <button
-                  onClick={() => setPreviewFace('front')}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${
-                    previewFace === 'front' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Recto
-                </button>
-                <button
-                  onClick={() => setPreviewFace('back')}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${
-                    previewFace === 'back' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Verso
-                </button>
-              </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="md3-segmented-btn" style={{ minWidth: 220 }}>
+              <button
+                onClick={() => setPreviewModel('rdc_epst')}
+                className={previewModel === 'rdc_epst' ? 'active' : ''}
+              >
+                <Sparkles className="w-3 h-3" /> Officiel RDC
+              </button>
+              <button
+                onClick={() => setPreviewModel('custom')}
+                className={previewModel === 'custom' ? 'active' : ''}
+              >
+                Personnalisé
+              </button>
+            </div>
+
+            <div className="md3-segmented-btn">
+              <button
+                onClick={() => setPreviewFace('front')}
+                className={previewFace === 'front' ? 'active' : ''}
+              >
+                Recto
+              </button>
+              <button
+                onClick={() => setPreviewFace('back')}
+                className={previewFace === 'back' ? 'active' : ''}
+              >
+                Verso
+              </button>
             </div>
           </div>
 
           <div
-            className="rounded-2xl border flex items-center justify-center overflow-auto p-4 transition-all"
-            style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', minHeight: '440px' }}
+            className="rounded-2xl flex items-center justify-center overflow-auto p-4 transition-all"
+            style={{ background: 'var(--md-sys-color-surface-container-low)', border: '1px solid var(--md-sys-color-outline)', minHeight: '440px' }}
           >
             <div
               className="transition-transform duration-200 ease-out flex items-center justify-center py-2"
@@ -998,7 +1052,7 @@ export const CardSettingsPanel: React.FC<CardSettingsPanelProps> = ({
             </div>
           </div>
 
-          <p className="text-[10px] text-slate-500 text-center font-medium">
+          <p className="text-[10px] text-center font-medium" style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>
             L'aperçu se met à jour en temps réel avec vos paramètres. Sceau physique et filigranes intégrés.
           </p>
         </div>

@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar, ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react';
 
 export interface CustomDatePickerProps {
@@ -26,8 +27,8 @@ const MONTHS_FR_SHORT = [
 
 const DAYS_FR = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
-const START_YEAR = 2000;
-const END_YEAR = new Date().getFullYear() + 5;
+const START_YEAR = new Date().getFullYear() - 120;
+const END_YEAR = new Date().getFullYear() + 20;
 const YEARS = Array.from({ length: END_YEAR - START_YEAR + 1 }, (_, i) => START_YEAR + i);
 
 type PanelView = 'calendar' | 'year' | 'month';
@@ -45,7 +46,9 @@ export const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [view, setView] = useState<PanelView>('calendar');
   const containerRef = useRef<HTMLDivElement>(null);
+  const popperRef = useRef<HTMLDivElement>(null);
   const yearGridRef = useRef<HTMLDivElement>(null);
+  const [popperStyle, setPopperStyle] = useState<{ top: number; left?: number; right?: number }>({ top: 0 });
 
   const initialDate = useMemo(() => {
     if (!value) return new Date();
@@ -71,7 +74,12 @@ export const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
   // Click outside to close
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        (!popperRef.current || !popperRef.current.contains(target))
+      ) {
         setIsOpen(false);
         setView('calendar');
       }
@@ -89,6 +97,30 @@ export const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
       }
     }
   }, [view]);
+
+  // Positionnement fixed en portail pour éviter d'être masqué par overflow-hidden
+  useLayoutEffect(() => {
+    if (!isOpen || !containerRef.current) return;
+
+    const updatePosition = () => {
+      const rect = containerRef.current!.getBoundingClientRect();
+      const spacing = 8;
+      const top = Math.min(rect.bottom + spacing, window.innerHeight - 340);
+      setPopperStyle(
+        alignRight
+          ? { top, right: Math.max(8, window.innerWidth - rect.right) }
+          : { top, left: Math.max(8, rect.left) }
+      );
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [isOpen, alignRight]);
 
   const currentYear = viewDate.getFullYear();
   const currentMonth = viewDate.getMonth();
@@ -174,9 +206,9 @@ export const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
             setView('calendar');
           }
         }}
-        className={`w-full flex items-center justify-between gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 border select-none cursor-pointer ${
+        className={`w-full h-9 flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 border select-none cursor-pointer ${
           disabled
-            ? 'opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-800'
+            ? 'opacity-50 cursor-not-allowed'
             : isOpen
             ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-500/5'
             : 'hover:border-indigo-500/40 hover:bg-indigo-500/5'
@@ -214,18 +246,12 @@ export const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
         </div>
       </div>
 
-      {/* ── Popover Calendrier Material 3 (Inspiré Image 4) ── */}
-      {isOpen && (
+      {/* ── Popover Calendrier Material 3 (portail fixed pour éviter le masquage) ── */}
+      {isOpen && createPortal(
         <div
-          className={`absolute ${alignRight ? 'right-0' : 'left-0'} top-full mt-2 rounded-2xl border z-[9999] p-4 space-y-3 animate-scale-in`}
-          style={{
-            width: 320,
-            background: 'var(--sidebar-popover-bg)',
-            borderColor: 'var(--sidebar-popover-border)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            boxShadow: 'var(--elevation-3)',
-          }}
+          ref={popperRef}
+          className="fixed rounded-2xl border z-[99999] p-4 space-y-3 animate-scale-in popover-menu"
+          style={{ width: 320, ...popperStyle, maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }}
         >
           {/* ── Raccourcis Rapides (Pill Buttons) ── */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sidebar-scroll">
@@ -439,7 +465,8 @@ export const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
               </div>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

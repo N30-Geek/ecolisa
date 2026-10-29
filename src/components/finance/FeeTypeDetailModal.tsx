@@ -8,6 +8,7 @@ import {
   Printer,
   Search,
   Receipt,
+  Pencil,
   X,
 } from 'lucide-react';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
@@ -29,6 +30,7 @@ interface FeeTypeDetailModalProps {
   classes: ClasseScolaire[];
   onClose: () => void;
   onViewReceipt?: (payment: TransactionPaiement) => void;
+  onEdit?: (feeType: TypeFraisScolaire) => void;
 }
 
 const STATUS_COLORS = {
@@ -51,6 +53,7 @@ export const FeeTypeDetailModal: React.FC<FeeTypeDetailModalProps> = ({
   classes,
   onClose,
   onViewReceipt,
+  onEdit,
 }) => {
   const { currency, exchangeRate } = useSchoolConfig();
   const fmt = (n: number, source?: string) => formatCurrency(n, currency, source || currency, exchangeRate);
@@ -348,6 +351,14 @@ export const FeeTypeDetailModal: React.FC<FeeTypeDetailModalProps> = ({
               </p>
             </div>
           </div>
+          {onEdit && (
+            <button
+              onClick={() => onEdit(feeType)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white transition-all shrink-0"
+            >
+              <Pencil className="w-3.5 h-3.5" /> Modifier ce frais
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

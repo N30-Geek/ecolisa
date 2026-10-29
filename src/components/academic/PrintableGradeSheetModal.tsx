@@ -13,6 +13,7 @@ interface PrintableGradeSheetModalProps {
   anneeScolaire?: string;
   students: Eleve[];
   fullGradesMap?: Record<string, Record<string, number>>;
+  maxima?: { P1: number; P2: number; EX1: number; P3: number; P4: number; EX2: number };
 }
 
 export const PrintableGradeSheetModal: React.FC<PrintableGradeSheetModalProps> = ({
@@ -24,7 +25,8 @@ export const PrintableGradeSheetModal: React.FC<PrintableGradeSheetModalProps> =
   teacherName = 'MAOMBI B. Isaac Deodatus',
   anneeScolaire = '2025 - 2026',
   students,
-  fullGradesMap = {}
+  fullGradesMap = {},
+  maxima = { P1: 10, P2: 10, EX1: 20, P3: 10, P4: 10, EX2: 20 },
 }) => {
   if (!isOpen) return null;
 
@@ -181,25 +183,27 @@ export const PrintableGradeSheetModal: React.FC<PrintableGradeSheetModalProps> =
                 <th style={{ ...S.headerCellVertical }}>Tot. Pér. (4)</th>
               </tr>
 
-              {/* Ligne 4: Maxima */}
+              {/* Ligne 4: Maxima (une seule cote saisie par période dans ECOLISA,
+                  les colonnes Int.1/Int.2 restent donc vides ; le maximum
+                  complet de la période est affiché dans la colonne Tot.) */}
               <tr style={{ background: '#000', color: '#fff', fontWeight: 900 }}>
                 <td style={{ ...S.cell, color: '#fff' }}>Max.</td>
                 <td style={{ ...S.cell, textAlign: 'left', paddingLeft: '4px', color: '#fff' }}>MAXIMA DE LA BRANCHE</td>
-                <td style={{ ...S.cell, color: '#fff' }}>10</td>
-                <td style={{ ...S.cell, color: '#fff' }}>10</td>
-                <td style={{ ...S.cell, color: '#fff' }}>20</td>
-                <td style={{ ...S.cell, color: '#fff' }}>10</td>
-                <td style={{ ...S.cell, color: '#fff' }}>10</td>
-                <td style={{ ...S.cell, color: '#fff' }}>20</td>
-                <td style={{ ...S.cell, color: '#fff' }}>40</td>
-                <td style={{ ...S.cell, color: '#fff' }}>10</td>
-                <td style={{ ...S.cell, color: '#fff' }}>10</td>
-                <td style={{ ...S.cell, color: '#fff' }}>20</td>
-                <td style={{ ...S.cell, color: '#fff' }}>10</td>
-                <td style={{ ...S.cell, color: '#fff' }}>10</td>
-                <td style={{ ...S.cell, color: '#fff' }}>20</td>
-                <td style={{ ...S.cell, color: '#fff' }}>40</td>
-                <td style={{ ...S.cell, color: '#fff' }}>160</td>
+                <td style={{ ...S.cell, color: '#fff' }}></td>
+                <td style={{ ...S.cell, color: '#fff' }}></td>
+                <td style={{ ...S.cell, color: '#fff' }}>{maxima.P1}</td>
+                <td style={{ ...S.cell, color: '#fff' }}></td>
+                <td style={{ ...S.cell, color: '#fff' }}></td>
+                <td style={{ ...S.cell, color: '#fff' }}>{maxima.P2}</td>
+                <td style={{ ...S.cell, color: '#fff' }}>{maxima.P1 + maxima.P2 + maxima.EX1}</td>
+                <td style={{ ...S.cell, color: '#fff' }}></td>
+                <td style={{ ...S.cell, color: '#fff' }}></td>
+                <td style={{ ...S.cell, color: '#fff' }}>{maxima.P3}</td>
+                <td style={{ ...S.cell, color: '#fff' }}></td>
+                <td style={{ ...S.cell, color: '#fff' }}></td>
+                <td style={{ ...S.cell, color: '#fff' }}>{maxima.P4}</td>
+                <td style={{ ...S.cell, color: '#fff' }}>{maxima.P3 + maxima.P4 + maxima.EX2}</td>
+                <td style={{ ...S.cell, color: '#fff' }}>{maxima.P1 + maxima.P2 + maxima.EX1 + maxima.P3 + maxima.P4 + maxima.EX2}</td>
               </tr>
             </thead>
             <tbody>

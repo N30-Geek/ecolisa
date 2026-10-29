@@ -67,10 +67,10 @@ export const LeavesManager: React.FC = () => {
     try {
       const [staff, savedLeaves] = await Promise.all([
         LocalDatabaseService.getStaff(),
-        LocalDatabaseService.getConfig('staff_leaves') || [],
+        LocalDatabaseService.getConfig('staff_leaves'),
       ]);
       setStaffList(staff);
-      setLeaves(savedLeaves);
+      setLeaves(savedLeaves || []);
       if (staff.length > 0 && !newLeave.staffId) {
         setNewLeave((prev) => ({ ...prev, staffId: staff[0].id }));
       }

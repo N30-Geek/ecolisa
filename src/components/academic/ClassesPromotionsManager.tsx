@@ -37,6 +37,7 @@ import { LocalDatabaseService } from '../../services/localDatabase';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { Pagination } from '../common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
+import { useSearchTarget } from '../../hooks/useSearchTarget';
 import { ClassFormModal } from './ClassFormModal';
 import { RoomFormModal } from './RoomFormModal';
 import { BulkAddClassesModal } from './BulkAddClassesModal';
@@ -175,6 +176,8 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [isPromoting, setIsPromoting] = useState(false);
 
+  const { apply } = useSearchTarget('classes');
+
   // Chargement des données
   const [assignedClasses, setAssignedClasses] = useState<string[] | null>(null);
 
@@ -219,6 +222,14 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    const target = apply();
+    if (target?.name) {
+      setSearchQuery(target.name);
+      setActiveTab('promotions');
+    }
+  }, [apply]);
 
   // Calcul du nombre réel d'élèves par classe
   const studentCountByClass = useMemo(() => {
@@ -1012,63 +1023,84 @@ export const ClassesPromotionsManager: React.FC<ClassesPromotionsManagerProps> =
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sallesPagination.paginated.map(s => (
-              <div
-                key={s.id}
-                className="p-5 rounded-2xl border-0 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 space-y-3.5"
-                style={{ background: 'var(--bg-surface)' }}
+          {sallesPagination.paginated.length === 0 ? (
+            <div className="p-12 text-center rounded-2xl border space-y-3" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+              <Building className="w-12 h-12 text-slate-400 mx-auto" />
+              <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Aucune salle physique enregistrée</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                Ajoutez les salles, amphithéâtres et locaux de votre établissement pour les affecter aux classes.
+              </p>
+              <button
+                onClick={() => {
+                  setEditingRoom(null);
+                  setIsRoomModalOpen(true);
+                }}
+                className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-md shadow-indigo-500/25 cursor-pointer"
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] font-black px-2.5 py-0.5 rounded bg-indigo-500/15 text-indigo-700 dark:text-indigo-300">
-                    {s.codeSalle}
-                  </span>
-                  <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${s.statut === 'DISPONIBLE' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-amber-500/15 text-amber-600'}`}>
-                    {s.statut}
-                  </span>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{s.nomSalle}</h4>
-                  <p className="text-xs text-slate-400 font-medium mt-0.5">{s.batiment || 'Bâtiment Principal'}</p>
-                </div>
-
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800/40 flex justify-between text-xs font-bold">
-                  <span className="text-slate-500 dark:text-slate-400">Capacité :</span>
-                  <span className="text-indigo-600 dark:text-indigo-400">{s.capacite} places assises</span>
-                </div>
-
-                <div className="pt-2 flex justify-end gap-1.5">
-                  <button
-                    onClick={() => {
-                      setEditingRoom(s);
-                      setIsRoomModalOpen(true);
-                    }}
-                    className="p-2 rounded-xl text-slate-600 dark:text-slate-300 shadow-xs hover:shadow-md hover:bg-slate-500/10 active:scale-[0.95] transition-all duration-200 cursor-pointer"
+                <Plus className="w-4 h-4" /> Ajouter une Salle
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {sallesPagination.paginated.map(s => (
+                  <div
+                    key={s.id}
+                    className="p-5 rounded-2xl border-0 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 space-y-3.5"
+                    style={{ background: 'var(--bg-surface)' }}
                   >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setDeleteRoomId(s.id)}
-                    className="p-2 rounded-xl text-rose-600 dark:text-rose-400 shadow-xs hover:shadow-md hover:bg-rose-500/10 active:scale-[0.95] transition-all duration-200 cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] font-black px-2.5 py-0.5 rounded bg-indigo-500/15 text-indigo-700 dark:text-indigo-300">
+                        {s.codeSalle}
+                      </span>
+                      <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${s.statut === 'DISPONIBLE' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-amber-500/15 text-amber-600'}`}>
+                        {s.statut}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{s.nomSalle}</h4>
+                      <p className="text-xs text-slate-400 font-medium mt-0.5">{s.batiment || 'Bâtiment Principal'}</p>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800/40 flex justify-between text-xs font-bold">
+                      <span className="text-slate-500 dark:text-slate-400">Capacité :</span>
+                      <span className="text-indigo-600 dark:text-indigo-400">{s.capacite} places assises</span>
+                    </div>
+
+                    <div className="pt-2 flex justify-end gap-1.5">
+                      <button
+                        onClick={() => {
+                          setEditingRoom(s);
+                          setIsRoomModalOpen(true);
+                        }}
+                        className="p-2 rounded-xl text-slate-600 dark:text-slate-300 shadow-xs hover:shadow-md hover:bg-slate-500/10 active:scale-[0.95] transition-all duration-200 cursor-pointer"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteRoomId(s.id)}
+                        className="p-2 rounded-xl text-rose-600 dark:text-rose-400 shadow-xs hover:shadow-md hover:bg-rose-500/10 active:scale-[0.95] transition-all duration-200 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          {!loading && filteredSalles.length > 0 && (
-            <Pagination
-              currentPage={sallesPagination.page}
-              totalPages={sallesPagination.totalPages}
-              total={sallesPagination.total}
-              pageSize={sallesPagination.pageSize}
-              start={sallesPagination.start}
-              end={sallesPagination.end}
-              onPageChange={sallesPagination.setPage}
-              onPageSizeChange={sallesPagination.setPageSize}
-            />
+              {!loading && filteredSalles.length > 0 && (
+                <Pagination
+                  currentPage={sallesPagination.page}
+                  totalPages={sallesPagination.totalPages}
+                  total={sallesPagination.total}
+                  pageSize={sallesPagination.pageSize}
+                  start={sallesPagination.start}
+                  end={sallesPagination.end}
+                  onPageChange={sallesPagination.setPage}
+                  onPageSizeChange={sallesPagination.setPageSize}
+                />
+              )}
+            </>
           )}
         </div>
       )}

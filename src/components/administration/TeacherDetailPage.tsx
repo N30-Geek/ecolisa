@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Pencil, FileText, QrCode, User, BookOpen, Clock, DollarSign,
-  Folder, Phone, Mail, MapPin, Calendar, Hash, Award, Check, RotateCw, Eye, EyeOff, ShieldCheck, Download, School, Printer, Lock, Key, ZoomIn, ZoomOut, X,
-  UserPlus, MessageSquare, KeyRound, AlertCircle, ShieldAlert, Briefcase, Users, UserCheck, GraduationCap, Baby, Layers, Zap, CheckCircle2, TrendingUp
+  Folder, Phone, Mail, MapPin, Calendar, Hash, Award, Check, RotateCw, ShieldCheck, Download, School, Printer, ZoomIn, ZoomOut, X, Eye,
+  UserPlus, MessageSquare, AlertCircle, ShieldAlert, Briefcase, Users, UserCheck, GraduationCap, Baby, Layers, Zap, CheckCircle2, TrendingUp
 } from 'lucide-react';
-import { MembrePersonnel, DocumentScolaire, UserAccount, FichePaie } from '../../types';
+import { MembrePersonnel, DocumentScolaire, UserAccount, FichePaie, ScheduleSlot } from '../../types';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { formatCurrency } from '../../utils/currency';
@@ -26,7 +26,7 @@ const formatBytes = (bytes = 0) => {
 interface TeacherDetailPageProps {
   teacher: MembrePersonnel;
   onBack: () => void;
-  onEdit: (teacher: MembrePersonnel) => void;
+  onEdit?: (teacher: MembrePersonnel) => void;
   onUpdate?: (teacher: MembrePersonnel) => void;
 }
 
@@ -51,15 +51,29 @@ const cardStyle = {
   borderColor: 'var(--border)',
 };
 
+const InfoRow: React.FC<{ label: string; value: React.ReactNode; hint?: string; mono?: boolean }> = ({ label, value, hint, mono }) => (
+  <div className="flex items-center justify-between p-2.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+    <span className="text-[10.5px] font-medium" style={{ color: 'var(--text-secondary)' }}>{label}</span>
+    <div className="text-right">
+      <span className={`text-xs font-semibold ${mono ? 'font-mono' : ''}`} style={{ color: 'var(--text-primary)' }}>{value}</span>
+      {hint && <p className="text-[9.5px]" style={{ color: 'var(--text-secondary)' }}>{hint}</p>}
+    </div>
+  </div>
+);
+
 const gradeLabel: Record<string, string> = {
   DOCTEUR: 'Docteur (PhD)', DES: 'DES / Master', LICENCIE: 'Licencié (L2)',
   AGREGE: 'Agrégé EPST', GRADUAT: 'Gradué (L1)', AUTRE: 'Autre',
 };
 
+const DAYS_OF_WEEK = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+
 const roleLabel: Record<string, string> = {
   ENSEIGNANT: 'Enseignant / Professeur', COMPTABLE: 'Comptable / Intendant',
-  PREFET: 'Préfet des Études', SURVEILLANT: 'Directeur de Discipline',
-  DE: 'Directeur des Études', ADMIN: 'Personnel Administratif',
+  PREFET: 'Préfet des Études', PREFET_DIRECTEUR: 'Préfet des Études',
+  DIRECTEUR_ECOLE: 'Directeur d’école (P/M)', SURVEILLANT: 'Directeur de Discipline',
+  DE: 'Directeur des Études', DIRECTEUR_ETUDES: 'Directeur des Études',
+  ADMIN: 'Personnel Administratif', SECRETAIRE: 'Secrétaire', INTENDANT: 'Intendant',
   PROMOTEUR_ADMIN: 'Promoteur & Admin',
 };
 
@@ -71,7 +85,8 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
 }) => {
   const [teacher, setTeacher] = useState<MembrePersonnel>(initialTeacher);
   const { config, currency } = useSchoolConfig();
-  const [activeTab, setActiveTab] = useState<'identity' | 'classes' | 'payroll' | 'documents'>('identity');
+  const [activeTab, setActiveTab] = useState<'identity' | 'classes' | 'payroll' | 'documents' | 'schedule'>('identity');
+  const [teacherSchedule, setTeacherSchedule] = useState<ScheduleSlot[]>([]);
   const [cardPreviewFace, setCardPreviewFace] = useState<'front' | 'back'>('front');
   const [cardModalOpen, setCardModalOpen] = useState(false);
   const [docsModalOpen, setDocsModalOpen] = useState(false);
@@ -88,15 +103,9 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
   const [allUsers, setAllUsers] = useState<UserAccount[]>([]);
   const [allStaff, setAllStaff] = useState<MembrePersonnel[]>([]);
 
-  // États Zoom Avatar Lightbox & Authentification Mot de passe
+  // États Zoom Avatar Lightbox
   const [zoomAvatarOpen, setZoomAvatarOpen] = useState(false);
   const [avatarZoomScale, setAvatarZoomScale] = useState(1);
-  const [isPasswordRevealed, setIsPasswordRevealed] = useState(false);
-  const [authAdminModalOpen, setAuthAdminModalOpen] = useState(false);
-  const [adminPasswordInput, setAdminPasswordInput] = useState('');
-  const [adminAuthError, setAdminAuthError] = useState<string | null>(null);
-  const [adminAuthSubmitting, setAdminAuthSubmitting] = useState(false);
-  const [showTypedAdminPassword, setShowTypedAdminPassword] = useState(false);
 
   // Synchronisation avec les props
   useEffect(() => {
@@ -106,18 +115,20 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
   const loadData = async () => {
     setUserAccountLoading(true);
     try {
-      const [acc, users, staff, docs, fiches] = await Promise.all([
+      const [acc, users, staff, docs, fiches, schedule] = await Promise.all([
         LocalDatabaseService.getUserByStaff(teacher),
         LocalDatabaseService.getUsers(),
         LocalDatabaseService.getStaff().catch(() => []),
         LocalDatabaseService.getStaffDocuments(teacher.id).catch(() => []),
         LocalDatabaseService.getFichesPaie({ staffId: teacher.id }).catch(() => []),
+        LocalDatabaseService.getSchedules({ teacherId: teacher.id }).catch(() => []),
       ]);
       setUserAccount(acc);
       setAllUsers(users);
       setAllStaff(staff);
       setStaffDocs(docs || []);
       setStaffFiches(fiches || []);
+      setTeacherSchedule(schedule || []);
       
       const fresh = staff.find(s => s.id === teacher.id);
       if (fresh) setTeacher(fresh);
@@ -129,30 +140,6 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
   useEffect(() => {
     loadData();
   }, [teacher.id, docsModalOpen, activeTab]);
-
-  const handleVerifyAdminPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!adminPasswordInput.trim()) {
-      setAdminAuthError('Veuillez saisir votre mot de passe ou PIN d’administration.');
-      return;
-    }
-    setAdminAuthSubmitting(true);
-    setAdminAuthError(null);
-    try {
-      const isValid = await LocalDatabaseService.verifyAdminPassword(adminPasswordInput);
-      if (isValid) {
-        setIsPasswordRevealed(true);
-        setAuthAdminModalOpen(false);
-        setAdminPasswordInput('');
-      } else {
-        setAdminAuthError('Mot de passe ou PIN Administrateur incorrect. Accès refusé.');
-      }
-    } catch (err) {
-      setAdminAuthError('Erreur de vérification du mot de passe admin.');
-    } finally {
-      setAdminAuthSubmitting(false);
-    }
-  };
 
   const isTauxHoraire = teacher.modeRemuneration === 'TAUX_HORAIRE' || teacher.modeRemuneration === 'MIXTE';
   const volumeHebdo = teacher.volumeHoraireHebdo || 18;
@@ -204,6 +191,7 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
             <span>Affecter Cours & Titularisation</span>
           </button>
 
+          {onEdit && (
           <button
             onClick={() => onEdit(teacher)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold text-white shadow-md shadow-amber-500/20 cursor-pointer transition-all hover:bg-amber-600 active:scale-95"
@@ -214,10 +202,11 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
               {teacher.role === 'ENSEIGNANT' ? 'Modifier Dossier Enseignant'
                 : (teacher.role === 'PROMOTEUR_ADMIN' || teacher.role === 'ADMIN') ? 'Modifier Dossier Admin'
                 : (teacher.role === 'COMPTABLE' || teacher.role === 'INTENDANT') ? 'Modifier Dossier Intendance'
-                : (teacher.role === 'PREFET' || teacher.role === 'PREFET_DIRECTEUR' || teacher.role === 'DE' || teacher.role === 'DIRECTEUR_ETUDES') ? 'Modifier Dossier Direction'
+                : (teacher.role === 'PREFET' || teacher.role === 'PREFET_DIRECTEUR' || teacher.role === 'DIRECTEUR_ECOLE' || teacher.role === 'DE' || teacher.role === 'DIRECTEUR_ETUDES' || teacher.role === 'DIRECTEUR_DISCIPLINE' || teacher.role === 'CENSEUR' || teacher.role === 'SECRETAIRE') ? 'Modifier Dossier Direction'
                 : 'Modifier Dossier Personnel'}
             </span>
           </button>
+          )}
 
           <button
             onClick={() => setFullFileModalOpen(true)}
@@ -344,6 +333,7 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
             {[
               { id: 'identity', label: 'Identité & Origine RDC', icon: User },
               { id: 'classes', label: 'Contrat & Affectations', icon: BookOpen },
+              { id: 'schedule', label: 'Horaires & Cours', icon: Calendar },
               { id: 'payroll', label: 'Taux Horaire & Paie', icon: Clock },
               { id: 'documents', label: 'Dossier & Documents', icon: Folder },
             ].map(t => {
@@ -508,7 +498,7 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
           {/* TAB 2 : CONTRAT & AFFECTATIONS (adaptatif selon rôle/cycle) */}
           {activeTab === 'classes' && (() => {
             const isAdminPersonnel = ['PREFET', 'DE', 'SURVEILLANT', 'COMPTABLE', 'ADMIN', 'PROMOTEUR_ADMIN',
-              'PREFET_DIRECTEUR', 'DIRECTEUR_ETUDES', 'DIRECTEUR_DISCIPLINE', 'SECRETAIRE', 'INTENDANT'].includes(teacher.role || '');
+              'PREFET_DIRECTEUR', 'DIRECTEUR_ECOLE', 'DIRECTEUR_ETUDES', 'DIRECTEUR_DISCIPLINE', 'SECRETAIRE', 'INTENDANT'].includes(teacher.role || '');
             const isPrimMat = teacher.cyclePrincipal === 'MATERNELLE' || teacher.cyclePrincipal === 'PRIMAIRE';
 
             // ── Restructurer les cours en tableau { matiere, classe } ──
@@ -638,7 +628,7 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
                           {(teacher.coursAttribues || teacher.disciplines || (
                             teacher.cyclePrincipal === 'PRIMAIRE'
                               ? ['Français (Lecture & Écriture)', 'Mathématiques / Calcul', 'Éveil Scientifique & Milieu', 'Éducation Civique & Morale', 'Calligraphie & Travaux Manuels', 'Éducation Physique']
-                              : ['Activités d\'Éveil & Psychomotricité', 'Langage & Communication Oral', 'Sensorialité & Formes', 'Dessin, Coloriage & Découpage', 'Chants & Rondes']
+                              : ['Activités sensorielles', 'Activités musicales', 'Activités psychomotrices', 'Activités physiques', "Activités d'arts plastiques", 'Activités de comportement', 'Activités de vie pratique', 'Activités de promotion de la santé', 'Activités exploratoires', 'Activités de langage', 'Activités mathématiques', 'Activités libres']
                           )).map(m => (
                             <span key={m} className="px-3 py-1.5 rounded-xl text-xs font-black bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 flex items-center gap-1.5">
                               <Check className="w-3 h-3" /> {m}
@@ -977,6 +967,63 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
             </div>
           )}
 
+          {/* TAB 3B : HORAIRES & COURS */}
+          {activeTab === 'schedule' && (
+            <div className="space-y-5 animate-fade-in">
+              <div className="rounded-2xl border p-6 space-y-4" style={cardStyle}>
+                <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-2">
+                    <Calendar className="w-4 h-4" /> Emploi du temps & Prochains cours
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-black border border-indigo-500/20">
+                    {teacherSchedule.length} créneau(s)
+                  </span>
+                </div>
+
+                {teacherSchedule.length === 0 ? (
+                  <div className="p-6 text-center rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <Clock className="w-12 h-12 text-slate-400 mx-auto mb-2" />
+                    <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Aucun horaire attribué</p>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto">
+                      Affectez des cours dans le module Planning pour voir ici les salles, jours et heures de l'enseignant.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr style={{ background: 'var(--bg-sunken)' }}>
+                          <th className="text-left px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Jour</th>
+                          <th className="text-left px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Horaire</th>
+                          <th className="text-left px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Matière</th>
+                          <th className="text-left px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Classe</th>
+                          <th className="text-left px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Salle</th>
+                          <th className="text-left px-4 py-2.5 font-black uppercase text-[10px] text-slate-400">Vacation</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...teacherSchedule].sort((a, b) => DAYS_OF_WEEK.indexOf(a.jour) - DAYS_OF_WEEK.indexOf(b.jour) || a.heureDebut.localeCompare(b.heureDebut)).map(s => (
+                          <tr key={s.id} className="border-t" style={{ borderColor: 'var(--border)' }}>
+                            <td className="px-4 py-2.5 font-bold">{s.jour}</td>
+                            <td className="px-4 py-2.5 font-mono">{s.heureDebut} - {s.heureFin}</td>
+                            <td className="px-4 py-2.5 font-bold text-indigo-600 dark:text-indigo-400">{s.nomMatiere}</td>
+                            <td className="px-4 py-2.5">{s.nomClasse}</td>
+                            <td className="px-4 py-2.5">{s.salle || '—'}</td>
+                            <td className="px-4 py-2.5">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${s.vacation === 'MATIN' ? 'bg-amber-500/15 text-amber-700' : s.vacation === 'APRES_MIDI' ? 'bg-indigo-500/15 text-indigo-700' : 'bg-purple-500/15 text-purple-700'}`}>
+                                {s.vacation}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* TAB 4 : DOSSIER & DOCUMENTS */}
           {activeTab === 'documents' && (
             <div className="space-y-5 animate-fade-in">
@@ -1149,85 +1196,50 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
           </div>
 
           {/* 3. Identifiants de Connexion & Rôle Système (Pour Administrateurs) */}
-          <div className="rounded-2xl border p-5 space-y-3.5 shadow-md bg-gradient-to-br from-indigo-500/5 via-slate-900/5 to-transparent" style={cardStyle}>
+          <div className="rounded-2xl border p-5 space-y-3.5 shadow-xs" style={cardStyle}>
             <div className="flex items-center justify-between border-b pb-2.5" style={{ borderColor: 'var(--border)' }}>
-              <h3 className="text-xs font-black uppercase tracking-wider text-indigo-500 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-500" /> COMPTE D'ACCÈS SYSTÈME & IDENTIFIANTS
+              <h3 className="text-sm font-bold flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                <ShieldCheck className="w-4 h-4 text-indigo-500" />
+                <span>Compte d'accès</span>
               </h3>
               {userAccount ? (
-                <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
-                  userAccount.statut === 'ACTIF' 
-                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' 
-                    : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                  userAccount.statut === 'ACTIF'
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
                 }`}>
-                  {userAccount.statut === 'ACTIF' ? 'Compte Actif' : 'Compte Suspendu'}
+                  {userAccount.statut === 'ACTIF' ? 'Actif' : 'Suspendu'}
                 </span>
               ) : (
-                <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-slate-500/15 text-slate-500 border border-slate-500/30">
-                  Aucun Compte
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-500/10 text-slate-500 border border-slate-500/20">
+                  Aucun compte
                 </span>
               )}
             </div>
 
             {userAccount ? (
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center justify-between p-2.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <span className="text-slate-400 font-bold text-[10.5px]">Identifiant / E-mail :</span>
-                  <span className="font-mono font-black text-indigo-600 dark:text-indigo-400">{userAccount.email}</span>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <span className="text-slate-400 font-bold text-[10.5px]">Rôle Système :</span>
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400">{getRoleInfo(userAccount.role).label}</span>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <span className="text-slate-400 font-bold text-[10.5px]">Mot de Passe Sécurisé :</span>
-                  <div className="flex items-center gap-2">
-                    <span className={`font-mono font-bold ${isPasswordRevealed ? 'text-amber-600 dark:text-amber-400 font-black' : 'text-slate-500'}`}>
-                      {isPasswordRevealed ? ((userAccount as any).password || (userAccount as any).generatedPassword || (userAccount as any).motDePasse || 'Mot de passe configuré') : '•••••••• (Protégé)'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (isPasswordRevealed) {
-                          setIsPasswordRevealed(false);
-                        } else {
-                          setAdminPasswordInput('');
-                          setAdminAuthError(null);
-                          setAuthAdminModalOpen(true);
-                        }
-                      }}
-                      className="p-1 rounded-lg hover:bg-slate-500/10 text-indigo-500 transition-colors cursor-pointer"
-                      title={isPasswordRevealed ? "Masquer le mot de passe" : "Afficher le mot de passe (Vérification admin)"}
-                    >
-                      {isPasswordRevealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4 text-indigo-500" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-                  <span className="text-slate-400 font-bold text-[10.5px]">Code PIN de Secours :</span>
-                  <span className="font-mono font-bold text-slate-400 tracking-widest">
-                    {userAccount.pinCode ? (isPasswordRevealed ? userAccount.pinCode : '••••••') : 'Non configuré'}
-                  </span>
-                </div>
+              <div className="space-y-3 text-xs">
+                <InfoRow label="E-mail" value={userAccount.email} mono />
+                <InfoRow label="Rôle" value={getRoleInfo(userAccount.role).label} />
+                <InfoRow
+                  label="Mot de passe"
+                  value="Sécurisé (hashé)"
+                  hint="Modifiez-le via le bouton ci-dessous"
+                />
 
                 {userAccount.derniereConnexion && (
-                  <div className="flex items-center justify-between p-2 rounded-xl text-[10.5px] text-slate-400">
-                    <span>Dernière connexion :</span>
-                    <span className="font-semibold text-slate-300">
-                      {new Date(userAccount.derniereConnexion).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </span>
-                  </div>
+                  <InfoRow
+                    label="Dernière connexion"
+                    value={new Date(userAccount.derniereConnexion).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  />
                 )}
 
-                {/* Boutons d'action pour le compte existant */}
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <button
                     type="button"
                     onClick={() => setUserModalOpen(true)}
-                    className="py-2 px-3 rounded-xl bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    className="py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                   >
                     <Pencil className="w-3.5 h-3.5" />
                     <span>Modifier Accès</span>
@@ -1237,35 +1249,34 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
                     type="button"
                     onClick={() => {
                       const role = getRoleInfo(userAccount.role);
-                      const pwd = (userAccount as any).password || (userAccount as any).generatedPassword || (userAccount as any).motDePasse || '';
-                      const msg = `Bonjour ${userAccount.prenom || ''} ${userAccount.nom},\n\nVos accès officiels ECOLISA :\n• E-mail : ${userAccount.email}\n• Mot de passe : ${pwd || '[Mot de passe configuré]'}\n• Code PIN : ${userAccount.pinCode || 'Non configuré'}\n• Rôle : ${role.label}\n\nVeuillez conserver ces informations en lieu sûr.`;
+                      const msg = `Bonjour ${userAccount.prenom || ''} ${userAccount.nom},\n\nVos accès ECOLISA :\n• E-mail : ${userAccount.email}\n• Rôle : ${role.label}\n\nConservez ces informations en lieu sûr.`;
                       const rawPhone = (userAccount.telephone || teacher.telephone || '').replace(/[^0-9]/g, '');
                       const phone = rawPhone.startsWith('243') ? rawPhone : (rawPhone ? `243${rawPhone.replace(/^0/, '')}` : '');
                       const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
                       window.open(url, '_blank');
                     }}
-                    className="py-2 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    className="py-2 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Envoyer WhatsApp</span>
+                    <span>WhatsApp</span>
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="space-y-3 p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+              <div className="space-y-3 p-4 rounded-xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                 <div className="flex items-start gap-2.5">
                   <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
-                    Cet enseignant ne dispose pas encore de compte d'accès pour se connecter au portail ECOLISA.
+                  <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                    Aucun compte d'accès. Créez-le manuellement avec un mot de passe.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setUserModalOpen(true)}
-                  className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer border border-indigo-500/30"
+                  className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
                   <UserPlus className="w-4 h-4 text-white" />
-                  <span>Créer un Compte d'Accès pour cet Enseignant</span>
+                  <span>Créer un compte</span>
                 </button>
               </div>
             )}
@@ -1280,14 +1291,16 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
                 <span>Gérer les Affectations & Titularisations</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => onEdit(teacher)}
-                className="w-full py-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-extrabold hover:bg-amber-500/20 flex items-center justify-center gap-2 transition-colors cursor-pointer"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                <span>Modifier les Informations RH & Identité</span>
-              </button>
+              {onEdit && (
+                <button
+                  type="button"
+                  onClick={() => onEdit(teacher)}
+                  className="w-full py-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-extrabold hover:bg-amber-500/20 flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  <span>Modifier les Informations RH & Identité</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1374,98 +1387,6 @@ export const TeacherDetailPage: React.FC<TeacherDetailPageProps> = ({
             <p className="text-xs font-bold text-slate-300">
               Photo de profil officielle · {teacher.prenom} {teacher.nom}
             </p>
-          </div>
-        </div>
-      )}
-
-      {/* Modal d'Authentification Administrateur (Déverrouillage Mot de Passe) */}
-      {authAdminModalOpen && (
-        <div className="fixed inset-0 w-full h-full z-[9999] bg-slate-950/65 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-fade-in">
-          <div
-            className="w-full max-w-md rounded-3xl border p-6 space-y-5 shadow-2xl"
-            style={{
-              background: 'var(--bg-surface)',
-              borderColor: 'var(--border)',
-            }}
-          >
-            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border)' }}>
-              <div className="flex items-center gap-2">
-                <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
-                  <Lock className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black uppercase tracking-wider text-indigo-500">
-                    Confirmation Administrateur
-                  </h3>
-                  <p className="text-[11px] font-semibold text-slate-400">Authentification de Sécurité</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setAuthAdminModalOpen(false)}
-                className="p-1.5 rounded-xl hover:bg-slate-500/10 text-slate-400"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-400">
-              Pour afficher le mot de passe confidentiel de <span className="font-bold text-indigo-500">{teacher.prenom} {teacher.nom}</span>, veuillez confirmer votre mot de passe d'administration ou votre PIN Caisse/Admin.
-            </p>
-
-            {adminAuthError && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center gap-2">
-                <Key className="w-4 h-4 shrink-0" />
-                <span>{adminAuthError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleVerifyAdminPassword} className="space-y-4">
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                  Mot de Passe ou PIN Admin
-                </label>
-                <div className="relative">
-                  <input
-                    type={showTypedAdminPassword ? "text" : "password"}
-                    value={adminPasswordInput}
-                    onChange={e => setAdminPasswordInput(e.target.value)}
-                    placeholder="Saisissez votre mot de passe / PIN..."
-                    autoFocus
-                    className="w-full pl-3.5 pr-10 py-2.5 rounded-xl text-xs font-mono font-bold border outline-none focus:ring-2 focus:ring-indigo-500/30"
-                    style={{
-                      background: 'var(--bg-sunken)',
-                      borderColor: 'var(--border)',
-                      color: 'var(--text-primary)',
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowTypedAdminPassword(!showTypedAdminPassword)}
-                    className="absolute right-3 top-2.5 p-1 text-slate-400 hover:text-indigo-500 transition-colors"
-                  >
-                    {showTypedAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setAuthAdminModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-500/10 transition-colors cursor-pointer"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={adminAuthSubmitting}
-                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md shadow-indigo-500/25 flex items-center gap-2 cursor-pointer transition-all"
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>{adminAuthSubmitting ? 'Vérification...' : 'Déverrouiller et Afficher'}</span>
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

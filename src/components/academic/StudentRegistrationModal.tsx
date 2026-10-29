@@ -41,7 +41,7 @@ import {
   UserPlus,
   AlertTriangle
 } from 'lucide-react';
-import { Eleve, ClasseScolaire, AnneeScolaireConfig, FactureEleve, TransactionPaiement, TypeFraisScolaire, LigneFacture } from '../../types';
+import { Eleve, ClasseScolaire, AnneeScolaireConfig, FactureEleve, TransactionPaiement, TypeFraisScolaire, LigneFacture, OptionConfig } from '../../types';
 import type { SchoolConfig } from '../onboarding/OnboardingWizard';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
@@ -52,6 +52,9 @@ import { showToast } from '../common/ToastNotification';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { formatCurrency, convertCurrency } from '../../utils/currency';
 import { isFraisAnnexeApplicable, isFeeTypeApplicable } from '../../utils/feeFilters';
+import { EPST_SECTIONS_OPTIONS } from '../../data/referentielEpstData';
+import { normalizeOptionCode, getOptionLabel } from '../../utils/options';
+import { getNextUnpaidDueTranche } from '../../utils/feeTranches';
 import { NumberInput } from '../common/NumberInput';
 import { PhoneInput } from '../common/PhoneInput';
 import { PROVINCES_RDC } from '../../data/referentielEPST';
@@ -89,13 +92,9 @@ const CYCLE_OPTIONS: SelectOption[] = [
 
 const CYCLES_AVEC_OPTIONS = ['HUMANITES'];
 
-const OPTION_EPST_OPTIONS: SelectOption[] = [
-  { value: 'Math-Physique', label: 'Mathématique-Physique (STEM)' },
-  { value: 'Biologie-Chimie', label: 'Biologie-Chimie (SVT)' },
-  { value: 'Commerciale', label: 'Commerciale & Gestion' },
-  { value: 'Pédagogie', label: 'Pédagogie Générale' },
-  { value: 'Littéraire', label: 'Littéraire & Langues' },
-];
+const OPTION_EPST_OPTIONS: SelectOption[] = EPST_SECTIONS_OPTIONS
+  .filter(o => o.value !== 'ALL' && o.value !== 'TRONC_COMMUN')
+  .map(o => ({ value: o.value, label: o.label }));
 
 const CYCLE_LABELS: Record<string, string> = {
   MATERNELLE: 'Cycle Maternelle',
@@ -150,6 +149,11 @@ const TRANSPORT_OPTIONS: SelectOption[] = [
   { value: 'PIED', label: 'À pied' },
 ];
 
+const GROUPE_ETUDE_OPTIONS: SelectOption[] = [
+  { value: 'MATIN', label: 'Groupe du Matin' },
+  { value: 'APRES_MIDI', label: "Groupe de l'Après-midi" },
+];
+
 const LANGUE_MATERNELLE_OPTIONS: SelectOption[] = [
   { value: 'Français', label: 'Français' },
   { value: 'Lingala', label: 'Lingala' },
@@ -166,7 +170,7 @@ const getFeePriorityInfo = (ft: Partial<TypeFraisScolaire> & { nom?: string; cat
     return { priority: ft.priorite, code: `P${ft.priorite}`, label: `P${ft.priorite} - ${ft.nom || 'Frais'}`, color: '#10b981', badgeBg: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' };
   }
   const cat = String(ft.categorie || '');
-  if (ft.obligatoire || cat === 'FRAIS_INSCRIPTION' || cat === 'FRAIS_REINSCRIPTION') {
+  if (ft.obligatoire || ft.payeALInscription) {
     return { priority: 1, code: 'P1', label: 'P1 - Inscription (Obligatoire)', color: '#10b981', badgeBg: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' };
   }
   if (cat.includes('CARTE') || cat.includes('MINERVAL')) {
@@ -259,13 +263,14 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
     schoolYearId: '',
     anneeScolaire: '',
     cycleId: 'HUMANITES',
-    optionEPST: 'Math-Physique',
+    optionEPST: 'SCIENTIFIQUE',
     classId: '',
     nomClasse: '',
     regime: 'EXTERNE' as 'EXTERNE' | 'INTERNE' | 'SEMI_INTERNE',
     langue: 'Français',
     salleId: '',
     salle: '',
+    groupeEtude: 'MATIN' as 'MATIN' | 'APRES_MIDI',
 
     // Étape 3 : Tuteurs & Parents
     nomPere: '',
@@ -347,6 +352,14 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
         ? years.find(y => y.id === defaultSchoolYearId)
         : (years.find(y => y.statut === 'EN_COURS') || years[0]);
       const firstClass = classes.find(c => c.schoolYearId === activeYear?.id) || classes[0];
+      const cycleId = (firstClass?.cycleId as any) || 'HUMANITES';
+      const availableOpts = (activeYear?.options || []).filter(o => o.cycleCode === cycleId);
+      const classOption = normalizeOptionCode(firstClass?.optionCode);
+      const firstOption = (cycleId === 'HUMANITES'
+        ? (classOption && classOption !== 'TRONC_COMMUN'
+            ? classOption
+            : availableOpts[0]?.code || OPTION_EPST_OPTIONS[0]?.value)
+        : 'TRONC_COMMUN');
 
       setFormData(prev => ({
         ...prev,
@@ -357,7 +370,8 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
         nomClasse: firstClass?.nom || '',
         salleId: '',
         salle: firstClass?.salle || '',
-        cycleId: (firstClass?.cycleId as any) || 'HUMANITES',
+        cycleId,
+        optionEPST: firstOption,
         montantInscription: firstClass?.fraisInscription ?? activeYear?.fraisInscription ?? 0,
         devise: (firstClass?.devise || systemCurrency) as string
       }));
@@ -446,7 +460,11 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
       });
     }
 
-    const selectedOption = CYCLES_AVEC_OPTIONS.includes(formData.cycleId) ? formData.optionEPST : 'TRONC_COMMUN';
+    const selectedOption = (() => {
+      const year = schoolYears.find(y => y.id === formData.schoolYearId) || schoolYears.find(y => y.statut === 'EN_COURS') || schoolYears[0];
+      const hasOptions = (year?.options || []).some(o => o.cycleCode === formData.cycleId);
+      return hasOptions ? formData.optionEPST : 'TRONC_COMMUN';
+    })();
     const feeContext = {
       schoolYearId: formData.schoolYearId,
       classId: formData.classId,
@@ -504,7 +522,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
   useEffect(() => {
     if (applicableFees.length > 0) {
       const auto = applicableFees
-        .filter(ft => ft.obligatoire || ft.categorie === 'FRAIS_INSCRIPTION' || ft.categorie === 'FRAIS_CARTE' || ft.categorie === 'FRAIS_CONNEXION' || ft.categorie === 'FRAIS_REINSCRIPTION')
+        .filter(ft => ft.obligatoire || ft.payeALInscription)
         .map(ft => ft.id);
       
       setSelectedFeeIds(prev => {
@@ -515,24 +533,29 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
     }
   }, [applicableFees]);
 
-  // Lignes de facture calculées
+  // Lignes de facture : une seule facture par frais, pour la prochaine tranche dûe
   const invoiceLignes: LigneFacture[] = useMemo(() => {
-    return selectedFeeIds.map(id => {
+    const activeYear = schoolYears.find(y => y.id === formData.schoolYearId) || schoolYears.find(y => y.statut === 'EN_COURS') || schoolYears[0];
+    return selectedFeeIds.reduce((acc, id) => {
       const ft = applicableFees.find(f => f.id === id);
-      const rawMontant = ft?.montant || 0;
-      const ftDevise = ft?.devise || systemCurrency;
-      const finalMontant = convertCurrency(rawMontant, ftDevise, formData.devise, exchangeRate);
-      return {
-        id: `l_${id}_${Date.now()}`,
+      if (!ft) return acc;
+      const { tranche } = getNextUnpaidDueTranche(ft, [], activeYear?.debut, activeYear?.fin, new Date(), true);
+      if (!tranche) return acc;
+      const ftDevise = tranche.devise || ft.devise || systemCurrency;
+      const finalMontant = convertCurrency(tranche.montant, ftDevise, formData.devise, exchangeRate);
+      acc.push({
+        id: `l_${id}_${tranche.id}_${Date.now()}`,
         invoiceId: '',
         feeTypeId: id,
-        nom: ft?.nom || 'Frais scolaire',
-        categorie: ft?.categorie || 'FRAIS_INSCRIPTION',
+        trancheId: tranche.id,
+        nom: tranche.nom === 'Paiement unique' ? (ft.nom || 'Frais scolaire') : `${ft.nom} — ${tranche.nom}`,
+        categorie: ft.categorie || 'FRAIS_INSCRIPTION',
         montant: finalMontant,
         devise: formData.devise,
-      };
-    });
-  }, [selectedFeeIds, applicableFees, systemCurrency, formData.devise, exchangeRate]);
+      });
+      return acc;
+    }, [] as LigneFacture[]);
+  }, [selectedFeeIds, applicableFees, schoolYears, formData.schoolYearId, formData.devise, systemCurrency, exchangeRate]);
 
   // Total calculé des frais sélectionnés
   const totalFacture = useMemo(() => {
@@ -608,9 +631,15 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
     const studentClass = classesList.find(c => c.id === initialStudent.classId);
     const studentYear = schoolYears.find(y => y.id === (studentClass?.schoolYearId || initialStudent.schoolYearId));
     const cycleId = (studentClass?.cycleId as any) || 'HUMANITES';
-    const optionEPST = CYCLES_AVEC_OPTIONS.includes(cycleId)
-      ? ((studentClass?.optionCode as any) || 'Math-Physique')
-      : 'TRONC_COMMUN';
+    const availableOpts = (studentYear?.options || []).filter(o => o.cycleCode === cycleId);
+    const studentOption = normalizeOptionCode(initialStudent.optionEPST || initialStudent.optionCode);
+    const classOption = normalizeOptionCode(studentClass?.optionCode);
+    const optionEPST = studentOption && studentOption !== 'TRONC_COMMUN'
+      ? studentOption
+      : (classOption && classOption !== 'TRONC_COMMUN'
+          ? classOption
+          : availableOpts[0]?.code
+          || (cycleId === 'HUMANITES' ? OPTION_EPST_OPTIONS[0]?.value : 'TRONC_COMMUN'));
     const fee = studentClass?.fraisInscription ?? studentYear?.fraisInscription ?? 0;
 
     setFormData(prev => ({
@@ -648,7 +677,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
       salle: initialStudent.salle || studentClass?.salle || '',
       regime: initialStudent.regime || 'EXTERNE',
       langue: initialStudent.langue || 'Français',
-      optionEPST: (studentClass?.optionCode as any) || initialStudent.optionEPST || optionEPST,
+      optionEPST: optionEPST || 'TRONC_COMMUN',
       payerMaintenant: false,
       montantInscription: fee,
       devise: (studentClass?.devise || systemCurrency) as string,
@@ -683,6 +712,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
       telephoneReferentUrgence: initialStudent.telephoneReferentUrgence || '',
       relationReferentUrgence: initialStudent.relationReferentUrgence || 'Parent',
       transportScolaire: initialStudent.transportScolaire || 'AUCUN',
+      groupeEtude: initialStudent.groupeEtude || 'MATIN',
       cantine: !!initialStudent.cantine,
       internat: !!initialStudent.internat,
       boursier: !!initialStudent.boursier,
@@ -694,9 +724,38 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
     setStep(1);
   }, [initialStudent, classesList, schoolYears, generatedRegistrationNumber, systemCurrency]);
 
-  const hasOptions = CYCLES_AVEC_OPTIONS.includes(formData.cycleId);
+  // Année scolaire active sélectionnée
+  const activeSchoolYear = useMemo(
+    () => schoolYears.find(y => y.id === formData.schoolYearId) || schoolYears.find(y => y.statut === 'EN_COURS') || schoolYears[0],
+    [schoolYears, formData.schoolYearId]
+  );
 
-  // Classes filtrées selon le cycle et l'année scolaire
+  // Options d'études configurées pour l'année et le cycle sélectionnés
+  const availableOptions = useMemo<OptionConfig[]>(() => {
+    if (!activeSchoolYear) return [];
+    const configured = (activeSchoolYear.options || []).filter(o => o.cycleCode === formData.cycleId);
+    if (configured.length > 0) return configured;
+    // Fallback sur les options EPST classiques si aucune n'est configurée
+    if (formData.cycleId !== 'HUMANITES') return [];
+    return OPTION_EPST_OPTIONS.map(o => ({
+      id: o.value,
+      code: o.value,
+      nom: o.label,
+      cycleCode: 'HUMANITES' as OptionConfig['cycleCode'],
+    }));
+  }, [activeSchoolYear, formData.cycleId]);
+
+  const cycleHasOptions = availableOptions.length > 0;
+  const optionOptions = useMemo<SelectOption[]>(
+    () => availableOptions.map(o => ({ value: o.code, label: o.nom })),
+    [availableOptions]
+  );
+
+  const hasOptions = cycleHasOptions;
+
+  // Classes filtrées selon le cycle et l'année scolaire.
+  // L'option (section) est choisie indépendamment ou déduite de la classe ;
+  // elle ne filtre pas la liste des classes pour permettre l'affectation d'abord.
   const filteredClasses = useMemo(
     () => classesList.filter(c =>
       (!formData.cycleId || c.cycleId === formData.cycleId) &&
@@ -709,6 +768,26 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
     () => filteredClasses.map(c => ({ value: c.id, label: c.nom })),
     [filteredClasses]
   );
+
+  // Sélection automatique de la première classe valide quand la liste filtrée change
+  useEffect(() => {
+    if (filteredClasses.length === 0) return;
+    if (formData.classId && filteredClasses.some(c => c.id === formData.classId)) return;
+    const first = filteredClasses[0];
+    const classOption = normalizeOptionCode(first.optionCode || first.options?.[0]);
+    const newOption = (classOption && classOption !== 'TRONC_COMMUN' && optionOptions.some(o => o.value === classOption))
+      ? classOption
+      : (formData.optionEPST || OPTION_EPST_OPTIONS[0]?.value);
+    setFormData(prev => ({
+      ...prev,
+      classId: first.id,
+      nomClasse: first.nom || '',
+      salle: first.salle || first.salles?.[0] || '',
+      salleId: '',
+      optionEPST: (newOption as any) || 'TRONC_COMMUN',
+      montantInscription: first.fraisInscription ?? prev.montantInscription,
+    }));
+  }, [filteredClasses, optionOptions, formData.classId, formData.optionEPST]);
 
   const schoolYearOptions: SelectOption[] = useMemo(
     () => schoolYears.map(y => ({ value: y.id, label: `${y.nom} — ${y.statut}` })),
@@ -878,6 +957,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
         telephoneReferentUrgence: formData.telephoneReferentUrgence,
         relationReferentUrgence: formData.relationReferentUrgence,
         transportScolaire: formData.transportScolaire,
+        groupeEtude: formData.groupeEtude,
         cantine: formData.cantine,
         internat: formData.internat,
         boursier: formData.boursier,
@@ -934,7 +1014,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
             .map(l => {
               const alloc = Math.min(l.montant, remaining);
               remaining = Math.max(0, remaining - alloc);
-              return { feeTypeId: l.feeTypeId, montant: Number(alloc.toFixed(2)) };
+              return { feeTypeId: l.feeTypeId, trancheId: l.trancheId, montant: Number(alloc.toFixed(2)) };
             })
             .filter(a => a.montant > 0.001);
 
@@ -1895,7 +1975,20 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                         value={formData.schoolYearId}
                         onChange={(val) => {
                           const y = schoolYears.find(sy => sy.id === val);
-                          setFormData({ ...formData, schoolYearId: val, anneeScolaire: y?.nom || '' });
+                          const newOptions = (y?.options || []).filter(o => o.cycleCode === formData.cycleId);
+                          const newOption = newOptions.find(o => o.code === formData.optionEPST)?.code
+                            || newOptions[0]?.code
+                            || (formData.cycleId === 'HUMANITES' ? 'Math-Physique' : 'TRONC_COMMUN');
+                          setFormData({
+                            ...formData,
+                            schoolYearId: val,
+                            anneeScolaire: y?.nom || '',
+                            optionEPST: newOption,
+                            classId: '',
+                            nomClasse: '',
+                            salleId: '',
+                            salle: '',
+                          });
                         }}
                       />
                     </div>
@@ -1908,68 +2001,86 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                         options={CYCLE_OPTIONS}
                         value={formData.cycleId}
                         onChange={(val) => {
-                          const hasOpt = CYCLES_AVEC_OPTIONS.includes(val);
+                          const cycleOptions = (activeSchoolYear?.options || []).filter(o => o.cycleCode === val);
+                          const fallbackOptions = val === 'HUMANITES' ? OPTION_EPST_OPTIONS : [];
+                          const available = cycleOptions.length > 0 ? cycleOptions : fallbackOptions.map(o => ({
+                            id: o.value, code: o.value, nom: o.label, cycleCode: 'HUMANITES' as OptionConfig['cycleCode'],
+                          }));
+                          const newOption = available.find(o => o.code === formData.optionEPST)?.code
+                            || available[0]?.code
+                            || (val === 'HUMANITES' ? 'Math-Physique' : 'TRONC_COMMUN');
                           setFormData({
                             ...formData,
                             cycleId: val as any,
-                            optionEPST: hasOpt ? formData.optionEPST : 'TRONC_COMMUN',
+                            optionEPST: newOption as any,
                             classId: '',
                             nomClasse: '',
+                            salleId: '',
+                            salle: '',
                           });
                         }}
                       />
                     </div>
                   </div>
 
+                  <div>
+                    <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                      Classe / Promotion <span className="text-rose-500">*</span>
+                    </label>
+                    <CustomSelect
+                      options={classOptions}
+                      value={formData.classId}
+                      placeholder={classOptions.length === 0 ? "Aucune classe disponible" : "Sélectionner la classe..."}
+                      onChange={(val) => {
+                        const targetClass = classesList.find(c => c.id === val);
+                        const classOption = normalizeOptionCode(targetClass?.optionCode || targetClass?.options?.[0]);
+                        const newOption = (classOption && classOption !== 'TRONC_COMMUN' && optionOptions.some(o => o.value === classOption))
+                          ? classOption
+                          : (formData.optionEPST || OPTION_EPST_OPTIONS[0]?.value);
+                        setFormData({
+                          ...formData,
+                          classId: val,
+                          nomClasse: targetClass?.nom || '',
+                          salleId: targetClass?.salle ? '' : (targetClass?.salles?.[0] ? '' : ''),
+                          salle: targetClass?.salle || targetClass?.salles?.[0] || '',
+                          optionEPST: newOption as any,
+                          montantInscription: targetClass?.fraisInscription ?? formData.montantInscription,
+                        });
+                      }}
+                    />
+                    {classOptions.length === 0 && (
+                      <p className="mt-1.5 text-[10px] font-bold text-amber-500">
+                        Aucune classe créée pour ce cycle et cette année scolaire. Veuillez créer la classe dans les paramètres.
+                      </p>
+                    )}
+                  </div>
+
                   {hasOptions && (
                     <div>
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Option / Filière d'Enseignement EPST <span className="text-rose-500">*</span>
+                        Option / Section d'Enseignement EPST <span className="text-rose-500">*</span>
                       </label>
                       <CustomSelect
-                        options={OPTION_EPST_OPTIONS}
+                        options={optionOptions}
                         value={formData.optionEPST}
                         onChange={(val) => setFormData({ ...formData, optionEPST: val })}
                       />
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Classe / Promotion <span className="text-rose-500">*</span>
-                      </label>
-                      <CustomSelect
-                        options={classOptions}
-                        value={formData.classId}
-                        onChange={(val) => {
-                          const targetClass = classesList.find(c => c.id === val);
-                          setFormData({
-                            ...formData,
-                            classId: val,
-                            nomClasse: targetClass?.nom || '',
-                            salleId: targetClass?.salle ? '' : (targetClass?.salles?.[0] ? '' : ''),
-                            salle: targetClass?.salle || targetClass?.salles?.[0] || '',
-                            montantInscription: targetClass?.fraisInscription ?? formData.montantInscription,
-                          });
-                        }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                        Salle de Classe Physique
-                      </label>
-                      <CustomSelect
-                        options={salleOptions}
-                        value={formData.salle || ''}
-                        onChange={(val) => setFormData({ ...formData, salle: val, salleId: val })}
-                        placeholder="Sélectionner une salle"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                      Salle de Classe Physique
+                    </label>
+                    <CustomSelect
+                      options={salleOptions}
+                      value={formData.salle || ''}
+                      onChange={(val) => setFormData({ ...formData, salle: val, salleId: val })}
+                      placeholder="Sélectionner une salle"
+                    />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                         Régime de Présence
@@ -1978,6 +2089,17 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                         options={REGIME_OPTIONS}
                         value={formData.regime}
                         onChange={(val) => setFormData({ ...formData, regime: val as any })}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                        Groupe d'Étude
+                      </label>
+                      <CustomSelect
+                        options={GROUPE_ETUDE_OPTIONS}
+                        value={formData.groupeEtude}
+                        onChange={(val) => setFormData({ ...formData, groupeEtude: val as 'MATIN' | 'APRES_MIDI' })}
                       />
                     </div>
 
@@ -2179,7 +2301,7 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                           </button>
                           <button
                             type="button"
-                            onClick={() => setSelectedFeeIds(applicableFees.filter(f => f.obligatoire || f.categorie === 'FRAIS_INSCRIPTION' || f.categorie === 'FRAIS_CARTE' || f.categorie === 'FRAIS_CONNEXION').map(f => f.id))}
+                            onClick={() => setSelectedFeeIds(applicableFees.filter(f => f.obligatoire || f.payeALInscription).map(f => f.id))}
                             className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 transition-all cursor-pointer"
                           >
                             Obligatoires Seuls
@@ -2531,6 +2653,12 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                   <span className="font-bold text-slate-900 dark:text-slate-100">{formData.transportScolaire}</span>
                 </div>
                 <div>
+                  <span className="text-slate-400 block">Groupe d'Étude</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">
+                    {formData.groupeEtude === 'APRES_MIDI' ? "Après-midi" : "Matin"}
+                  </span>
+                </div>
+                <div>
                   <span className="text-slate-400 block">Tuteur / Contact</span>
                   <span className="font-bold text-slate-900 dark:text-slate-100 truncate block">
                     {formData.nomTuteur || formData.nomPere || formData.nomMere || '—'}
@@ -2805,6 +2933,12 @@ export const StudentRegistrationModal: React.FC<StudentRegistrationPageProps> = 
                       <div>
                         <span className="text-slate-400 block">Transport:</span>
                         <span className="font-bold text-slate-800 dark:text-slate-200">{formData.transportScolaire}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">Groupe d'Étude:</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">
+                          {formData.groupeEtude === 'APRES_MIDI' ? "Après-midi" : "Matin"}
+                        </span>
                       </div>
                       <div>
                         <span className="text-slate-400 block">Cantine / Internat:</span>

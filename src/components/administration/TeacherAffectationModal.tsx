@@ -7,10 +7,11 @@ import {
   ChevronRight, Info, Filter, Search, CheckSquare, Square,
   Zap, ArrowRight, CornerDownRight, BarChart3, HelpCircle
 } from 'lucide-react';
-import { MembrePersonnel, ClasseScolaire } from '../../types';
+import { MembrePersonnel, ClasseScolaire, Discipline } from '../../types';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { NumberInput } from '../common/NumberInput';
 import { LocalDatabaseService } from '../../services/localDatabase';
+import { getAvailableSubjectsForContext, getMissingEpstCoursesForContext, dedupeClassesByName } from '../../utils/academicContext';
 
 interface TeacherAffectationModalProps {
   isOpen: boolean;
@@ -28,14 +29,20 @@ interface SubjectDefinition {
 }
 
 const PROGRAMME_EPST_PAR_NIVEAU: Record<string, SubjectDefinition[]> = {
-  // ── MATERNELLE ──
+  // ── MATERNELLE : 12 activités officielles EPST IGE/PS.001 ──
   MATERNELLE: [
-    { nom: "Activités d'Éveil & Psychomotricité", categorie: 'EVEIL', isMajeure: true },
-    { nom: 'Langage & Communication Orale', categorie: 'LANGUES', isMajeure: true },
-    { nom: 'Sensorialité, Formes & Couleurs', categorie: 'EVEIL', isMajeure: true },
-    { nom: 'Dessin, Coloriage & Découpage', categorie: 'EVEIL' },
-    { nom: 'Chants, Rondes & Éducation Musicale', categorie: 'EVEIL' },
-    { nom: 'Initiation aux Premières Notions Mathématiques', categorie: 'SCIENCES' },
+    { nom: 'Activités sensorielles', categorie: 'EVEIL' },
+    { nom: 'Activités musicales', categorie: 'EVEIL' },
+    { nom: 'Activités psychomotrices', categorie: 'EVEIL' },
+    { nom: 'Activités physiques', categorie: 'EVEIL' },
+    { nom: "Activités d'arts plastiques", categorie: 'EVEIL' },
+    { nom: 'Activités de comportement', categorie: 'HUMAINES' },
+    { nom: 'Activités de vie pratique', categorie: 'GENERAL' },
+    { nom: 'Activités de promotion de la santé', categorie: 'HUMAINES' },
+    { nom: 'Activités exploratoires', categorie: 'SCIENCES' },
+    { nom: 'Activités de langage', categorie: 'LANGUES' },
+    { nom: 'Activités mathématiques', categorie: 'SCIENCES' },
+    { nom: 'Activités libres', categorie: 'EVEIL' },
   ],
 
   // ── PRIMAIRE ──
@@ -174,7 +181,7 @@ type ModalMode = 'ADMIN' | 'ENSEIGNANT';
 function detectMode(teacher: MembrePersonnel): ModalMode {
   const adminRoles = [
     'PREFET', 'DE', 'SURVEILLANT', 'COMPTABLE', 'ADMIN', 'PROMOTEUR_ADMIN',
-    'PREFET_DIRECTEUR', 'DIRECTEUR_ETUDES', 'DIRECTEUR_DISCIPLINE',
+    'PREFET_DIRECTEUR', 'DIRECTEUR_ECOLE', 'DIRECTEUR_ETUDES', 'DIRECTEUR_DISCIPLINE',
     'COMPTABLE_INTENDANT', 'SECRETAIRE', 'INTENDANT'
   ];
   return adminRoles.includes(teacher.role || '') ? 'ADMIN' : 'ENSEIGNANT';
@@ -226,7 +233,7 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
   const [mode, setMode] = useState<ModalMode>('ENSEIGNANT');
   const [cycle, setCycle] = useState<'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE'>('SECONDAIRE');
   const [classesList, setClassesList] = useState<ClasseScolaire[]>([]);
-  const [dbSubjects, setDbSubjects] = useState<string[]>([]);
+  const [dbDisciplines, setDbDisciplines] = useState<Discipline[]>([]);
   const [allStaffList, setAllStaffList] = useState<MembrePersonnel[]>([]);
 
   // Mode ADMIN
@@ -306,17 +313,16 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
       LocalDatabaseService.getSubjects(),
       LocalDatabaseService.getStaff(),
     ]).then(([cls, subs, stf]) => {
-      setClassesList(cls || []);
-      if (subs && subs.length > 0) {
-        setDbSubjects(Array.from(new Set(subs.map(s => s.nom))));
-      }
+      const deduped = dedupeClassesByName(cls || []);
+      setClassesList(deduped);
+      setDbDisciplines(subs || []);
       setAllStaffList(stf || []);
 
-      // Si aucune classe n'est sélectionnée, initialiser intelligemment avec la 1ère classe du cycle
-      if (cls && cls.length > 0) {
-        const matchingClass = cls.find(c => {
-          const cat = detectClassCurriculum(c.nom);
-          return cp === 'SECONDAIRE' ? (cat !== 'MATERNELLE' && cat !== 'PRIMAIRE') : cat === cp;
+      // Si aucune classe n'est sélectionnée, initialiser avec la 1ère classe du cycle de l'enseignant
+      if (deduped.length > 0) {
+        const matchingClass = deduped.find(c => {
+          if (cp === 'SECONDAIRE') return c.cycleId === 'SECONDAIRE_CTEB' || c.cycleId === 'HUMANITES';
+          return c.cycleId === cp;
         });
         if (matchingClass) {
           setSelClasse(matchingClass.nom);
@@ -326,7 +332,7 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
       }
     }).catch(() => {
       setClassesList([]);
-      setDbSubjects([]);
+      setDbDisciplines([]);
       setAllStaffList([]);
     });
   }, [isOpen, teacher]);
@@ -374,43 +380,15 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
   // ── Classes disponibles selon le cycle sélectionné ─────────────────────────
   const filteredClassesByCycle = useMemo(() => {
     if (cycle === 'MATERNELLE') {
-      const dbMat = classesList.filter(c => detectClassCurriculum(c.nom) === 'MATERNELLE').map(c => c.nom);
-      const defaults = ['1ère Maternelle (Petite Section)', '2ème Maternelle (Moyenne Section)', '3ème Maternelle (Grande Section)'];
-      return Array.from(new Set([...dbMat, ...defaults]));
+      return classesList.filter(c => c.cycleId === 'MATERNELLE' || detectClassCurriculum(c.nom) === 'MATERNELLE').map(c => c.nom);
     }
     if (cycle === 'PRIMAIRE') {
-      const dbPrim = classesList.filter(c => detectClassCurriculum(c.nom) === 'PRIMAIRE').map(c => c.nom);
-      const defaults = [
-        '1ère Année Primaire A', '1ère Année Primaire B',
-        '2ème Année Primaire A', '2ème Année Primaire B',
-        '3ème Année Primaire A', '3ème Année Primaire B',
-        '4ème Année Primaire A', '4ème Année Primaire B',
-        '5ème Année Primaire A', '5ème Année Primaire B',
-        '6ème Année Primaire A', '6ème Année Primaire B',
-      ];
-      return Array.from(new Set([...dbPrim, ...defaults]));
+      return classesList.filter(c => c.cycleId === 'PRIMAIRE' || detectClassCurriculum(c.nom) === 'PRIMAIRE').map(c => c.nom);
     }
-    // SECONDAIRE
-    const dbSec = classesList.filter(c => {
-      const cat = detectClassCurriculum(c.nom);
-      return cat !== 'MATERNELLE' && cat !== 'PRIMAIRE';
-    }).map(c => c.nom);
-
-    const defaults = [
-      '7ème Année Éducation de Base A (CTEB)', '7ème Année Éducation de Base B (CTEB)',
-      '8ème Année Éducation de Base A (CTEB)', '8ème Année Éducation de Base B (CTEB)',
-      '1ère Année Scientifique (3ème Sec.)', '2ème Année Scientifique (4ème Sec.)',
-      '3ème Année Scientifique (5ème Sec.)', '4ème Année Scientifique EXETAT (6ème Sec.)',
-      '1ère Commerciale & Gestion', '2ème Commerciale & Gestion',
-      '3ème Commerciale & Gestion', '4ème Commerciale & Gestion EXETAT',
-      '1ère Littéraire (Latin-Philo)', '2ème Littéraire (Latin-Philo)',
-      '3ème Littéraire (Latin-Philo)', '4ème Littéraire EXETAT',
-      '1ère Pédagogie Générale', '2ème Pédagogie Générale',
-      '3ème Pédagogie Générale', '4ème Pédagogie Générale EXETAT',
-      '1ère Technique Industrielle', '2ème Technique Industrielle',
-      '3ème Technique Industrielle', '4ème Technique Industrielle EXETAT',
-    ];
-    return Array.from(new Set([...dbSec, ...defaults]));
+    // SECONDAIRE : CTEB + Humanités
+    return classesList
+      .filter(c => c.cycleId === 'SECONDAIRE_CTEB' || c.cycleId === 'HUMANITES' || (c.cycleId !== 'MATERNELLE' && c.cycleId !== 'PRIMAIRE'))
+      .map(c => c.nom);
   }, [cycle, classesList]);
 
   // Options pour le sélecteur de classe pour affectation
@@ -449,40 +427,73 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
   }, [cycle, filteredClassesByCycle]);
 
   // ── Matières Intelligentes suggérées selon la classe sélectionnée ──────────
+  const mapCourseCategorie = (cat?: string): SubjectDefinition['categorie'] => {
+    const c = (cat || '').toUpperCase();
+    if (c.includes('SCIENCES_EXACTES') || c.includes('SCIENCE') && !c.includes('HUMAINES')) return 'SCIENCES';
+    if (c.includes('SCIENCES_HUMAINES') || c.includes('HISTOIRE') || c.includes('GEO') || c.includes('CIVIQUE')) return 'HUMAINES';
+    if (c.includes('LANGUES') || c.includes('FRANCAIS') || c.includes('ANGLAIS') || c.includes('LATIN')) return 'LANGUES';
+    if (c.includes('TECHNIQUE') || c.includes('PROF')) return 'TECHNIQUE';
+    if (c.includes('PEDAGOGIE')) return 'PEDAGOGIE';
+    if (c.includes('EVEIL')) return 'EVEIL';
+    return 'GENERAL';
+  };
+
+  const selectedClassObj = useMemo(() => {
+    return classesList.find(c => c.nom === selClasse) || undefined;
+  }, [classesList, selClasse]);
+
   const suggestedCurriculumSubjects = useMemo(() => {
-    let curriculumKey = 'CTEB_7_8';
-    if (cycle === 'MATERNELLE') curriculumKey = 'MATERNELLE';
-    else if (cycle === 'PRIMAIRE') curriculumKey = 'PRIMAIRE';
-    else if (selClasse !== 'TOUTES') {
-      curriculumKey = detectClassCurriculum(selClasse);
-    } else {
-      curriculumKey = 'CTEB_7_8';
+    const targetClass = selectedClassObj;
+
+    // Matières du contexte (classe / option / cycle) déjà dans la base
+    const dbContextSubjects = getAvailableSubjectsForContext(
+      dbDisciplines,
+      targetClass,
+      targetClass?.optionCode || 'TRONC_COMMUN',
+      null,
+      classesList
+    );
+
+    // Matières officielles EPST manquantes dans la base
+    const missing = getMissingEpstCoursesForContext(
+      dbDisciplines,
+      targetClass,
+      targetClass?.optionCode || 'TRONC_COMMUN'
+    );
+
+    const dbDefs: SubjectDefinition[] = dbContextSubjects.map(s => ({
+      nom: s.nom,
+      categorie: mapCourseCategorie(s.categorie),
+      isMajeure: s.isOptionMajora || false,
+    }));
+
+    const officialDefs: SubjectDefinition[] = missing.map(c => ({
+      nom: c.nom,
+      categorie: mapCourseCategorie(c.categorie),
+      isMajeure: c.isOptionMajora || false,
+    }));
+
+    const seen = new Set<string>();
+    const combined: SubjectDefinition[] = [];
+    for (const s of [...dbDefs, ...officialDefs]) {
+      const key = s.nom.toLowerCase().trim();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      combined.push(s);
     }
 
-    const officialList = PROGRAMME_EPST_PAR_NIVEAU[curriculumKey] || PROGRAMME_EPST_PAR_NIVEAU['CTEB_7_8'];
-    const officialNames = new Set(officialList.map(s => s.nom.toLowerCase()));
-
-    // Ajouter les matières de la base SQLite non présentes
-    const extraDb = dbSubjects
-      .filter(s => !officialNames.has(s.toLowerCase()))
-      .map(s => ({ nom: s, categorie: 'GENERAL' as const, isMajeure: false }));
-
-    const combined: SubjectDefinition[] = [...officialList, ...extraDb];
-
-    // Filtrer par recherche textuelle
     let list = combined;
     if (searchSubjectTerm.trim()) {
       const q = searchSubjectTerm.toLowerCase();
       list = list.filter(s => s.nom.toLowerCase().includes(q));
     }
 
-    // Filtrer par catégorie
     if (selCategoryFilter !== 'ALL') {
       list = list.filter(s => s.categorie === selCategoryFilter);
     }
 
     return list;
-  }, [cycle, selClasse, dbSubjects, searchSubjectTerm, selCategoryFilter]);
+  }, [selectedClassObj, dbDisciplines, classesList, searchSubjectTerm, selCategoryFilter]);
 
   // ── Actions Titularisation ────────────────────────────────────────────────
   const addTitularClass = (cls: string) => {
@@ -614,13 +625,18 @@ export const TeacherAffectationModal: React.FC<TeacherAffectationModalProps> = (
           ? (salleUnique ? [salleUnique] : [])
           : Array.from(new Set(courseEntries.filter(e => e.classe !== 'TOUTES').map(e => e.classe)));
 
+        const titularClassObj = finalTituls[0] ? classesList.find(c => c.nom === finalTituls[0]) : undefined;
+        const optionTitulaire = titularClassObj?.optionCode && titularClassObj.optionCode !== 'TRONC_COMMUN'
+          ? titularClassObj.optionCode
+          : '';
+
         updates = {
           cyclePrincipal: cycle,
           salleUniqueId: isPrimMat ? salleUnique : undefined,
           estTitulaire: finalTituls.length > 0,
           classeTitulaireId: finalTituls[0] || '',
           classesTitularisees: finalTituls,
-          optionTitulaireCode: finalTituls[0] || '',
+          optionTitulaireCode: optionTitulaire,
           classesAssignees: finalClasses,
           coursAttribues: coursFormatted,
           disciplines: coursFormatted,

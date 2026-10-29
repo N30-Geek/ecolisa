@@ -2,7 +2,8 @@
 
 export type RôleSystème = 
   | 'PROMOTEUR_ADMIN'       // Promoteur — vue globale réseau + admin système
-  | 'PREFET_DIRECTEUR'      // Préfet (secondaire) / Directeur (primaire/maternel)
+  | 'PREFET_DIRECTEUR'      // Préfet des Études (secondaire)
+  | 'DIRECTEUR_ECOLE'       // Directeur d'école (maternelle / primaire)
   | 'DIRECTEUR_ETUDES'      // Directeur des Études — pédagogie & résultats
   | 'DIRECTEUR_DISCIPLINE'  // Directeur de Discipline / Censeur
   | 'COMPTABLE'             // Comptable Intendant Général — finances complètes
@@ -109,10 +110,12 @@ export interface Eleve {
   telephoneMere?: string;
   professionMere?: string;
   emailMere?: string;
-  statut: 'ACTIF' | 'TRANSFERE' | 'FINALISTE' | 'EXCLU';
+  statut: 'ACTIF' | 'TRANSFERE' | 'FINALISTE' | 'REDOUBLANT' | 'EXCLU';
   schoolYearId: string;
   classId: string;
   nomClasse: string;
+  /** Cycle d'appartenance de l'élève, utile aux cartes et aux filtres. */
+  cycleCode?: 'MATERNELLE' | 'PRESCHOOL' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'CTEB' | 'HUMANITES' | string;
   // Lien Parent/Tuteur
   parentId?: string;           // ID du ParentTuteur principal (père/mère/tuteur)
   nomParent: string;
@@ -126,8 +129,20 @@ export interface Eleve {
   langue?: string;
   langueInstruction?: string;
   optionEPST?: string;
+  optionCode?: string;
   salleId?: string;
   salle?: string;
+  groupeEtude?: 'MATIN' | 'APRES_MIDI';
+
+  // Décision du conseil de classe / délibération
+  decisionConseil?: string;
+  mentionConseil?: string;
+  pourcentageGeneral?: number;
+  rangClasse?: number;
+  branchesEchecMajeur?: number;
+  branchesEchecMineur?: number;
+  observationsDeliberation?: string;
+  dateDeliberation?: string;
 
   // Dossier complet supplémentaire
   numeroActeNaissance?: string;
@@ -157,6 +172,27 @@ export interface Eleve {
   anneePrecedente?: string;
   moyenneAnneePrecedente?: number;
   dateInscription?: string;
+
+  // Historique des inscriptions / réinscriptions
+  historiqueInscriptions?: HistoriqueInscription[];
+}
+
+export interface HistoriqueInscription {
+  id: string;
+  anneeScolaireId: string;
+  anneeScolaireNom?: string;
+  ancienneClasseId?: string;
+  ancienneClasseNom?: string;
+  nouvelleClasseId?: string;
+  nouvelleClasseNom?: string;
+  decision: 'PASS' | 'REPEAT' | 'EXCLU' | 'TRANSFERE';
+  moyenne?: number;
+  mention?: string;
+  montantFrais?: number;
+  deviseFrais?: string;
+  date: string;
+  fraisFactureId?: string;
+  commentaire?: string;
 }
 
 export type GroupeActiviteMaternelle = 'GROUPE_I' | 'GROUPE_II' | 'GROUPE_III' | 'GROUPE_IV';
@@ -195,6 +231,40 @@ export type TypeEvaluation =
   | 'PROJET'
   | 'COMPOSITION';
 
+export type StatutCote =
+  | 'BROUILLON'
+  | 'SOUMIS'
+  | 'VALIDE_TITULAIRE'
+  | 'REJETE_TITULAIRE'
+  | 'VALIDE_DE'
+  | 'REJETE_DE';
+
+export interface EpreuveScolaire {
+  id: string;
+  titre: string;
+  type: 'INTERROGATION' | 'EXAMEN' | 'EXERCICE_CONTROLE' | 'DEVOIR' | 'TRAVAIL_PRATIQUE';
+  cible: 'PERIODE' | 'EXAMEN';
+  periode: 'P1' | 'P2' | 'EX1' | 'P3' | 'P4' | 'EX2';
+  cycleId: string;
+  classeId: string;
+  nomClasse: string;
+  optionCode?: string;
+  matiereId: string;
+  nomMatiere: string;
+  professeurId: string;
+  nomProfesseur: string;
+  schoolYearId?: string;
+  dateEpreuve: string;
+  maxPoints: number;
+  statut: 'PROGRAMMEE' | 'EN_COURS' | 'CORRIGEE' | 'PUBLIEE';
+  validationStatut?: 'EN_ATTENTE' | 'VALIDEE' | 'REJETEE';
+  valideParId?: string;
+  valideParNom?: string;
+  valideLe?: string;
+  integreeRegistre?: boolean;
+  remarques?: string;
+}
+
 export interface Cote {
   id: string;
   evaluationId?: string;
@@ -202,6 +272,8 @@ export interface Cote {
   anneeScolaireId?: string;
   matiereId?: string;
   classeId?: string;
+  optionCode?: string;
+  enseignantId?: string;
   periode: string;
   type: TypeEvaluation;
   score: number;
@@ -210,7 +282,18 @@ export interface Cote {
   dateCote?: string;
   titre?: string;
   libelle?: string;
+  // Workflow cotes → titulaire → directeur des études
+  statut?: StatutCote;
+  soumisLe?: string;
+  valideTitulaireLe?: string;
+  valideDELe?: string;
+  valideParTitulaireId?: string;
+  valideParDEId?: string;
+  commentaireValidation?: string;
 }
+
+export type StatutPresence = 'PRESENT' | 'ABSENT' | 'RETARD' | 'JUSTIFIE';
+export type SessionPointage = 'MATIN' | 'APRES_MIDI' | 'JOURNEE';
 
 export interface Presence {
   id: string;
@@ -218,8 +301,12 @@ export interface Presence {
   anneeScolaireId?: string;
   classeId?: string;
   dateJour: string;
-  statut: 'PRESENT' | 'ABSENT' | 'RETARD' | 'JUSTIFIE';
+  session: SessionPointage;
+  heureArrivee?: string;
+  statut: StatutPresence;
   motif?: string;
+  pointePar?: string;
+  justificatif?: string;
 }
 
 export interface SchoolEvent {
@@ -232,6 +319,39 @@ export interface SchoolEvent {
   categorie: 'RENTRÉE_CLÔTURE' | 'EXAMENS_JURY' | 'VACANCES' | 'FÉRIÉ' | 'AUTRE';
   publicCible: 'TOUS' | 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE' | 'SECONDAIRE_EXETAT';
   highlight?: boolean;
+}
+
+export type VacationHoraire = 'MATIN' | 'APRES_MIDI' | 'SOIR' | 'SUR_MESURE';
+export type JourSemaine = 'Lundi' | 'Mardi' | 'Mercredi' | 'Jeudi' | 'Vendredi' | 'Samedi';
+export type BreakType = 'PAUSE_1' | 'PAUSE_2' | 'PAUSE_3';
+
+export interface HoraireCreneau {
+  id: string;
+  schoolYearId?: string;
+  vacation?: VacationHoraire;
+  debut: string;
+  fin: string;
+  label: string;
+  isBreak?: boolean;
+  breakType?: BreakType;
+  ordre?: number;
+}
+
+export interface ScheduleSlot {
+  id: string;
+  schoolYearId?: string;
+  classeId: string;
+  nomClasse: string;
+  vacation: VacationHoraire;
+  jour: JourSemaine;
+  heureDebut: string;
+  heureFin: string;
+  matiereId: string;
+  nomMatiere: string;
+  professeurId?: string;
+  nomProfesseur: string;
+  salle: string;
+  couleurBg?: string;
 }
 
 export interface BulletinEleve {
@@ -309,6 +429,11 @@ export interface UserAccount {
   nom: string;
   prenom?: string;
   role: RôleSystème;
+  staffId?: string;
+  cyclesAssignes?: string[];
+  classesAssignees?: string[];
+  sallesAssignees?: string[];
+  optionsAssignees?: string[];
   pinCode?: string;
   avatarUrl?: string;
   statut: 'ACTIF' | 'SUSPENDU' | 'INACTIF';
@@ -380,6 +505,7 @@ export interface MembrePersonnel {
   coursAttribues?: string[];       // Pour le Secondaire : liste des IDs/noms des cours attribués
   classesAssignees?: string[];     // Classes secondaires où il enseigne
   cyclesAssignes?: string[];       // ex: ['MATERNELLE', 'PRIMAIRE', 'HUMANITES']
+  sallesAssignees?: string[];
   optionsAssignees?: string[];      // ex: ['Math-Physique', 'Biologie-Chimie']
   // Contrat
   typeContrat?: TypeContratPersonnel;
@@ -638,6 +764,13 @@ export interface CycleConfig {
   sallesCount: number;
 }
 
+export interface GroupeEtudesConfig {
+  cycleCode: 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE_CTEB' | 'HUMANITES' | string;  // Cycle concerné
+  optionId?: string;       // Option (facultatif)
+  salleId?: string;        // Salle (facultatif)
+  session: 'MATIN' | 'APRES_MIDI';  // Session d'études
+}
+
 export interface AnneeScolaireConfig {
   id: string;
   nom: string;
@@ -653,6 +786,7 @@ export interface AnneeScolaireConfig {
   cycles: CycleConfig[];
   options?: OptionConfig[];
   salles: SalleConfig[];
+  groupesEtudes?: GroupeEtudesConfig[];  // Configuration des groupes d'études par cycle/option/salle
   semestres: { id: string; nom: string; statut: string; fin: string }[];
   periodes: { id: string; nom: string; debut: string; fin: string; type: 'PERIOD' | 'EXAM' }[];
 }
@@ -719,6 +853,8 @@ export interface TypeFraisScolaire {
   nombreTranches?: number;
   tranches?: FraisTranche[];
   priorite?: number;
+  acceptePartialite?: boolean;
+  payeALInscription?: boolean;
 }
 
 export interface LigneFacture {
@@ -751,6 +887,10 @@ export interface OperationCaisse {
   beneficiaire?: string;
   anneeScolaireId?: string;
   schoolYearId?: string;
+  cycleId?: string;
+  classId?: string;
+  salleId?: string;
+  optionCode?: string;
   origine?: 'PAYMENT' | 'EXPENSE' | 'MANUAL' | 'PAYROLL';
   origineId?: string;
 }
@@ -808,6 +948,16 @@ export interface BudgetPrevisionnel {
   dateFin?: string;
   categorie: string;
   type: 'REVENU' | 'DEPENSE';
+  /** Précision comptable : revenu, charge fixe ou charge dynamique (variable) */
+  nature?: 'REVENU' | 'CHARGE_FIXE' | 'CHARGE_DYNAMIQUE';
+  /** Fréquence de la ligne ou du modèle */
+  frequence?: 'PONCTUEL' | 'MENSUEL' | 'TRIMESTRIEL' | 'ANNUEL';
+  /** True si la ligne/modèle se renouvelle automatiquement d'une période sur l'autre */
+  renouvelable?: boolean;
+  /** Identifiant de regroupement pour les séries générées automatiquement */
+  modeleId?: string;
+  /** Index de la période dans une série (0-based) */
+  periodeIndex?: number;
   montant: number;
   devise: string;
   note?: string;
@@ -871,4 +1021,56 @@ export interface AuditLogEntry {
   entiteId?: string;       // ID de l'entité concernée
   details?: Record<string, any>;
   createdAt: string;
+}
+
+// ─── App Settings, Apparence, Sauvegardes ─────────────────────────────────────
+
+export interface ThemeConfig {
+  accentColor: string;                 // ex: '#6366f1'
+  appearance: 'light' | 'dark' | 'system';
+  fontScale: 'small' | 'medium' | 'large';
+  density: 'compact' | 'comfortable';
+  fontFamily: 'sans' | 'serif' | 'mono';
+  borderRadius?: 'sharp' | 'rounded' | 'extra'; // 'extra' = plus arrondi
+  reducedMotion?: boolean;
+  highContrast?: boolean;
+  customColors?: Record<string, string>;
+}
+
+export interface BackupEntry {
+  id: string;
+  name: string;
+  path: string;
+  size: number;
+  createdAt: string;
+  type: 'MANUAL' | 'AUTO' | 'ON_EXIT';
+  compressed: boolean;
+}
+
+export interface BackupConfig {
+  enabled: boolean;
+  autoBackup: boolean;
+  autoBackupIntervalMinutes: number;
+  maxBackups: number;
+  compressBackups: boolean;
+  backupFolder?: string;
+  lastAutoBackup?: string;
+  includeDocuments?: boolean;
+}
+
+export interface UserPreferences {
+  defaultTab?: string;
+  compactLists?: boolean;
+  emailNotifications?: boolean;
+  sessionTimeoutMinutes?: number;
+  landingPage?: string;
+  language?: 'fr';
+  sidebarCollapsed?: boolean;
+}
+
+export interface AppSettings {
+  themeConfig?: ThemeConfig;
+  backupConfig?: BackupConfig;
+  userPreferences?: Record<string, UserPreferences>;
+  lastAutoBackup?: string;
 }

@@ -29,7 +29,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { LocalDatabaseService } from '../../services/localDatabase';
-import type { Discipline, MembrePersonnel, GroupeActiviteMaternelle } from '../../types';
+import type { Discipline, MembrePersonnel, GroupeActiviteMaternelle, ClasseScolaire } from '../../types';
 import { CustomSelect } from '../common/CustomSelect';
 import { NumberInput } from '../common/NumberInput';
 import { Pagination } from '../common/Pagination';
@@ -39,6 +39,7 @@ import {
   EPST_SECTIONS_OPTIONS,
   GROUPE_MATERNELLE_LABELS,
   CourseReference,
+  normalizeNiveau,
 } from '../../data/referentielEpstData';
 
 const uuid = () => {
@@ -98,15 +99,34 @@ interface SubjectsManagerProps {
 export const SubjectsManager: React.FC<SubjectsManagerProps> = ({ activeSchoolYear }) => {
   const [subjectsList, setSubjectsList] = useState<Discipline[]>([]);
   const [staffList, setStaffList] = useState<MembrePersonnel[]>([]);
+  const [classes, setClasses] = useState<ClasseScolaire[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [importSuccess, setImportSuccess] = useState(false);
 
   // Filtres
+  const [classFilter, setClassFilter] = useState<string>('ALL');
   const [cycleFilter, setCycleFilter] = useState<string>('ALL');
   const [optionFilter, setOptionFilter] = useState<string>('ALL');
+  const [niveauFilter, setNiveauFilter] = useState<string>('');
   const [teacherFilter, setTeacherFilter] = useState<string>('ALL');
   const [search, setSearch] = useState('');
+
+  // Filtre par classe : ajuste automatiquement le cycle, l'option et le niveau
+  useEffect(() => {
+    if (classFilter === 'ALL') {
+      setCycleFilter('ALL');
+      setOptionFilter('ALL');
+      setNiveauFilter('');
+    } else {
+      const selected = classes.find((c) => c.id === classFilter);
+      if (selected) {
+        setCycleFilter(selected.cycleId || 'ALL');
+        setOptionFilter(selected.optionCode || 'ALL');
+        setNiveauFilter(normalizeNiveau(selected.nom) || '');
+      }
+    }
+  }, [classFilter, classes]);
 
   // Modale d'ajout / édition
   const [showModal, setShowModal] = useState(false);
@@ -146,12 +166,14 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({ activeSchoolYe
   const loadData = async () => {
     setLoading(true);
     try {
-      const [subjects, staff] = await Promise.all([
+      const [subjects, staff, classList] = await Promise.all([
         LocalDatabaseService.getSubjects(),
         LocalDatabaseService.getStaff(),
+        LocalDatabaseService.getClasses(),
       ]);
       setSubjectsList(subjects || []);
       setStaffList(staff || []);
+      setClasses(classList || []);
     } catch (e) {
       console.error('Erreur chargement matières & personnel:', e);
     } finally {
@@ -180,6 +202,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({ activeSchoolYe
     return subjectsList.filter((s) => {
       if (cycleFilter !== 'ALL' && s.cycleCode && s.cycleCode !== cycleFilter) return false;
       if (optionFilter !== 'ALL' && s.optionCode && s.optionCode !== optionFilter) return false;
+      if (niveauFilter && s.niveau && s.niveau !== niveauFilter) return false;
       if (teacherFilter !== 'ALL') {
         if (teacherFilter === 'NON_ASSIGNE') {
           if (s.enseignantId) return false;
@@ -198,7 +221,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({ activeSchoolYe
       }
       return true;
     });
-  }, [subjectsList, cycleFilter, optionFilter, teacherFilter, search]);
+  }, [subjectsList, cycleFilter, optionFilter, niveauFilter, teacherFilter, search]);
 
   const { paginated: paginatedSubjects, ...subjectsTabPagination } = usePagination(filteredSubjects, { defaultPageSize: 10 });
 
@@ -569,7 +592,23 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({ activeSchoolYe
           boxShadow: 'var(--elevation-1)',
         }}
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 flex-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 flex-1">
+          {/* Filtre Classe : affiche uniquement les cours pertinents */}
+          <div>
+            <CustomSelect
+              value={classFilter}
+              onChange={(v) => {
+                setClassFilter(v);
+                // le useEffect synchronise cycle/option/niveau
+              }}
+              options={[
+                { value: 'ALL', label: 'Toutes les Classes' },
+                ...classes.map((c) => ({ value: c.id, label: c.nom })).sort((a, b) => a.label.localeCompare(b.label)),
+              ]}
+              placeholder="Filtrer par classe..."
+            />
+          </div>
+
           {/* Filtre Cycle */}
           <div>
             <CustomSelect
@@ -651,7 +690,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({ activeSchoolYe
                 BULLETIN DE L'ENFANT DE LA 2è, 3è ANNÉE MATERNELLE
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                14 Activités officielles réparties en 4 Groupes · Total Trimestre : 120 pts · Total Annuel : 360 pts
+                12 Activités officielles réparties en 4 Groupes · Total Trimestre : 48 pts · Total Annuel : 144 pts
               </p>
             </div>
 
@@ -751,13 +790,13 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({ activeSchoolYe
           <div className="p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-indigo-500/10 to-purple-500/10" style={{ borderColor: 'var(--border)' }}>
             <div>
               <p className="text-xs font-black text-indigo-700 dark:text-indigo-300">TOTAL GÉNÉRAL BULLETIN MATERNELLE</p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">14 Activités (Groupes I + II + III + IV)</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">12 Activités (Groupes I + II + III + IV)</p>
             </div>
             <div className="flex items-center gap-4 text-xs font-mono font-black">
-              <span>Trimestre 1 : <strong className="text-indigo-600">/120 pts</strong></span>
-              <span>Trimestre 2 : <strong className="text-indigo-600">/120 pts</strong></span>
-              <span>Trimestre 3 : <strong className="text-indigo-600">/120 pts</strong></span>
-              <span className="px-3 py-1 rounded-lg bg-emerald-600 text-white shadow-xs">ANNUEL : /360 pts</span>
+              <span>Trimestre 1 : <strong className="text-indigo-600">/48 pts</strong></span>
+              <span>Trimestre 2 : <strong className="text-indigo-600">/48 pts</strong></span>
+              <span>Trimestre 3 : <strong className="text-indigo-600">/48 pts</strong></span>
+              <span className="px-3 py-1 rounded-lg bg-emerald-600 text-white shadow-xs">ANNUEL : /144 pts</span>
             </div>
           </div>
         </div>

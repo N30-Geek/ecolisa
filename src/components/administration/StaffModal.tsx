@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, User, Camera, Mail, Phone, Briefcase, Award, Calendar, DollarSign, ShieldCheck, Check, Upload } from 'lucide-react';
-import { MembrePersonnel, RôleSystème } from '../../types';
+import { ClasseScolaire, MembrePersonnel, RôleSystème } from '../../types';
+import { LocalDatabaseService } from '../../services/localDatabase';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
 import { NumberInput } from '../common/NumberInput';
@@ -16,12 +17,16 @@ interface StaffModalProps {
 }
 
 const roleOptions: SelectOption[] = [
-  { value: 'ENSEIGNANT', label: 'Enseignant / Professeur de Cours', icon: Briefcase },
-  { value: 'DE', label: 'Directeur des Études (DE)', icon: ShieldCheck },
-  { value: 'SURVEILLANT', label: 'Directeur de Discipline (DD) / Surveillant', icon: ShieldCheck },
-  { value: 'PREFET', label: 'Préfet des Études / Directeur d’Établissement', icon: ShieldCheck },
-  { value: 'COMPTABLE', label: 'Comptable Intendant Général', icon: DollarSign },
-  { value: 'ADMIN', label: 'Administrateur Général / Secrétariat', icon: ShieldCheck },
+  { value: 'PREFET_DIRECTEUR', label: 'Préfet des Études', icon: ShieldCheck },
+  { value: 'DIRECTEUR_ECOLE', label: 'Directeur d’école (Primaire / Maternelle)', icon: ShieldCheck },
+  { value: 'DIRECTEUR_ETUDES', label: 'Directeur des Études (Secondaire)', icon: ShieldCheck },
+  { value: 'DIRECTEUR_DISCIPLINE', label: 'Directeur de Discipline', icon: ShieldCheck },
+  { value: 'CENSEUR', label: 'Censeur des Études', icon: ShieldCheck },
+  { value: 'SECRETAIRE', label: 'Secrétaire administratif', icon: Briefcase },
+  { value: 'COMPTABLE', label: 'Comptable', icon: DollarSign },
+  { value: 'INTENDANT', label: 'Économe / Intendant', icon: DollarSign },
+  { value: 'TITULAIRE', label: 'Enseignant titulaire', icon: Briefcase },
+  { value: 'ENSEIGNANT', label: 'Enseignant / Professeur de cours', icon: Briefcase },
 ];
 
 const genderOptions: SelectOption[] = [
@@ -62,11 +67,19 @@ export const StaffModal: React.FC<StaffModalProps> = ({
     devise: 'USD',
     statut: 'ACTIF',
     photoUrl: '',
+    cyclesAssignes: [],
+    classesAssignees: [],
+    sallesAssignees: [],
   });
 
   const [isWebcamOpen, setIsWebcamOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [schoolClasses, setSchoolClasses] = useState<ClasseScolaire[]>([]);
+
+  useEffect(() => {
+    if (isOpen) LocalDatabaseService.getClasses().then(setSchoolClasses).catch(() => setSchoolClasses([]));
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -95,6 +108,9 @@ export const StaffModal: React.FC<StaffModalProps> = ({
         devise: 'USD',
         statut: 'ACTIF',
         photoUrl: '',
+        cyclesAssignes: [],
+        classesAssignees: [],
+        sallesAssignees: [],
       });
     }
   }, [staffToEdit, isOpen]);
@@ -105,6 +121,10 @@ export const StaffModal: React.FC<StaffModalProps> = ({
       setErrorMessage('Le prénom et le nom de famille sont obligatoires.');
       return;
     }
+    if (!formData.cyclesAssignes?.length) {
+      setErrorMessage('Sélectionnez au moins un cycle d’affectation pour définir le périmètre d’accès.');
+      return;
+    }
 
     setIsSubmitting(true);
     setErrorMessage(null);
@@ -113,6 +133,7 @@ export const StaffModal: React.FC<StaffModalProps> = ({
       const mappedRole: MembrePersonnel['role'] = (formData.role as MembrePersonnel['role']) || 'ENSEIGNANT';
 
       const fullStaff: MembrePersonnel = {
+        ...formData,
         id: staffToEdit?.id || `staff_${Date.now()}`,
         numeroMatriculeEPST: formData.matricule || formData.numeroMatriculeEPST || `STF-${Math.floor(1000 + Math.random() * 9000)}`,
         matricule: formData.matricule || `STF-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -365,6 +386,60 @@ export const StaffModal: React.FC<StaffModalProps> = ({
                 </div>
               </div>
 
+              <div className="p-4 rounded-xl space-y-4" style={{ background: 'var(--bg-sunken)' }}>
+                <div>
+                  <label className="text-xs font-bold block mb-2" style={{ color: 'var(--text-primary)' }}>
+                    Cycles d’affectation et périmètre d’accès *
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {[
+                      { id: 'MATERNELLE', label: 'Maternelle' },
+                      { id: 'PRIMAIRE', label: 'Primaire' },
+                      { id: 'SECONDAIRE', label: 'Secondaire (CTEB & Humanités)' },
+                    ].map(cycle => {
+                      const selected = (formData.cyclesAssignes || []).includes(cycle.id);
+                      return (
+                        <button key={cycle.id} type="button" onClick={() => {
+                          const cycles = new Set(formData.cyclesAssignes || []);
+                          if (selected) cycles.delete(cycle.id); else cycles.add(cycle.id);
+                          setFormData({ ...formData, cyclesAssignes: Array.from(cycles), cyclePrincipal: Array.from(cycles)[0] as any, classesAssignees: [], sallesAssignees: [] });
+                        }} className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${selected ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-indigo-500/10'}`}>
+                          {cycle.label}{selected && <Check className="w-4 h-4" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2">Le Promoteur/Admin général conserve seul l’accès global. Tous les autres comptes sont limités aux cycles sélectionnés.</p>
+                </div>
+
+                {!!formData.cyclesAssignes?.length && (
+                  <div>
+                    <label className="text-xs font-bold block mb-2" style={{ color: 'var(--text-primary)' }}>Classes et salles spécifiques</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto sidebar-scroll">
+                      {schoolClasses.filter(classe => {
+                        const code = (classe.cycleId || classe.cycleCode || '').toUpperCase();
+                        const group = code === 'HUMANITES' || code === 'CTEB' || code === 'SECONDAIRE_CTEB' ? 'SECONDAIRE' : code;
+                        return formData.cyclesAssignes?.includes(group);
+                      }).map(classe => {
+                        const selected = (formData.classesAssignees || []).includes(classe.nom);
+                        return (
+                          <button key={classe.id} type="button" onClick={() => {
+                            const assigned = new Set(formData.classesAssignees || []);
+                            if (selected) assigned.delete(classe.nom); else assigned.add(classe.nom);
+                            const selectedClasses = schoolClasses.filter(item => assigned.has(item.nom));
+                            setFormData({ ...formData, classesAssignees: Array.from(assigned), sallesAssignees: Array.from(new Set(selectedClasses.map(item => item.salle).filter(Boolean))) });
+                          }} className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-left text-xs transition-all ${selected ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}>
+                            <span><strong className="block">{classe.nom}</strong><span className="text-[10px] opacity-70">Salle : {classe.salle || 'Non définie'}</span></span>
+                            {selected && <Check className="w-4 h-4 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {schoolClasses.length === 0 && <p className="text-[10px] text-amber-500">Aucune classe configurée pour l’année scolaire active.</p>}
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-bold block mb-1.5" style={{ color: 'var(--text-primary)' }}>
@@ -392,7 +467,7 @@ export const StaffModal: React.FC<StaffModalProps> = ({
               </div>
 
               {/* Affectation Spécifique Pédagogique (si Enseignant) */}
-              {formData.role === 'ENSEIGNANT' && (
+              {(formData.role === 'ENSEIGNANT' || formData.role === 'TITULAIRE') && (
                 <div className="p-4 rounded-xl border space-y-4 animate-fade-in" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
@@ -401,37 +476,6 @@ export const StaffModal: React.FC<StaffModalProps> = ({
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 border border-indigo-500/20">
                       Accès Restreint aux Cours Attributes
                     </span>
-                  </div>
-
-                  {/* Choix du Cycle */}
-                  <div>
-                    <label className="text-xs font-bold block mb-1.5" style={{ color: 'var(--text-primary)' }}>
-                      Cycle d'Enseignement Principal *
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { id: 'MATERNELLE', label: '🎨 Maternelle' },
-                        { id: 'PRIMAIRE', label: '📘 Primaire' },
-                        { id: 'SECONDAIRE', label: '🔬 Secondaire (CTEB & Humanités)' },
-                      ].map(c => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => setFormData({
-                            ...formData,
-                            cyclePrincipal: c.id as any,
-                            estTitulaire: c.id === 'MATERNELLE' || c.id === 'PRIMAIRE' ? true : formData.estTitulaire,
-                          })}
-                          className={`py-2 px-3 rounded-xl text-xs font-black border transition-all cursor-pointer ${
-                            formData.cyclePrincipal === c.id || (!formData.cyclePrincipal && c.id === 'SECONDAIRE')
-                              ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
-                              : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-800 hover:bg-indigo-500/10'
-                          }`}
-                        >
-                          {c.label}
-                        </button>
-                      ))}
-                    </div>
                   </div>
 
                   {/* CAS MATERNELLE OU PRIMAIRE : Salle unique & titulaire automatique */}

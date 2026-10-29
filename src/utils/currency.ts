@@ -35,6 +35,20 @@ export const DEFAULT_CURRENCIES: Currency[] = [
 
 export const DEFAULT_EXCHANGE_RATE = 2850;
 
+// Cache mémoire partagé alimenté par la base SQLite (via useSchoolConfig).
+// Plus aucune lecture localStorage ici : la base de données est la seule source
+// de vérité pour les devises et la configuration monétaire.
+let _schoolConfigCache: Partial<SchoolConfig> | null = null;
+let _userDisplayCurrencyCache: string | null = null;
+
+export const setCurrencyConfigCache = (config: Partial<SchoolConfig> | null) => {
+  _schoolConfigCache = config;
+};
+
+export const setUserDisplayCurrencyCache = (code: string | null) => {
+  _userDisplayCurrencyCache = code;
+};
+
 const normalize = (code?: string) => (code || '').toUpperCase().trim();
 
 export const getCurrency = (code: string, currencies: Currency[] = DEFAULT_CURRENCIES): Currency | undefined => {
@@ -90,6 +104,8 @@ export const applyNumberFormatPreset = (preset: NumberFormatConfig['preset']): P
  * Formate un nombre selon la configuration demandée (séparateurs, décimales).
  * Ne hardcode aucun symbole monétaire.
  */
+const CURRENCIES_WITHOUT_DECIMALS: string[] = ['CDF', 'XAF', 'FCFA', 'GNF', 'RWF', 'UGX', 'MGA', 'BIF', 'KMF', 'TND'];
+
 export const formatNumber = (
   value: number,
   numberFormat?: NumberFormatConfig
@@ -119,11 +135,17 @@ export const formatCurrencyFromList = (
   const displayCode = normalize(currency) || getReferenceCurrency(currencies).code;
   const sourceCode = normalize(from) || displayCode;
   const displayCur = getCurrency(displayCode, currencies) || getReferenceCurrency(currencies);
-  const nf = numberFormat || getCurrencyConfig().numberFormat || DEFAULT_NUMBER_FORMAT;
+  const rawNf = numberFormat || getCurrencyConfig().numberFormat || DEFAULT_NUMBER_FORMAT;
+  const isNoDecimalCurrency = CURRENCIES_WITHOUT_DECIMALS.includes(displayCode);
+  const nf = {
+    ...rawNf,
+    decimalPlaces: isNoDecimalCurrency ? 0 : (rawNf.decimalPlaces ?? 2),
+  };
   const value = sourceCode !== displayCode
     ? convertCurrencyFromList(amount, sourceCode, displayCode, currencies)
     : amount;
-  const formatted = formatNumber(value, nf);
+  const roundedValue = isNoDecimalCurrency ? Math.round(value) : value;
+  const formatted = formatNumber(roundedValue, nf);
   const symbol = nf.showCurrencySymbol ? (displayCur.symbol || displayCur.code) : '';
   if (!symbol) return formatted;
   return nf.currencyPosition === 'before'
@@ -132,7 +154,8 @@ export const formatCurrencyFromList = (
 };
 
 /**
- * Récupère la configuration monétaire en combinant config globale et préférence utilisateur.
+ * Récupère la configuration monétaire depuis le cache mémoire alimenté par
+ * la base SQLite. Le localStorage n'est plus utilisé ici.
  */
 export const getCurrencyConfig = (): {
   currencies: Currency[];
@@ -141,9 +164,8 @@ export const getCurrencyConfig = (): {
   numberFormat: NumberFormatConfig;
 } => {
   try {
-    const raw = localStorage.getItem('ecolisa_school_config');
-    const parsed: Partial<SchoolConfig> = raw ? JSON.parse(raw) : {};
-    const userDisplay = localStorage.getItem('ecolisa_user_display_currency');
+    const parsed: Partial<SchoolConfig> = _schoolConfigCache || {};
+    const userDisplay = _userDisplayCurrencyCache;
 
     const currencies = parsed.currencies?.length
       ? parsed.currencies
@@ -209,13 +231,19 @@ export const formatCurrency = (
   const source = normalize(from) || display;
   const { currencies, numberFormat: configNumberFormat } = getCurrencyConfig();
   const displayCur = getCurrency(display, currencies) || getReferenceCurrency(currencies);
-  const nf = numberFormat || configNumberFormat || DEFAULT_NUMBER_FORMAT;
+  const rawNf = numberFormat || configNumberFormat || DEFAULT_NUMBER_FORMAT;
+  const isNoDecimalCurrency = CURRENCIES_WITHOUT_DECIMALS.includes(display);
+  const nf = {
+    ...rawNf,
+    decimalPlaces: isNoDecimalCurrency ? 0 : (rawNf.decimalPlaces ?? 2),
+  };
 
   const value = source !== display
     ? convertCurrency(amount, source, display, exchangeRate)
     : amount;
 
-  const formatted = formatNumber(value, nf);
+  const roundedValue = isNoDecimalCurrency ? Math.round(value) : value;
+  const formatted = formatNumber(roundedValue, nf);
   const symbol = nf.showCurrencySymbol ? (displayCur.symbol || displayCur.code) : '';
   if (!symbol) return formatted;
   return nf.currencyPosition === 'before'

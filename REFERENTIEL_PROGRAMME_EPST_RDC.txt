@@ -76,7 +76,7 @@ C. DOMAINE DES SCIENCES HUMAINES ET MORALES
    7. HUMANITÉS PÉDAGOGIQUES (Pédagogie Générale)
    8. TECHNIQUES SOCIALES (Pédagogie Sociale)
 
-[SECTION C] ENSEIGNEMENT TECHNIQUE INDUSTRIEL & BTIMENT
+[SECTION C] ENSEIGNEMENT TECHNIQUE INDUSTRIEL & BÂTIMENT
    9. CONSTRUCTION (Bâtiment & Travaux Publics)
    10. ÉLECTRICITÉ (Électricité Industrielle & Bâtiment)
    11. MÉCANIQUE GÉNÉRALE (Usinage & Maintenance)
@@ -279,7 +279,7 @@ Sciences de la Vie (Botan/Zoo)    10           20           40           80
 Anglais                           10           20           40           80
 Histoire                          10           20           40           80
 Géographie                        10           20           40           80
-Éducation Civique & Morale (ECM)   10           20           40           80
+Éducation Civique & Morale (ECM)  10           20           40           80
 Éducation à la Vie (EDVIE)        10           20           40           80
 Technologie & TIC                 10           20           40           80
 --------------------------------------------------------------------------------
@@ -318,7 +318,7 @@ Droit Commercial & Sociétés       10           20           40           80
 CCA Française / Anglaise          20           40           80          160
 Économie Générale                 10           20           40           80
 Français Général                  20           40           80          160
-Anglais Commercial               10           20           40           80
+Anglais Commercial                10           20           40           80
 Mathématiques Générales           10           20           40           80
 --------------------------------------------------------------------------------
 

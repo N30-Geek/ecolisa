@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -16,8 +16,7 @@ import {
   ZoomOut,
   Maximize2,
 } from "lucide-react";
-import { IdCardRenderer } from "./IdCardRenderer";
-import { RDCEleveCardTemplate } from "./RDCEleveCardTemplate";
+import { IdCardRenderer, getStudentCardCycle, resolveCardConfig } from "./IdCardRenderer";
 import { Eleve } from "../../types";
 import { useSchoolConfig } from "../../hooks/useSchoolConfig";
 
@@ -33,7 +32,10 @@ export const StudentIdCardModal: React.FC<StudentIdCardModalProps> = ({
   student,
 }) => {
   const { config } = useSchoolConfig();
-  const [cardModel, setCardModel] = useState<"rdc_epst" | "custom">("rdc_epst");
+  const savedModel = resolveCardConfig(config, undefined, getStudentCardCycle(student)).rendererModel ?? "rdc_epst";
+  const [modelOverride, setCardModel] = useState<"rdc_epst" | "custom" | undefined>();
+  const cardModel = modelOverride ?? savedModel;
+  useEffect(() => setCardModel(undefined), [isOpen, student.id, savedModel]);
   const [activeTab, setActiveTab] = useState<"inner" | "outer" | "unfolded">(
     "unfolded",
   );
@@ -182,9 +184,9 @@ export const StudentIdCardModal: React.FC<StudentIdCardModalProps> = ({
                 className="text-sm font-black uppercase tracking-wider flex items-center gap-2"
                 style={{ color: "var(--text-primary)" }}
               >
-                Carte Officielle EPST RDC (85.6mm × 54mm)
+                Carte d’identification de l’élève
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-extrabold">
-                  Norme RDC EPST
+                  {modelOverride ? 'Choix temporaire' : 'Modèle enregistré'}
                 </span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
@@ -337,50 +339,10 @@ export const StudentIdCardModal: React.FC<StudentIdCardModalProps> = ({
               transformOrigin: "center center",
             }}
           >
-            {cardModel === "rdc_epst" ? (
-              <RDCEleveCardTemplate
-                student={student}
-                schoolConfig={config}
-                face={
-                  activeTab === "inner"
-                    ? "front"
-                    : activeTab === "outer"
-                      ? "back"
-                      : "both"
-                }
-              />
-            ) : (
-              <>
-                {activeTab === "inner" && (
-                  <IdCardRenderer
-                    student={student}
-                    schoolConfig={config}
-                    face="front"
-                  />
-                )}
-                {activeTab === "outer" && (
-                  <IdCardRenderer
-                    student={student}
-                    schoolConfig={config}
-                    face="back"
-                  />
-                )}
-                {activeTab === "unfolded" && (
-                  <div className="flex flex-wrap items-start justify-center gap-6">
-                    <IdCardRenderer
-                      student={student}
-                      schoolConfig={config}
-                      face="front"
-                    />
-                    <IdCardRenderer
-                      student={student}
-                      schoolConfig={config}
-                      face="back"
-                    />
-                  </div>
-                )}
-              </>
-            )}
+            <div className="flex flex-wrap items-start justify-center gap-6">
+              {activeTab !== "outer" && <IdCardRenderer student={student} schoolConfig={config} model={cardModel} face="front" />}
+              {activeTab !== "inner" && <IdCardRenderer student={student} schoolConfig={config} model={cardModel} face="back" />}
+            </div>
           </div>
         </div>
 

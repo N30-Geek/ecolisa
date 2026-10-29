@@ -2,10 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Users, BarChart3, GraduationCap, Building2 } from 'lucide-react';
 import { MembrePersonnel } from '../../types';
 import { LocalDatabaseService } from '../../services/localDatabase';
+import { canEditPersonalInfo } from '../../utils/permissions';
 import { TeacherDirectory } from './TeacherDirectory';
 import { TeacherDetailPage } from './TeacherDetailPage';
 import { LeavesManager } from './LeavesManager';
 import { StaffFormPage } from './StaffFormPage';
+import { useSearchTarget } from '../../hooks/useSearchTarget';
 
 interface TeacherManagerProps {
   targetCategory?: 'ENSEIGNANT' | 'STAFF';
@@ -145,7 +147,11 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
   const [editingTeacher, setEditingTeacher] = useState<MembrePersonnel | null>(null);
   const [selectedTeacher, setSelectedTeacher] = useState<MembrePersonnel | null>(null);
 
+  const currentUser = LocalDatabaseService.getCurrentUser();
+  const canEditPersonnel = canEditPersonalInfo(currentUser?.role);
+
   const isEnseignant = targetCategory === 'ENSEIGNANT';
+  const { apply } = useSearchTarget(isEnseignant ? 'teachers' : 'hr');
 
   const loadTeachers = useCallback(async () => {
     setLoading(true);
@@ -162,12 +168,25 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
     setView('LIST');
   }, [loadTeachers, targetCategory]);
 
+  useEffect(() => {
+    const target = apply();
+    if (target?.id && teachers.length > 0) {
+      const found = teachers.find(t => t.id === target.id || `${t.prenom} ${t.nom}` === target.name);
+      if (found) {
+        setSelectedTeacher(found);
+        setView('DETAIL');
+      }
+    }
+  }, [apply, teachers]);
+
   const handleAdd = () => {
+    if (!canEditPersonnel) return;
     setEditingTeacher(null);
     setView('FORM');
   };
 
   const handleEdit = (t: MembrePersonnel) => {
+    if (!canEditPersonnel) return;
     setEditingTeacher(t);
     setView('FORM');
   };
@@ -185,8 +204,8 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
     } else {
       saved = await LocalDatabaseService.addStaff(staffMember);
     }
-    await loadTeachers();
     const updatedStaff = saved || staffMember;
+    await loadTeachers();
     if (selectedTeacher && selectedTeacher.id === staffMember.id) {
       setSelectedTeacher(updatedStaff);
       setView('DETAIL');
@@ -195,7 +214,7 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
     }
   };
 
-  if (view === 'FORM') {
+  if (view === 'FORM' && canEditPersonnel) {
     return (
       <StaffFormPage
         staffToEdit={editingTeacher}
@@ -219,10 +238,10 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
           setSelectedTeacher(updated);
           setTeachers(prev => prev.map(t => t.id === updated.id ? updated : t));
         }}
-        onEdit={t => {
+        onEdit={canEditPersonnel ? t => {
           setEditingTeacher(t);
           setView('FORM');
-        }}
+        } : undefined}
       />
     );
   }
@@ -320,6 +339,7 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
           onAdd={handleAdd}
           onView={handleView}
           onEdit={handleEdit}
+          canEdit={canEditPersonnel}
         />
       )}
 

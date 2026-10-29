@@ -107,15 +107,12 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     (
       <div
         ref={menuRef}
-        className="fixed rounded-2xl border shadow-sm z-[99999] p-1.5 space-y-1.5 animate-scale-in"
+        className="fixed rounded-xl border z-[99999] p-1.5 space-y-1 animate-scale-in popover-menu"
         style={{
           top: menuPos.openUp ? undefined : menuPos.top,
           bottom: menuPos.openUp ? window.innerHeight - menuPos.top : undefined,
           left: menuPos.left,
           width: Math.max(menuPos.width, 260),
-          background: 'var(--bg-surface)',
-          borderColor: 'var(--border)',
-          boxShadow: 'var(--shadow-sm)',
         }}
       >
           {isSearchable && (
@@ -128,7 +125,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Rechercher..."
                   autoFocus
-                  className="w-full pl-8 pr-2.5 py-1 text-xs rounded-lg border focus:outline-none focus:border-indigo-500 font-medium"
+                  className="w-full pl-8 pr-2.5 py-1.5 text-xs rounded-lg border focus:outline-none focus:border-indigo-500 font-medium"
                   style={{
                     background: 'var(--bg-sunken)',
                     borderColor: 'var(--border)',
@@ -155,8 +152,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                       setIsOpen(false);
                       setSearchTerm('');
                     }}
-                    className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
-                      isSelected ? 'bg-indigo-600 text-white shadow-xs' : 'hover:bg-[var(--bg-sunken)]'
+                    className={`w-full min-h-9 flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+                      isSelected ? 'bg-indigo-600 text-white' : 'hover:bg-[var(--bg-sunken)]'
                     }`}
                     style={{
                       color: isSelected ? '#ffffff' : 'var(--text-primary)',
@@ -201,25 +198,26 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
           setIsOpen(!isOpen);
           setSearchTerm('');
         }}
-        className={`w-full flex items-center justify-between gap-2 px-4 py-3 rounded-2xl text-sm font-bold transition-colors border cursor-pointer focus:outline-none ${
+        className={`w-full h-9 flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border cursor-pointer focus:outline-none active:scale-[0.98] ${
           disabled ? 'opacity-50 cursor-not-allowed' : ''
         }`}
         style={{
-          background: 'var(--bg-sunken)',
-          borderColor: isOpen ? '#6366f1' : 'var(--border)',
+          background: 'var(--bg-surface)',
+          borderColor: isOpen ? 'rgba(99,102,241,0.45)' : 'var(--border)',
           color: 'var(--text-primary)',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
         }}
       >
         <div className="flex items-center gap-2 min-w-0">
           {selectedOption?.icon ? (
-            <selectedOption.icon className="w-4 h-4 text-indigo-500 shrink-0" />
+            <selectedOption.icon className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
           ) : Icon ? (
-            <Icon className="w-4 h-4 text-indigo-500 shrink-0" />
+            <Icon className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
           ) : null}
           <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
         </div>
         <ChevronDown
-          className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${
+          className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${
             isOpen ? 'rotate-180 text-indigo-500' : ''
           }`}
         />

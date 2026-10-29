@@ -2,11 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Users, Search, ShieldCheck, KeyRound, Lock, Eye, EyeOff,
-  X, CheckCircle2, Crown, Sparkles, ArrowRight, UserCheck, Wallet, GraduationCap
+  X, CheckCircle2, Crown, Sparkles, ArrowRight, UserCheck, Wallet, GraduationCap, School, ArrowLeft
 } from 'lucide-react';
 import { RôleSystème, UserAccount } from '../../types';
 import { LocalDatabaseService, UserSession } from '../../services/localDatabase';
-import { roleRequiresPin } from '../../utils/permissions';
+import { normalizeAccessCycle, roleRequiresPin, canAccessMaternelleAndPrimaire, expandMaternellePrimaireScope } from '../../utils/permissions';
 
 interface AccountSwitcherModalProps {
   isOpen: boolean;
@@ -17,7 +17,8 @@ interface AccountSwitcherModalProps {
 
 const ROLE_LABELS: Record<RôleSystème, string> = {
   PROMOTEUR_ADMIN:      'Promoteur / Admin',
-  PREFET_DIRECTEUR:     'Préfet / Directeur',
+  PREFET_DIRECTEUR:     'Préfet des Études',
+  DIRECTEUR_ECOLE:      'Directeur d’école (P/M)',
   DIRECTEUR_ETUDES:     'Dir. des Études',
   DIRECTEUR_DISCIPLINE: 'Dir. de Discipline',
   COMPTABLE:            'Comptable Intendant',
@@ -32,6 +33,7 @@ const ROLE_LABELS: Record<RôleSystème, string> = {
 const ROLE_COLORS: Record<RôleSystème, string> = {
   PROMOTEUR_ADMIN:      'from-violet-600 to-purple-700 text-white',
   PREFET_DIRECTEUR:     'from-indigo-600 to-blue-700 text-white',
+  DIRECTEUR_ECOLE:      'from-blue-600 to-sky-700 text-white',
   DIRECTEUR_ETUDES:     'from-blue-600 to-cyan-700 text-white',
   DIRECTEUR_DISCIPLINE: 'from-amber-600 to-orange-700 text-white',
   COMPTABLE:            'from-emerald-600 to-teal-700 text-white',
@@ -44,6 +46,13 @@ const ROLE_COLORS: Record<RôleSystème, string> = {
 };
 
 type PoleCategory = 'ALL' | 'DIRECTION' | 'PEDAGOGIE' | 'FINANCES' | 'PARENTS';
+type AccountCycle = 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE';
+
+const ACCOUNT_CYCLES: { id: AccountCycle; label: string; description: string; icon: React.ElementType; color: string }[] = [
+  { id: 'MATERNELLE', label: 'Maternelle', description: 'Direction, enseignants et personnel du cycle maternel', icon: UserCheck, color: 'from-pink-500 to-rose-500' },
+  { id: 'PRIMAIRE', label: 'Primaire', description: 'Direction, instituteurs et personnel de l’école primaire', icon: GraduationCap, color: 'from-sky-500 to-blue-600' },
+  { id: 'SECONDAIRE', label: 'Secondaire', description: 'CTEB, Humanités, options et personnel secondaire', icon: School, color: 'from-indigo-500 to-violet-600' },
+];
 
 export const AccountSwitcherModal: React.FC<AccountSwitcherModalProps> = ({
   isOpen,
@@ -55,6 +64,7 @@ export const AccountSwitcherModal: React.FC<AccountSwitcherModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<PoleCategory>('ALL');
+  const [selectedCycle, setSelectedCycle] = useState<AccountCycle | null>(null);
   const [selectedUser, setSelectedUser] = useState<UserAccount | null>(null);
   const [pinOrPassword, setPinOrPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -64,6 +74,7 @@ export const AccountSwitcherModal: React.FC<AccountSwitcherModalProps> = ({
   useEffect(() => {
     if (!isOpen) {
       setSelectedUser(null);
+      setSelectedCycle(null);
       setPinOrPassword('');
       setErrorMsg(null);
       return;
@@ -88,10 +99,17 @@ export const AccountSwitcherModal: React.FC<AccountSwitcherModalProps> = ({
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
       if (u.statut === 'SUSPENDU') return false;
+      if (selectedCycle && u.role !== 'PROMOTEUR_ADMIN') {
+        let cycles: string[] = (u.cyclesAssignes || []).map(normalizeAccessCycle).filter(Boolean);
+        if (canAccessMaternelleAndPrimaire(u.role)) {
+          cycles = expandMaternellePrimaireScope(cycles);
+        }
+        if (cycles.length > 0 && !cycles.includes(selectedCycle)) return false;
+      }
 
       // Filtre catégorie
       if (activeCategory === 'DIRECTION') {
-        if (!['PROMOTEUR_ADMIN', 'PREFET_DIRECTEUR', 'DIRECTEUR_ETUDES', 'DIRECTEUR_DISCIPLINE', 'CENSEUR', 'SECRETAIRE'].includes(u.role)) return false;
+        if (!['PROMOTEUR_ADMIN', 'PREFET_DIRECTEUR', 'DIRECTEUR_ECOLE', 'DIRECTEUR_ETUDES', 'DIRECTEUR_DISCIPLINE', 'CENSEUR', 'SECRETAIRE'].includes(u.role)) return false;
       } else if (activeCategory === 'PEDAGOGIE') {
         if (!['ENSEIGNANT', 'TITULAIRE', 'DIRECTEUR_ETUDES', 'CENSEUR'].includes(u.role)) return false;
       } else if (activeCategory === 'FINANCES') {
@@ -112,7 +130,7 @@ export const AccountSwitcherModal: React.FC<AccountSwitcherModalProps> = ({
 
       return true;
     });
-  }, [users, activeCategory, search]);
+  }, [users, selectedCycle, activeCategory, search]);
 
   if (!isOpen) return null;
 
@@ -131,6 +149,11 @@ export const AccountSwitcherModal: React.FC<AccountSwitcherModalProps> = ({
     if (!selectedUser) return;
     setErrorMsg(null);
 
+    if (selectedUser.role !== 'PROMOTEUR_ADMIN' && !selectedCycle) {
+      setErrorMsg('Sélectionnez d’abord le cycle d’affectation du compte.');
+      return;
+    }
+
     setIsSubmitting(true);
     await new Promise((res) => setTimeout(res, 250));
 
@@ -147,14 +170,17 @@ export const AccountSwitcherModal: React.FC<AccountSwitcherModalProps> = ({
         return;
       }
 
-      // Créer la nouvelle session
+      // Créer la nouvelle session avec le cycle sélectionné
       const newSession: UserSession = {
         id:      verified.id,
         email:   verified.email,
         nom:     `${verified.prenom || ''} ${verified.nom}`.trim(),
         role:    verified.role,
-        token:   `token_${Math.random().toString(36).substring(2)}`,
+        token:   `token_${crypto.randomUUID()}`,
         pinCode: verified.pinCode || undefined,
+        telephone: verified.telephone,
+        cycle:   verified.role === 'PROMOTEUR_ADMIN' ? undefined : (selectedCycle || undefined),
+        cyclesAssignes: selectedUser.cyclesAssignes,
       };
 
       // Consigner l'audit
@@ -224,7 +250,48 @@ export const AccountSwitcherModal: React.FC<AccountSwitcherModalProps> = ({
         <div className="p-4 sm:p-5 space-y-4 max-h-[70vh] overflow-y-auto sidebar-scroll">
           {/* Si aucun utilisateur sélectionné pour entrer le PIN -> Afficher la liste */}
           {!selectedUser ? (
+            !selectedCycle ? (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>1. Choisissez le cycle de travail</h4>
+                  <p className="text-xs text-slate-400 mt-1">Les comptes et les responsabilités seront filtrés selon le cycle sélectionné.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {ACCOUNT_CYCLES.map(cycle => {
+                    const CycleIcon = cycle.icon;
+                    const accountCount = users.filter(user => {
+                      if (user.statut === 'SUSPENDU') return false;
+                      if (user.role === 'PROMOTEUR_ADMIN') return true;
+                      let assigned: string[] = (user.cyclesAssignes || []).map(normalizeAccessCycle).filter(Boolean);
+                      if (canAccessMaternelleAndPrimaire(user.role)) {
+                        assigned = expandMaternellePrimaireScope(assigned);
+                      }
+                      return assigned.length === 0 || assigned.includes(cycle.id);
+                    }).length;
+                    return (
+                      <button key={cycle.id} onClick={() => setSelectedCycle(cycle.id)} className="group p-4 rounded-2xl text-left transition-all hover:-translate-y-0.5 hover:shadow-md" style={{ background: 'var(--bg-sunken)' }}>
+                        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${cycle.color} text-white flex items-center justify-center mb-3 shadow-sm group-hover:scale-105 transition-transform`}>
+                          <CycleIcon className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-black" style={{ color: 'var(--text-primary)' }}>{cycle.label}</p>
+                        <p className="text-[10px] text-slate-400 mt-1 min-h-8">{cycle.description}</p>
+                        <div className="flex items-center justify-between mt-3">
+                          <span className="text-[10px] font-bold text-indigo-500">{accountCount} compte{accountCount > 1 ? 's' : ''}</span>
+                          <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all" />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
             <>
+              <div className="flex items-center justify-between gap-3">
+                <button onClick={() => { setSelectedCycle(null); setActiveCategory('ALL'); setSearch(''); }} className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-indigo-500">
+                  <ArrowLeft className="w-4 h-4" /> Changer de cycle
+                </button>
+                <span className="px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase">{ACCOUNT_CYCLES.find(cycle => cycle.id === selectedCycle)?.label}</span>
+              </div>
               {/* FILTRES PAR PÔLE */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
                 {[
@@ -327,6 +394,9 @@ export const AccountSwitcherModal: React.FC<AccountSwitcherModalProps> = ({
                           <p className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 truncate">
                             {ROLE_LABELS[user.role] || user.role}
                           </p>
+                          {user.role !== 'PROMOTEUR_ADMIN' && (user.cyclesAssignes || []).length === 0 && (
+                            <p className="text-[9px] font-bold text-amber-500">Affectation de cycle à définir</p>
+                          )}
 
                           <div className="flex items-center gap-1.5 text-[9.5px] text-slate-400 mt-0.5">
                             {requiresPin ? (
@@ -348,6 +418,7 @@ export const AccountSwitcherModal: React.FC<AccountSwitcherModalProps> = ({
                 </div>
               )}
             </>
+            )
           ) : (
             /* FORMULAIRE DE VALIDATION PIN / MOT DE PASSE DU COMPTE CHOISI */
             <form onSubmit={handleSubmitSwitch} className="space-y-4 animate-fade-in">
@@ -401,8 +472,10 @@ export const AccountSwitcherModal: React.FC<AccountSwitcherModalProps> = ({
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={pinOrPassword}
-                    onChange={(e) => setPinOrPassword(e.target.value)}
-                    placeholder={roleRequiresPin(selectedUser.role) ? '••••' : '••••••••••••'}
+                    onChange={(e) => setPinOrPassword(roleRequiresPin(selectedUser.role) ? e.target.value.replace(/\D/g, '').slice(0, 6) : e.target.value)}
+                    placeholder={roleRequiresPin(selectedUser.role) ? '••••••' : '••••••••••••'}
+                    maxLength={roleRequiresPin(selectedUser.role) ? 6 : undefined}
+                    inputMode={roleRequiresPin(selectedUser.role) ? 'numeric' : undefined}
                     required
                     autoFocus
                     className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
@@ -421,7 +494,7 @@ export const AccountSwitcherModal: React.FC<AccountSwitcherModalProps> = ({
                   </button>
                 </div>
                 <p className="text-[10.5px] text-slate-400">
-                  Code PIN par défaut : <span className="font-mono font-bold text-indigo-500">1234</span> ou mot de passe créé.
+                  Saisissez le code PIN ou le mot de passe personnel remis à cet utilisateur.
                 </p>
               </div>
 

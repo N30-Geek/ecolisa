@@ -36,7 +36,7 @@ import {
   Eye,
   Receipt
 } from 'lucide-react';
-import { Eleve, DocumentScolaire, FactureEleve, TransactionPaiement, Cote, TypeFraisScolaire } from '../../types';
+import { Eleve, DocumentScolaire, FactureEleve, TransactionPaiement, Cote, TypeFraisScolaire, Presence } from '../../types';
 import { RDCEleveCardTemplate } from './RDCEleveCardTemplate';
 import { StudentIdCardModal } from './StudentIdCardModal';
 import { StudentFullFileModal } from './StudentFullFileModal';
@@ -47,6 +47,7 @@ import { LocalDatabaseService } from '../../services/localDatabase';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { formatCurrency, convertCurrency } from '../../utils/currency';
 import { getInvoiceTotal, getPaymentAmount, getStudentTotalDue, round2, getPaymentAllocationsSummary } from '../../utils/financeCalculations';
+import { getOptionLabel } from '../../utils/options';
 import { Pagination } from '../common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
 
@@ -74,6 +75,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
   const [invoices, setInvoices] = useState<FactureEleve[]>([]);
   const [payments, setPayments] = useState<TransactionPaiement[]>([]);
   const [cotes, setCotes] = useState<Cote[]>([]);
+  const [presences, setPresences] = useState<Presence[]>([]);
   const [feeTypes, setFeeTypes] = useState<TypeFraisScolaire[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -84,7 +86,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
   const loadStudentData = async () => {
     setLoadingData(true);
     try {
-      const [docList, invList, payList, coteList, ftList] = await Promise.all([
+      const [docList, invList, payList, coteList, presList, ftList] = await Promise.all([
         LocalDatabaseService.getStudentDocuments(student.id).catch(() => []),
         LocalDatabaseService.getInvoices().then(all => (all || []).filter(inv => inv.eleveId === student.id || inv.studentId === student.id || inv.studentId === student.registrationNumber)).catch(() => []),
         LocalDatabaseService.getPayments().then(all => (all || []).filter(p =>
@@ -94,12 +96,14 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
           p.registrationNumber === student.registrationNumber
         )).catch(() => []),
         LocalDatabaseService.getCotes({ eleveId: student.id }).catch(() => []),
+        LocalDatabaseService.getPresences({ eleveId: student.id }).catch(() => []),
         LocalDatabaseService.getFeeTypes().catch(() => []),
       ]);
       setDocuments(docList || []);
       setInvoices(invList || []);
       setPayments(payList || []);
       setCotes(coteList || []);
+      setPresences(presList || []);
       setFeeTypes(ftList || []);
     } catch (err) {
       console.error('[StudentDetailPage] Erreur chargement :', err);
@@ -144,6 +148,17 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
   const totalPointsObtained = useMemo(() => cotes.reduce((acc, c) => acc + (c.score || 0), 0), [cotes]);
   const totalPointsMax = useMemo(() => cotes.reduce((acc, c) => acc + (c.maxScore || 20), 0), [cotes]);
   const percentage = useMemo(() => totalPointsMax > 0 ? Math.round((totalPointsObtained / totalPointsMax) * 100) : 0, [totalPointsObtained, totalPointsMax]);
+
+  // Calcul réel de l'assiduité depuis les présences enregistrées
+  const presenceSummary = useMemo(() => {
+    const total = presences.length;
+    const absent = presences.filter((p) => p.statut === 'ABSENT').length;
+    const retard = presences.filter((p) => p.statut === 'RETARD').length;
+    const justifie = presences.filter((p) => p.statut === 'JUSTIFIE').length;
+    const present = total - absent - retard - justifie;
+    const taux = total > 0 ? Math.round(((present + (retard * 0.5)) / total) * 1000) / 10 : 0;
+    return { total, present, absent, retard, justifie, taux };
+  }, [presences]);
 
   const initials = `${(student.prenom?.[0] || '').toUpperCase()}${(student.nom?.[0] || '').toUpperCase()}`;
 
@@ -204,7 +219,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                   </span>
                 </div>
                 <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                  Matricule : <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{student.registrationNumber}</span> · Classe : <span className="font-bold text-slate-700 dark:text-slate-200">{student.nomClasse}</span>{student.salle ? <> · Salle : <span className="font-bold text-slate-700 dark:text-slate-200">{student.salle}</span></> : null}
+                  Matricule : <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{student.registrationNumber}</span> · Classe : <span className="font-bold text-slate-700 dark:text-slate-200">{student.nomClasse}</span> · Option : <span className="font-bold text-amber-700 dark:text-amber-300">{getOptionLabel(student.optionCode || student.optionEPST)}</span>{student.salle ? <> · Salle : <span className="font-bold text-slate-700 dark:text-slate-200">{student.salle}</span></> : null}
                 </p>
               </div>
             </div>
@@ -283,8 +298,8 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
               <span className="text-[10px] font-black uppercase text-slate-400">Taux de Présence</span>
               <ShieldCheck className="w-4 h-4 text-emerald-500" />
             </div>
-            <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">100 %</p>
-            <p className="text-[10px] text-slate-400 font-semibold">Assiduité modèle</p>
+            <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{presenceSummary.taux.toFixed(1)} %</p>
+            <p className="text-[10px] text-slate-400 font-semibold">{presenceSummary.total > 0 ? `${presenceSummary.present} présent(s) sur ${presenceSummary.total}` : 'Aucun pointage'}</p>
           </div>
 
           <div className="p-3.5 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
@@ -817,20 +832,25 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
                   <ShieldCheck className="w-4.5 h-4.5" /> Assiduité & Registre de Présence
                 </h3>
 
-                <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="grid grid-cols-4 gap-4 text-center">
                   <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <span className="text-[10px] font-bold text-slate-400 uppercase">Taux de Présence</span>
-                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">100 %</p>
+                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{presenceSummary.taux.toFixed(1)} %</p>
                   </div>
 
                   <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <span className="text-[10px] font-bold text-slate-400 uppercase">Absences Justifiées</span>
-                    <p className="text-xl font-black text-indigo-500">0 Jour</p>
+                    <p className="text-xl font-black text-indigo-500">{presenceSummary.justifie} Jour{presenceSummary.justifie > 1 ? 's' : ''}</p>
                   </div>
 
                   <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
                     <span className="text-[10px] font-bold text-slate-400 uppercase">Retards</span>
-                    <p className="text-xl font-black text-amber-500">0 Retard</p>
+                    <p className="text-xl font-black text-amber-500">{presenceSummary.retard} Retard{presenceSummary.retard > 1 ? 's' : ''}</p>
+                  </div>
+
+                  <div className="p-4 rounded-xl border space-y-1" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Absences Non Justifiées</span>
+                    <p className="text-xl font-black text-rose-500">{presenceSummary.absent} Jour{presenceSummary.absent > 1 ? 's' : ''}</p>
                   </div>
                 </div>
               </div>
@@ -991,7 +1011,7 @@ export const StudentDetailPage: React.FC<StudentDetailPageProps> = ({
         onClose={() => setShowPhotoModal(false)}
         photoUrl={student.photoUrl}
         title={`${student.prenom} ${student.nom} ${student.postnom || ''}`}
-        subtitle={`Matricule : ${student.registrationNumber} · Classe : ${student.nomClasse}${student.salle ? ` · Salle : ${student.salle}` : ''}`}
+        subtitle={`Matricule : ${student.registrationNumber} · Classe : ${student.nomClasse} · Option : ${getOptionLabel(student.optionCode || student.optionEPST)}${student.salle ? ` · Salle : ${student.salle}` : ''}`}
         badge={student.statut}
       />
       {/* MODALE DE REÇU INTERACTIVE DEPUIS L'HISTORIQUE */}

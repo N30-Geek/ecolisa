@@ -81,6 +81,12 @@ export function isFeeApplicable(
   // Si le frais a déjà ciblé un élément spécifique, la portée descriptive est suffisante.
   if (hasSpecificTarget) return true;
 
+  // Défense : si le frais n'a aucun ciblage et que la portée est vide, on considère
+  // qu'il s'applique à toute l'école (sauf uniformes génériques).
+  if (!portee && !isUniforme && feeCycleId === 'TOUS' && feeOption === 'TOUS' && feeRegime === 'TOUS' && !fee.classId && !fee.salleId) {
+    return true;
+  }
+
   const classNameLower = (ctx.className || '').toLowerCase();
   const cycleLabelLower = (cycleLabels[ctx.cycleId || ''] || ctx.cycleId || '').toLowerCase();
   const optionLower = (ctx.option || '').toLowerCase();

@@ -9,16 +9,182 @@ import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { convertCurrency, formatCurrency } from '../../utils/currency';
 import { getInvoiceTotal, getInvoicePaid, getPaymentAmount, getInvoiceStatus } from '../../utils/financeCalculations';
+import { getStudentOption, getOptionLabel } from '../../utils/options';
 import { NumberInput } from '../common/NumberInput';
+import { FinancialReportsGeneratorModal } from './FinancialReportsGeneratorModal';
 import type {
   FactureEleve, OperationCaisse, EcritureComptable, CompteComptable, AnneeScolaireConfig,
   Eleve, ClasseScolaire, TypeFraisScolaire, TransactionPaiement, MembrePersonnel,
 } from '../../types';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, Legend, AreaChart, Area, CartesianGrid } from 'recharts';
 import { CustomSelect } from '../common/CustomSelect';
 import { CustomDatePicker } from '../common/CustomDatePicker';
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
+
+// ─── Libellés lisibles (évite d'afficher les codes techniques dans les graphiques) ───
+const FEE_CATEGORY_LABELS: Record<string, string> = {
+  FRAIS_INSCRIPTION: 'Inscription',
+  FRAIS_REINSCRIPTION: 'Réinscription',
+  FRAIS_MINERVAL: 'Minerval',
+  FRAIS_CONNEXES: 'Frais connexes',
+  FRAIS_CARTE: 'Carte scolaire',
+  FRAIS_EXAMEN: 'Examens',
+  FRAIS_KITS_EQUIPEMENTS: 'Kits & équipements',
+  FRAIS_UNIFORME: 'Uniforme',
+  FRAIS_BUS: 'Transport',
+  FRAIS_ACTIVITE: 'Activités',
+  FRAIS_CANTINE: 'Cantine',
+  FRAIS_INTERNAT: 'Internat',
+  AUTRE: 'Autres',
+};
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  CASH: 'Espèces',
+  ESPECES: 'Espèces',
+  BANQUE: 'Virement bancaire',
+  VIREMENT: 'Virement bancaire',
+  CHEQUE: 'Chèque',
+  MOBILE_MONEY: 'Mobile Money',
+  MPESA: 'M-Pesa',
+  FLEXPAY_MPESA: 'FlexPay · M-Pesa',
+  FLEXPAY_ORANGE: 'FlexPay · Orange',
+  FLEXPAY_AIRTEL: 'FlexPay · Airtel',
+  FLEXPAY_CARTE: 'FlexPay · Carte',
+  ORANGE_MONEY: 'Orange Money',
+  AIRTEL_MONEY: 'Airtel Money',
+  CARTE_BANCAIRE: 'Carte bancaire',
+};
+
+const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
+  SALAIRES: 'Salaires & primes',
+  SALAIRE: 'Salaires & primes',
+  FOURNITURES: 'Fournitures',
+  MAINTENANCE: 'Maintenance',
+  LOYER: 'Loyer',
+  TRANSPORT: 'Transport',
+  ENERGIE: 'Eau & électricité',
+  TAXES: 'Taxes & impôts',
+  FORMATION: 'Formation',
+  EVENEMENT: 'Événements',
+  AUTRE: 'Autres',
+};
+
+/** Rend lisible un code technique : FRAIS_MINERVAL → Minerval, FLEXPAY_MPESA → Flexpay mpesa */
+const humanizeCode = (code: string, dictionary: Record<string, string> = {}): string => {
+  if (!code) return 'Non renseigné';
+  const key = code.toUpperCase().trim();
+  if (dictionary[key]) return dictionary[key];
+  const cleaned = key.replace(/^FRAIS_/, '').replace(/_/g, ' ').toLowerCase();
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+};
+
+const MONTH_NAMES = ['Janv.', 'Févr.', 'Mars', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'];
+
+/** 2026-08 → Août 2026 */
+const formatMonthLabel = (value: string): string => {
+  const match = /^(\d{4})-(\d{2})$/.exec(value || '');
+  if (!match) return value || '—';
+  const idx = Number(match[2]) - 1;
+  return `${MONTH_NAMES[idx] || match[2]} ${match[1]}`;
+};
+
+/** Abrège les montants sur les axes : 1 250 000 → 1,25 M */
+const compactAmount = (value: number): string => {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1).replace('.', ',')} Md`;
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace('.', ',')} M`;
+  if (abs >= 1_000) return `${Math.round(value / 1_000)} K`;
+  return String(Math.round(value));
+};
+
+/** Tronque un nom trop long pour les axes catégoriels */
+const truncateLabel = (value: string, max = 18): string =>
+  !value ? '—' : value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+
+const EmptyChart: React.FC<{ label?: string }> = ({ label = 'Aucune donnée sur la période' }) => (
+  <div className="flex flex-col items-center justify-center h-full gap-2">
+    <BarChart3 className="w-7 h-7 opacity-25" style={{ color: 'var(--text-muted)' }} />
+    <p className="text-[11px] font-semibold text-center" style={{ color: 'var(--text-muted)' }}>{label}</p>
+  </div>
+);
+
+/** Carte de graphique homogène : en-tête avec icône, titre, sous-titre et badge. */
+const ChartCard: React.FC<{
+  title: string;
+  subtitle?: string;
+  icon: React.ElementType;
+  iconColor: string;
+  badge?: string;
+  height?: number;
+  children: React.ReactNode;
+}> = ({ title, subtitle, icon: Icon, iconColor, badge, height = 240, children }) => (
+  <div className="section-card p-5 flex flex-col">
+    <div className="flex items-start justify-between gap-3 mb-4">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className="p-2 rounded-xl shrink-0" style={{ background: `${iconColor}1a` }}>
+          <Icon className="w-4 h-4" style={{ color: iconColor }} />
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-sm font-black truncate" style={{ color: 'var(--text-primary)' }}>{title}</h3>
+          {subtitle && <p className="text-[10px] font-semibold truncate" style={{ color: 'var(--text-muted)' }}>{subtitle}</p>}
+        </div>
+      </div>
+      {badge && (
+        <span className="text-[10px] font-black px-2 py-1 rounded-lg shrink-0 whitespace-nowrap" style={{ background: `${iconColor}14`, color: iconColor }}>
+          {badge}
+        </span>
+      )}
+    </div>
+    <div style={{ height }}>{children}</div>
+  </div>
+);
+
+/** Donut + légende détaillée (valeur + pourcentage) : évite les étiquettes qui se chevauchent. */
+const DonutWithLegend: React.FC<{
+  data: { name: string; value: number }[];
+  fmt: (n: number, source?: string) => string;
+  currency: string;
+  tooltip: React.ReactElement;
+}> = ({ data, fmt, currency, tooltip }) => {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  return (
+    <div className="flex items-center gap-4 h-full">
+      <div className="relative shrink-0" style={{ width: '46%', minWidth: 140 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius="58%" outerRadius="85%" paddingAngle={2} stroke="none">
+              {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+            </Pie>
+            <Tooltip content={tooltip} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <span className="text-[9px] font-black uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Total</span>
+          <span className="text-[11px] font-black text-center leading-tight px-2" style={{ color: 'var(--text-primary)' }}>
+            {compactAmount(total)}
+          </span>
+        </div>
+      </div>
+      <div className="flex-1 min-w-0 space-y-1.5 overflow-y-auto max-h-full sidebar-scroll pr-1">
+        {data.map((item, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>{item.name}</p>
+              <p className="text-[10px] font-black" style={{ color: COLORS[i % COLORS.length] }}>
+                {fmt(item.value, currency)}
+                <span className="ml-1.5 font-semibold" style={{ color: 'var(--text-muted)' }}>
+                  {total > 0 ? `${Math.round((item.value / total) * 100)}%` : '0%'}
+                </span>
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 interface ReportsTabProps {
   activeSchoolYear?: string;
 }
@@ -70,7 +236,9 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
   const [dateTo, setDateTo] = useState<string>('');
   const [periodPreset, setPeriodPreset] = useState<string>('');
   const [reportSearch, setReportSearch] = useState<string>('');
+  const [activeReport, setActiveReport] = useState<string>('overview');
   const [loading, setLoading] = useState(true);
+  const [showDocGenerator, setShowDocGenerator] = useState(false);
 
   // Coûts imputés pour le résultat net
   const [imputedCosts, setImputedCosts] = useState<number>(0);
@@ -111,6 +279,49 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
   useEffect(() => { load(); }, [yearFilter]);
 
   // Raccourcis de période
+  const applyReportTemplate = (template: string) => {
+    setActiveReport(template);
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    switch (template) {
+      case 'overview':
+        setYearFilter(activeYearId || '');
+        setClassFilter(''); setOptionFilter(''); setCycleFilter('');
+        setPaymentMethodFilter(''); setFeeCategoryFilter(''); setInvoiceStatusFilter('');
+        setPeriodPreset('this_year');
+        setTimeout(() => applyPeriodPreset('this_year'), 0);
+        break;
+      case 'recovery':
+        setInvoiceStatusFilter('NON_PAYE');
+        setPeriodPreset('this_year');
+        setTimeout(() => applyPeriodPreset('this_year'), 0);
+        break;
+      case 'treasury':
+        setPeriodPreset('this_month');
+        setTimeout(() => applyPeriodPreset('this_month'), 0);
+        setInvoiceStatusFilter(''); setFeeCategoryFilter('');
+        break;
+      case 'result':
+        setPeriodPreset('this_year');
+        setTimeout(() => applyPeriodPreset('this_year'), 0);
+        setInvoiceStatusFilter(''); setFeeCategoryFilter('');
+        break;
+      case 'overdue':
+        setInvoiceStatusFilter('PARTIEL');
+        setPeriodPreset('');
+        setDateFrom('');
+        setDateTo(today);
+        break;
+      case 'fees':
+        setFeeCategoryFilter('FRAIS_INSCRIPTION');
+        setPeriodPreset('this_year');
+        setTimeout(() => applyPeriodPreset('this_year'), 0);
+        break;
+      default:
+        break;
+    }
+  };
+
   const applyPeriodPreset = (preset: string) => {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
@@ -158,8 +369,16 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
   };
 
   useEffect(() => {
-    if (periodPreset) applyPeriodPreset(periodPreset);
+    if (periodPreset && periodPreset !== 'custom') applyPeriodPreset(periodPreset);
   }, [periodPreset]);
+
+  // Applique le rapport par défaut une seule fois au montage
+  useEffect(() => {
+    if (!dateFrom && !dateTo && activeYearId) {
+      applyReportTemplate('overview');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const inDateRange = (d?: string) => {
     if (!d) return true;
@@ -197,8 +416,10 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
     if (!inDateRange(i.dateEcheance || new Date().toISOString())) return false;
     if (yearFilter && i.anneeScolaireId && i.anneeScolaireId !== yearFilter) return false;
     if (classFilter && i.nomClasse !== classFilter) return false;
+    const st = students.find(s => s.id === i.eleveId || s.id === i.studentId);
     const cls = classes.find(c => c.nom === i.nomClasse);
-    if (optionFilter && cls?.optionCode !== optionFilter) return false;
+    const option = st ? getStudentOption(st, classes) : cls?.optionCode || 'TRONC_COMMUN';
+    if (optionFilter && option !== optionFilter) return false;
     if (cycleFilter && cls?.cycleId !== cycleFilter) return false;
     if (feeCategoryFilter) {
       const hasCategory = i.lignes?.some(l => l.categorie === feeCategoryFilter);
@@ -248,7 +469,9 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
       if (!inDateRange(inv.dateEcheance || new Date().toISOString())) continue;
       if (classFilter && inv.nomClasse !== classFilter) continue;
       const cls = classes.find(c => c.nom === inv.nomClasse);
-      if (optionFilter && cls?.optionCode !== optionFilter) continue;
+      const stu = students.find(s => s.id === inv.eleveId || s.id === inv.studentId);
+      const opt = stu ? getStudentOption(stu, classes) : cls?.optionCode || 'TRONC_COMMUN';
+      if (optionFilter && opt !== optionFilter) continue;
       if (cycleFilter && cls?.cycleId !== cycleFilter) continue;
       if (feeCategoryFilter && !inv.lignes?.some(l => l.categorie === feeCategoryFilter)) continue;
       const invStatus = getInvoiceStatus(inv, payments, currency);
@@ -261,7 +484,6 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
       const paye = getInvoicePaid(inv, payments, currency);
       const reste = Math.max(0, total - paye);
       if (reste <= 0.001) continue;
-      const stu = students.find(s => s.id === inv.studentId || s.id === inv.eleveId);
       const due = inv.dateEcheance ? new Date(inv.dateEcheance).getTime() : Date.now();
       const jours = Math.max(0, Math.floor((Date.now() - due) / (1000 * 60 * 60 * 24)));
       const key = inv.id;
@@ -404,7 +626,11 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
       const key = o.beneficiaire || o.caissier || 'Non renseigné';
       map.set(key, (map.get(key) || 0) + convertCurrency(o.montant, o.devise, currency, exchangeRate));
     }
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
+    return Array.from(map.entries())
+      .map(([name, value]) => ({ name, label: truncateLabel(name, 20), value }))
+      .filter(d => d.value > 0.001)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
   }, [filteredCash, currency, exchangeRate]);
 
   const revenueByCategory = useMemo(() => {
@@ -419,7 +645,10 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
         map.set(key, (map.get(key) || 0) + paidShare);
       }
     }
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
+    return Array.from(map.entries())
+      .map(([code, value]) => ({ code, name: humanizeCode(code, FEE_CATEGORY_LABELS), value }))
+      .filter(d => d.value > 0.001)
+      .sort((a, b) => b.value - a.value);
   }, [filteredInvoices, payments, currency, exchangeRate]);
 
   const expenseByCategory = useMemo(() => {
@@ -427,7 +656,11 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
     for (const o of filteredCash.filter(o => o.type === 'SORTIE')) {
       map.set(o.categorie, (map.get(o.categorie) || 0) + convertCurrency(o.montant, o.devise, currency, exchangeRate));
     }
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+    return Array.from(map.entries())
+      .map(([code, value]) => ({ code, name: humanizeCode(code, EXPENSE_CATEGORY_LABELS), value }))
+      .filter(d => d.value > 0.001)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
   }, [filteredCash, currency, exchangeRate]);
 
   const revenueByPaymentMethod = useMemo(() => {
@@ -435,7 +668,10 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
     for (const p of filteredPayments) {
       map.set(p.moyenPaiement, (map.get(p.moyenPaiement) || 0) + getPaymentAmount(p, currency));
     }
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+    return Array.from(map.entries())
+      .map(([code, value]) => ({ code, name: humanizeCode(code, PAYMENT_METHOD_LABELS), value }))
+      .filter(d => d.value > 0.001)
+      .sort((a, b) => b.value - a.value);
   }, [filteredPayments, currency, exchangeRate]);
 
   // Synthèse par catégorie de frais (facturé vs encaissé)
@@ -486,8 +722,8 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
 
   const optionOptions = useMemo(() => [
     { value: '', label: 'Toutes options' },
-    ...Array.from(new Set(classes.map(c => c.optionCode).filter(Boolean))).sort().map(o => ({ value: o!, label: o! })),
-  ], [classes]);
+    ...Array.from(new Set(students.map(s => getStudentOption(s, classes)).filter(Boolean))).sort().map(o => ({ value: o!, label: getOptionLabel(o!) })),
+  ], [students, classes]);
 
   const cycleOptions = useMemo(() => [
     { value: '', label: 'Tous cycles' },
@@ -555,7 +791,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
       else cur.sorties += val;
       map.set(month, cur);
     }
-    return Array.from(map.entries()).sort().map(([month, v]) => ({ month, ...v }));
+    return Array.from(map.entries()).sort().map(([month, v]) => ({ month, label: formatMonthLabel(month), ...v }));
   }, [filteredCash, currency, exchangeRate]);
 
   const balanceByCompte = useMemo(() => {
@@ -657,97 +893,158 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
   const { paginated: paginatedReliquats, ...reliquatsPagination } = usePagination(reliquats, { defaultPageSize: 10 });
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Rapports Financiers</h2>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Analyse intelligente : recouvrement, trésorerie, bénéfice et relances</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <CustomSelect
-            options={periodPresetOptions}
-            value={periodPreset}
-            onChange={setPeriodPreset}
-            placeholder="Période libre"
-            className="w-36"
-          />
-          <CustomSelect
-            options={yearOptions}
-            value={yearFilter}
-            onChange={setYearFilter}
-            placeholder="Toutes années"
-            icon={Calendar}
-            className="w-40"
-          />
-          <CustomSelect
-            options={cycleOptions}
-            value={cycleFilter}
-            onChange={setCycleFilter}
-            placeholder="Tous cycles"
-            className="w-36"
-          />
-          <CustomSelect
-            options={classOptions}
-            value={classFilter}
-            onChange={setClassFilter}
-            placeholder="Toutes classes"
-            className="w-40"
-          />
-          <CustomSelect
-            options={optionOptions}
-            value={optionFilter}
-            onChange={setOptionFilter}
-            placeholder="Toutes options"
-            className="w-36"
-          />
-          <CustomSelect
-            options={paymentMethodOptions}
-            value={paymentMethodFilter}
-            onChange={setPaymentMethodFilter}
-            placeholder="Tous modes"
-            className="w-36"
-          />
-          <CustomSelect
-            options={feeCategoryOptions}
-            value={feeCategoryFilter}
-            onChange={setFeeCategoryFilter}
-            placeholder="Toutes catégories"
-            className="w-40"
-          />
-          <CustomSelect
-            options={invoiceStatusOptions}
-            value={invoiceStatusFilter}
-            onChange={setInvoiceStatusFilter}
-            placeholder="Tous statuts"
-            className="w-36"
-          />
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
-            <CustomDatePicker value={dateFrom} onChange={setDateFrom} placeholder="Du" className="w-36" />
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>au</span>
-            <CustomDatePicker value={dateTo} onChange={setDateTo} placeholder="Au" className="w-36" />
+    <div className="space-y-5">
+      {/* Générateur intelligent de rapports */}
+      <div className="p-5 rounded-2xl border shadow-xs" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <div className="p-2.5 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
+                <BarChart3 className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>Rapports Financiers</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  Générateur intelligent filtrable par année, cycle, classe, option, statut, mode de paiement et catégorie de frais.
+                </p>
+              </div>
+            </div>
           </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={() => setShowDocGenerator(true)} className="btn-secondary flex items-center gap-2" style={{ fontSize: '12px' }}>
+              <FileText className="w-3.5 h-3.5" /> Documents comptables
+            </button>
+            <button onClick={exportReport} className="btn-secondary flex items-center gap-2" style={{ fontSize: '12px' }}>
+              <Download className="w-3.5 h-3.5" /> CSV
+            </button>
+            <button onClick={downloadPDF} className="btn-primary flex items-center gap-2" style={{ fontSize: '12px' }}>
+              <FileText className="w-3.5 h-3.5" /> PDF
+            </button>
+            <button onClick={printReport} className="btn-primary flex items-center gap-2" style={{ fontSize: '12px' }}>
+              <Printer className="w-3.5 h-3.5" /> Imprimer
+            </button>
+          </div>
+        </div>
+
+        {/* Templates rapides */}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-1">Rapports prédéfinis</span>
+          {[
+            { id: 'overview', label: 'Vue d\'ensemble', icon: BarChart3, color: 'indigo' },
+            { id: 'recovery', label: 'Recouvrement', icon: TrendingUp, color: 'emerald' },
+            { id: 'treasury', label: 'Trésorerie', icon: Wallet, color: 'blue' },
+            { id: 'result', label: 'Résultat net', icon: PieChartIcon, color: 'amber' },
+            { id: 'overdue', label: 'Relances impayés', icon: AlertTriangle, color: 'rose' },
+            { id: 'fees', label: 'Par catégorie de frais', icon: DollarSign, color: 'violet' },
+          ].map(t => {
+            const Icon = t.icon;
+            const active = activeReport === t.id;
+            const colorMap: Record<string, string> = {
+              indigo: 'bg-indigo-600 border-indigo-400/40 text-white shadow-indigo-600/30',
+              emerald: 'bg-emerald-600 border-emerald-400/40 text-white shadow-emerald-600/30',
+              blue: 'bg-blue-600 border-blue-400/40 text-white shadow-blue-600/30',
+              amber: 'bg-amber-600 border-amber-400/40 text-white shadow-amber-600/30',
+              rose: 'bg-rose-600 border-rose-400/40 text-white shadow-rose-600/30',
+              violet: 'bg-violet-600 border-violet-400/40 text-white shadow-violet-600/30',
+            };
+            return (
+              <button
+                key={t.id}
+                onClick={() => applyReportTemplate(t.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-black border transition-all cursor-pointer ${active ? `${colorMap[t.color]} shadow-md` : 'bg-slate-500/5 text-slate-600 dark:text-slate-300 border-slate-500/20 hover:bg-slate-500/10'}`}
+                style={active ? {} : { borderColor: 'var(--border)' }}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {t.label}
+              </button>
+            );
+          })}
           <button
             onClick={() => {
+              setActiveReport('');
               setYearFilter(''); setClassFilter(''); setOptionFilter(''); setCycleFilter('');
               setPaymentMethodFilter(''); setFeeCategoryFilter(''); setInvoiceStatusFilter('');
               setPeriodPreset(''); setDateFrom(''); setDateTo(''); setReportSearch('');
               setImputedCosts(0);
             }}
-            className="px-3 py-2 rounded-xl border text-[11px] font-black flex items-center gap-1.5"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-black border transition-all cursor-pointer text-slate-500 dark:text-slate-400 hover:bg-slate-500/10"
+            style={{ borderColor: 'var(--border)' }}
           >
             <RotateCcw className="w-3.5 h-3.5" /> Reset
           </button>
-          <button onClick={exportReport} className="btn-secondary flex items-center gap-2" style={{ fontSize: '12px' }}>
-            <Download className="w-3.5 h-3.5" /> CSV
-          </button>
-          <button onClick={downloadPDF} className="btn-primary flex items-center gap-2" style={{ fontSize: '12px' }}>
-            <FileText className="w-3.5 h-3.5" /> PDF
-          </button>
-          <button onClick={printReport} className="btn-primary flex items-center gap-2" style={{ fontSize: '12px' }}>
-            <Printer className="w-3.5 h-3.5" /> Imprimer
-          </button>
+        </div>
+
+        {/* Filtres avancés */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-2 items-end">
+          <CustomSelect
+            options={periodPresetOptions}
+            value={periodPreset}
+            onChange={setPeriodPreset}
+            placeholder="Période"
+            className="w-full"
+          />
+          <CustomSelect
+            options={yearOptions}
+            value={yearFilter}
+            onChange={setYearFilter}
+            placeholder="Année"
+            icon={Calendar}
+            className="w-full"
+          />
+          <CustomSelect
+            options={cycleOptions}
+            value={cycleFilter}
+            onChange={setCycleFilter}
+            placeholder="Cycle"
+            className="w-full"
+          />
+          <CustomSelect
+            options={classOptions}
+            value={classFilter}
+            onChange={setClassFilter}
+            placeholder="Classe"
+            className="w-full"
+          />
+          <CustomSelect
+            options={optionOptions}
+            value={optionFilter}
+            onChange={setOptionFilter}
+            placeholder="Option"
+            className="w-full"
+          />
+          <CustomSelect
+            options={paymentMethodOptions}
+            value={paymentMethodFilter}
+            onChange={setPaymentMethodFilter}
+            placeholder="Mode paiement"
+            className="w-full"
+          />
+          <CustomSelect
+            options={feeCategoryOptions}
+            value={feeCategoryFilter}
+            onChange={setFeeCategoryFilter}
+            placeholder="Catégorie frais"
+            className="w-full"
+          />
+          <CustomSelect
+            options={invoiceStatusOptions}
+            value={invoiceStatusFilter}
+            onChange={setInvoiceStatusFilter}
+            placeholder="Statut facture"
+            className="w-full"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+            <Calendar className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+            <CustomDatePicker value={dateFrom} onChange={setDateFrom} placeholder="Du" className="w-36" />
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>au</span>
+            <CustomDatePicker value={dateTo} onChange={setDateTo} placeholder="Au" className="w-36" />
+          </div>
+          <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+            {filteredInvoices.length} facture(s) · {filteredPayments.length} paiement(s) · {filteredCash.length} opération(s)
+          </div>
         </div>
       </div>
 
@@ -761,7 +1058,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
               Filtres : {[
                 yearFilter && years.find(y => y.id === yearFilter)?.nom,
                 classFilter,
-                optionFilter,
+                optionFilter && getOptionLabel(optionFilter),
                 cycleFilter,
                 paymentMethodFilter,
                 feeCategoryFilter,
@@ -927,96 +1224,122 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-5 mb-6">
-        <div className="section-card p-5">
-          <h3 className="font-bold mb-4" style={{ color: 'var(--text-primary)' }}>Flux de trésorerie par mois</h3>
-          <div className="h-60">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-6">
+        {/* Flux de trésorerie mensuel */}
+        <ChartCard
+          title="Flux de trésorerie par mois"
+          subtitle="Encaissements vs décaissements réels"
+          icon={Wallet}
+          iconColor="#10b981"
+          badge={`${cashFlowByMonth.length} mois`}
+        >
+          {cashFlowByMonth.length === 0 ? <EmptyChart /> : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={cashFlowByMonth}>
-                <XAxis dataKey="month" fontSize={10} stroke="#94a3b8" tickLine={false} axisLine={false} />
-                <YAxis fontSize={10} stroke="#94a3b8" tickLine={false} axisLine={false} />
+              <BarChart data={cashFlowByMonth} margin={{ top: 8, right: 8, left: -12, bottom: 0 }} barGap={4} maxBarSize={44}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.5} vertical={false} />
+                <XAxis dataKey="label" fontSize={10} stroke="var(--text-muted)" tickLine={false} axisLine={false} />
+                <YAxis fontSize={10} stroke="var(--text-muted)" tickLine={false} axisLine={false} tickFormatter={compactAmount} width={54} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
-                <Bar dataKey="entrees" fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="sorties" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                <Legend wrapperStyle={{ fontSize: '10px' }} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, fontWeight: 700, paddingTop: 8 }} />
+                <Bar dataKey="entrees" name="Entrées" fill="#10b981" radius={[5, 5, 0, 0]} />
+                <Bar dataKey="sorties" name="Sorties" fill="#ef4444" radius={[5, 5, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
-        </div>
+          )}
+        </ChartCard>
 
-        <div className="section-card p-5">
-          <h3 className="font-bold mb-4" style={{ color: 'var(--text-primary)' }}>Recettes par catégorie de frais</h3>
-          <div className="h-60">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={revenueByCategory} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name }) => name} fontSize={9}>
-                  {revenueByCategory.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip content={<ChartTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        {/* Recettes par catégorie de frais */}
+        <ChartCard
+          title="Recettes par catégorie de frais"
+          subtitle="Répartition des montants encaissés"
+          icon={PieChartIcon}
+          iconColor="#6366f1"
+          badge={fmt(revenueByCategory.reduce((s, d) => s + d.value, 0), currency)}
+        >
+          {revenueByCategory.length === 0 ? <EmptyChart /> : (
+            <DonutWithLegend data={revenueByCategory} fmt={fmt} currency={currency} tooltip={<ChartTooltip />} />
+          )}
+        </ChartCard>
 
-        <div className="section-card p-5">
-          <h3 className="font-bold mb-4" style={{ color: 'var(--text-primary)' }}>Dépenses par catégorie</h3>
-          <div className="h-60">
+        {/* Dépenses par catégorie */}
+        <ChartCard
+          title="Dépenses par catégorie"
+          subtitle="Top 8 des postes de dépense"
+          icon={TrendingDown}
+          iconColor="#ef4444"
+          badge={fmt(expenseByCategory.reduce((s, d) => s + d.value, 0), currency)}
+        >
+          {expenseByCategory.length === 0 ? <EmptyChart /> : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={expenseByCategory} layout="vertical" margin={{ left: 20 }}>
-                <XAxis type="number" fontSize={10} stroke="#94a3b8" tickLine={false} axisLine={false} />
-                <YAxis type="category" dataKey="name" fontSize={9} stroke="#94a3b8" tickLine={false} axisLine={false} width={80} />
+              <BarChart data={expenseByCategory} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 4 }} maxBarSize={22}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.5} horizontal={false} />
+                <XAxis type="number" fontSize={10} stroke="var(--text-muted)" tickLine={false} axisLine={false} tickFormatter={compactAmount} />
+                <YAxis type="category" dataKey="name" fontSize={10} stroke="var(--text-muted)" tickLine={false} axisLine={false} width={110} tickFormatter={v => truncateLabel(v, 15)} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
-                <Bar dataKey="value" fill="#ef4444" radius={[0, 4, 4, 0]}>
+                <Bar dataKey="value" name="Dépense" radius={[0, 5, 5, 0]}>
                   {expenseByCategory.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          </div>
-        </div>
+          )}
+        </ChartCard>
 
-        <div className="section-card p-5">
-          <h3 className="font-bold mb-4" style={{ color: 'var(--text-primary)' }}>Méthodes de paiement</h3>
-          <div className="h-60">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={revenueByPaymentMethod} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name }) => name} fontSize={9}>
-                  {revenueByPaymentMethod.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip content={<ChartTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        {/* Méthodes de paiement */}
+        <ChartCard
+          title="Méthodes de paiement"
+          subtitle="Canaux d'encaissement utilisés"
+          icon={Banknote}
+          iconColor="#8b5cf6"
+          badge={`${revenueByPaymentMethod.length} canaux`}
+        >
+          {revenueByPaymentMethod.length === 0 ? <EmptyChart /> : (
+            <DonutWithLegend data={revenueByPaymentMethod} fmt={fmt} currency={currency} tooltip={<ChartTooltip />} />
+          )}
+        </ChartCard>
 
-        <div className="section-card p-5">
-          <h3 className="font-bold mb-4" style={{ color: 'var(--text-primary)' }}>Recouvrement par classe</h3>
-          <div className="h-60">
+        {/* Recouvrement par classe */}
+        <ChartCard
+          title="Recouvrement par classe"
+          subtitle="Frais attendus vs encaissés"
+          icon={BarChart3}
+          iconColor="#f59e0b"
+          badge={`${recoveryByClass.length} classes`}
+        >
+          {recoveryByClass.length === 0 ? <EmptyChart /> : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={recoveryByClass}>
-                <XAxis dataKey="className" fontSize={9} stroke="#94a3b8" tickLine={false} axisLine={false} angle={-30} textAnchor="end" height={50} />
-                <YAxis fontSize={10} stroke="#94a3b8" tickLine={false} axisLine={false} />
+              <BarChart data={recoveryByClass.slice(0, 10)} margin={{ top: 8, right: 8, left: -12, bottom: 0 }} barGap={3} maxBarSize={26}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.5} vertical={false} />
+                <XAxis dataKey="className" fontSize={9} stroke="var(--text-muted)" tickLine={false} axisLine={false} interval={0} angle={-32} textAnchor="end" height={64} tickFormatter={v => truncateLabel(v, 14)} />
+                <YAxis fontSize={10} stroke="var(--text-muted)" tickLine={false} axisLine={false} tickFormatter={compactAmount} width={54} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
-                <Bar dataKey="expected" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="collected" fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Legend wrapperStyle={{ fontSize: '10px' }} />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                <Bar dataKey="expected" name="Attendu" fill="#6366f1" fillOpacity={0.28} radius={[5, 5, 0, 0]} />
+                <Bar dataKey="collected" name="Encaissé" fill="#10b981" radius={[5, 5, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
-        </div>
+          )}
+        </ChartCard>
 
-        <div className="section-card p-5">
-          <h3 className="font-bold mb-4" style={{ color: 'var(--text-primary)' }}>Dépenses par bénéficiaire</h3>
-          <div className="h-60">
+        {/* Dépenses par bénéficiaire */}
+        <ChartCard
+          title="Dépenses par bénéficiaire"
+          subtitle="Top 8 des bénéficiaires payés"
+          icon={TrendingDown}
+          iconColor="#f59e0b"
+          badge={`${expenseByBeneficiary.length} bénéf.`}
+        >
+          {expenseByBeneficiary.length === 0 ? <EmptyChart /> : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={expenseByBeneficiary} layout="vertical" margin={{ left: 20 }}>
-                <XAxis type="number" fontSize={10} stroke="#94a3b8" tickLine={false} axisLine={false} />
-                <YAxis type="category" dataKey="name" fontSize={9} stroke="#94a3b8" tickLine={false} axisLine={false} width={80} />
+              <BarChart data={expenseByBeneficiary} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 4 }} maxBarSize={22}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.5} horizontal={false} />
+                <XAxis type="number" fontSize={10} stroke="var(--text-muted)" tickLine={false} axisLine={false} tickFormatter={compactAmount} />
+                <YAxis type="category" dataKey="label" fontSize={10} stroke="var(--text-muted)" tickLine={false} axisLine={false} width={120} tickFormatter={v => truncateLabel(v, 16)} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
-                <Bar dataKey="value" fill="#f59e0b" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="value" name="Montant versé" fill="#f59e0b" radius={[0, 5, 5, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
-        </div>
+          )}
+        </ChartCard>
       </div>
 
       <div className="section-card p-5 mb-6">
@@ -1273,7 +1596,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
             Filtres : {[
               yearFilter && years.find(y => y.id === yearFilter)?.nom,
               classFilter,
-              optionFilter,
+              optionFilter && getOptionLabel(optionFilter),
               cycleFilter,
               paymentMethodFilter,
               feeCategoryFilter,
@@ -1351,6 +1674,13 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({ activeSchoolYear }) => {
           </tbody>
         </table>
       </div>
+
+      {showDocGenerator && (
+        <FinancialReportsGeneratorModal
+          activeSchoolYear={yearFilter || activeSchoolYear}
+          onClose={() => setShowDocGenerator(false)}
+        />
+      )}
     </div>
   );
 };

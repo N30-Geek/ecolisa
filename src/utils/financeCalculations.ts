@@ -15,17 +15,12 @@ export const getInvoiceTotal = (
 ): number => {
   const lignes = invoice.lignes?.filter((l): l is LigneFacture => !!l && typeof l.montant === 'number');
   if (lignes && lignes.length > 0) {
-    return round2(lignes.reduce((sum, l) => {
-      let source = l.devise || invoice.devise;
-      // Ancien enregistrement PayFeesModal : montant et montantPaye identiques
-      // signifient que le montant est déjà dans la devise d'affichage (invoice.devise)
-      if (l.devise !== invoice.devise && l.montantPaye !== undefined && Math.abs(l.montantPaye - l.montant) < 0.001) {
-        source = invoice.devise;
-      }
+    return lignes.reduce((sum, l) => {
+      const source = l.devise || invoice.devise;
       return sum + convertCurrency(l.montant, source, targetCurrency);
-    }, 0));
+    }, 0);
   }
-  return round2(convertCurrency(invoice.montantTotal, invoice.devise, targetCurrency));
+  return convertCurrency(invoice.montantTotal, invoice.devise, targetCurrency);
 };
 
 /**
@@ -39,12 +34,12 @@ export const getInvoicePaid = (
   targetCurrency: string
 ): number => {
   const invoicePayments = payments.filter(p => p.invoiceId === invoice.id);
-  return round2(invoicePayments.reduce((sum, p) => {
+  return invoicePayments.reduce((sum, p) => {
     if (p.allocations && p.allocations.length > 0) {
-      return sum + round2(p.allocations.reduce((a, alloc) => a + convertCurrency(alloc.montant, p.devise, targetCurrency), 0));
+      return sum + p.allocations.reduce((a, alloc) => a + convertCurrency(alloc.montant, p.devise, targetCurrency), 0);
     }
     return sum + convertCurrency(p.montantPaye, p.devise, targetCurrency);
-  }, 0));
+  }, 0);
 };
 
 /**
@@ -55,16 +50,18 @@ export const getPaymentAmount = (
   payment: TransactionPaiement,
   targetCurrency: string
 ): number => {
+  const fromMontantPaye = round2(convertCurrency(payment.montantPaye, payment.devise, targetCurrency));
   if (payment.allocations && payment.allocations.length > 0) {
     const fromAllocations = round2(payment.allocations.reduce((a, alloc) => a + convertCurrency(alloc.montant, payment.devise, targetCurrency), 0));
-    if (fromAllocations > 0 && payment.montantPaye !== undefined && payment.montantPaye > 0 && Math.abs(fromAllocations - payment.montantPaye) > 0.01) {
+    if (fromAllocations > 0.001 && Math.abs(fromAllocations - fromMontantPaye) > 0.01) {
       return fromAllocations;
     }
   }
-  return round2(convertCurrency(payment.montantPaye, payment.devise, targetCurrency));
+  return fromMontantPaye;
 };
 
 const ROUNDING_TOLERANCE = 0.10;
+const RELATIVE_TOLERANCE = 0.001; // 0,1 % du total (pour les arrondis de conversion)
 
 /**
  * Détermine le statut réel d'une facture à partir de ses paiements.
@@ -95,8 +92,11 @@ export const getInvoiceRemaining = (
 ): number => {
   const total = getInvoiceTotal(invoice, targetCurrency);
   const paid = getInvoicePaid(invoice, payments, targetCurrency);
-  const remaining = round2(Math.max(0, total - paid));
-  return remaining <= ROUNDING_TOLERANCE ? 0 : remaining;
+  const remaining = Math.max(0, total - paid);
+  // Tolérance absolue (0,10) + tolérance relative (0,1 % du total) pour absorber
+  // les écarts dus aux arrondis de conversion entre devises (ex: 30 000 Fc vs 13,04 $).
+  const tolerance = Math.max(ROUNDING_TOLERANCE, total * RELATIVE_TOLERANCE);
+  return remaining <= tolerance ? 0 : remaining;
 };
 
 /**
@@ -123,7 +123,7 @@ export const getStudentTotalDue = (
       byFeeTranche.set(key, Math.max(byFeeTranche.get(key) || 0, total));
     }
   }
-  return round2(Array.from(byFeeTranche.values()).reduce((a, b) => a + b, 0));
+  return Array.from(byFeeTranche.values()).reduce((a, b) => a + b, 0);
 };
 
 export interface PaymentAllocationSummary {
@@ -177,7 +177,8 @@ export const getPaymentAllocationsSummary = (
 
     const totalReference = (matchedTranche as any)?.montant ?? feeType?.montant ?? line?.montant ?? 0;
     const totalDevise = (matchedTranche as any)?.devise ?? feeType?.devise ?? line?.devise ?? payment.devise;
-    const isPartial = totalReference > 0.001 && a.montant < totalReference - 0.01;
+    const allocInTotalDevise = round2(convertCurrency(a.montant, payment.devise, totalDevise));
+    const isPartial = totalReference > 0.001 && allocInTotalDevise < totalReference - 0.01;
 
     return {
       ...a,

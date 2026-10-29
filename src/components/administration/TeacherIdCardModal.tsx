@@ -82,7 +82,7 @@ export const TeacherIdCardModal: React.FC<TeacherIdCardModalProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
       onClick={onClose}
     >
       <style>{`
@@ -106,24 +106,24 @@ export const TeacherIdCardModal: React.FC<TeacherIdCardModalProps> = ({
       `}</style>
 
       <div
-        className="relative w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col border text-slate-900 dark:text-white"
-        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+        className="relative w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col border bg-white text-slate-900"
+        style={{ borderColor: 'rgba(226,232,240,0.8)' }}
         onClick={e => e.stopPropagation()}
       >
         {/* EN-TÊTE */}
         <div
-          className="px-6 py-4 border-b flex items-center justify-between no-print"
-          style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}
+          className="px-6 py-4 border-b flex items-center justify-between no-print bg-slate-50"
+          style={{ borderColor: '#e2e8f0' }}
         >
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-indigo-600/20 text-indigo-500 border border-indigo-500/30">
               <School className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-black uppercase tracking-wider flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+              <h2 className="text-sm font-black uppercase tracking-wider flex items-center gap-2 text-slate-900">
                 Carte de Service Professionnelle d'Enseignant RDC
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-slate-500">
                 {teacher.prenom} {teacher.nom} — EPST RDC
               </p>
             </div>
@@ -131,14 +131,14 @@ export const TeacherIdCardModal: React.FC<TeacherIdCardModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-2 rounded-2xl text-slate-400 hover:text-white hover:bg-slate-500/20 transition-colors"
+            className="p-2 rounded-2xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* TOOLBAR CONTROLES */}
-        <div className="px-6 py-3 border-b flex flex-wrap items-center justify-between gap-3 no-print" style={{ borderColor: 'var(--border)' }}>
+        <div className="px-6 py-3 border-b flex flex-wrap items-center justify-between gap-3 no-print bg-white" style={{ borderColor: '#e2e8f0' }}>
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-indigo-500" />
             <span className="text-xs font-bold text-slate-400">Affichage :</span>
@@ -198,7 +198,7 @@ export const TeacherIdCardModal: React.FC<TeacherIdCardModalProps> = ({
         </div>
 
         {/* CARTE EN RENDU */}
-        <div className="p-8 overflow-y-auto flex items-center justify-center min-h-[300px]">
+        <div className="p-8 overflow-y-auto flex items-center justify-center min-h-[300px] bg-slate-50/80">
           <div id="teacher-card-print-section">
             <TeacherIdCardRenderer
               teacher={teacher}
@@ -209,13 +209,13 @@ export const TeacherIdCardModal: React.FC<TeacherIdCardModalProps> = ({
         </div>
 
         {/* FOOTER */}
-        <div className="px-6 py-3 border-t text-xs text-slate-400 flex items-center justify-between no-print" style={{ borderColor: 'var(--border)' }}>
+        <div className="px-6 py-3 border-t text-xs text-slate-500 flex items-center justify-between no-print bg-slate-50" style={{ borderColor: '#e2e8f0' }}>
           <span className="flex items-center gap-1.5 text-emerald-500 font-bold">
             <CheckCircle2 className="w-4 h-4" /> Format carte bancaire certifié CR80 (85.6mm × 53.98mm)
           </span>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-xl border border-slate-500/30 text-xs font-bold hover:bg-slate-500/10 transition-colors"
+            className="px-4 py-1.5 rounded-xl border border-slate-300 text-slate-600 text-xs font-bold hover:bg-slate-100 transition-colors"
           >
             Fermer
           </button>

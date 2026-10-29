@@ -60,7 +60,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({
   onPrint,
   onExportPDF,
 }) => {
-  const { currency, exchangeRate, format } = useSchoolConfig();
+  const { currency, exchangeRate, format, config } = useSchoolConfig();
   const printRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<FichePaie>(fiche);
@@ -121,16 +121,19 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({
   const handlePrint = async () => {
     setIsPrinting(true);
     const electron = (window as any).electronAPI;
-    if (electron?.printReceipt) {
+    if (electron?.printA4 && printRef.current) {
       try {
-        await electron.printReceipt({
-          printerName: '',
-          silent: false,
-          html: printRef.current?.innerHTML,
+        const result = await electron.printA4({
+          deviceName: config?.a4PrinterName,
+          silent: config?.directSilentPrint ?? false,
+          html: printRef.current.innerHTML,
         });
-        setIsPrinting(false);
-        return;
-      } catch (err) { console.warn('[Payslip] printReceipt failed:', err); }
+        if (result?.success) {
+          setIsPrinting(false);
+          return;
+        }
+        console.warn('[Payslip] printA4 failed:', result?.error);
+      } catch (err) { console.warn('[Payslip] printA4 failed:', err); }
     }
     const originalTitle = document.title;
     document.title = `Fiche_Paie_${draft.numeroFiche || draft.staffName}`;

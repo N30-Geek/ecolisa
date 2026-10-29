@@ -80,12 +80,17 @@ export const AccountingTab: React.FC<AccountingTabProps> = ({ activeSchoolYear }
     const map = new Map<string, number>();
     for (const e of ecritures) {
       for (const l of e.lignes || []) {
+        const c = comptes.find(cc => cc.id === l.compteId);
+        const debit = convertLine(l, l.debit || 0);
+        const credit = convertLine(l, l.credit || 0);
         const cur = map.get(l.compteId) || 0;
-        map.set(l.compteId, cur + convertLine(l, l.debit || 0) - convertLine(l, l.credit || 0));
+        // Passif, capitaux et produits : solde créditeur (crédit - débit)
+        const isCreditor = c?.type === 'PRODUIT' || c?.type === 'PASSIF' || c?.type === 'CAPITAUX';
+        map.set(l.compteId, cur + (isCreditor ? credit - debit : debit - credit));
       }
     }
     return map;
-  }, [ecritures, convert, referenceCurrency]);
+  }, [ecritures, comptes, convert, referenceCurrency]);
 
   const totalDebitCredit = useMemo(() => {
     return filteredEcritures.reduce((acc, e) => {
@@ -109,7 +114,11 @@ export const AccountingTab: React.FC<AccountingTabProps> = ({ activeSchoolYear }
       }
     }
     return Array.from(map.entries())
-      .map(([id, data]) => ({ id, ...data, solde: data.debit - data.credit }))
+      .map(([id, data]) => {
+        // Passif, capitaux et produits : solde créditeur (crédit - débit)
+        const isCreditor = data.type === 'PRODUIT' || data.type === 'PASSIF' || data.type === 'CAPITAUX';
+        return { id, ...data, solde: isCreditor ? data.credit - data.debit : data.debit - data.credit };
+      })
       .sort((a, b) => a.code.localeCompare(b.code));
   }, [ecritures, comptes, convert, referenceCurrency]);
 

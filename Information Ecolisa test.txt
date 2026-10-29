@@ -1,0 +1,8 @@
+Information Ecolisa test:
+------------------------
+Nom Etablissement: Complexe Scolaire Zelda
+type: Polyvent
+statut juridique:  Privé
+Regime d'enseignement: Demi-journée
+N°Arrêté D'grément EPST: 
+Province Educative RDC: MINEPST/CABMIN/1420/2026 DU 27/03

@@ -2,7 +2,8 @@ import React from 'react';
 import { QRCode } from 'react-qr-code';
 import { School } from 'lucide-react';
 import { Eleve } from '../../types';
-import { SchoolConfig } from '../onboarding/OnboardingWizard';
+import { SchoolConfig, CardCustomization } from '../onboarding/OnboardingWizard';
+import { cardAppearance, cardPhotoStyle, getStudentCardCycle, resolveCardConfig } from './IdCardRenderer';
 import { LOGO_EPST_RDC_BASE64 } from '../../assets/logoEPSTData';
 import { FLAG_RDC_BASE64 } from '../../assets/flagRDCData';
 
@@ -11,6 +12,8 @@ interface RDCEleveCardProps {
   schoolConfig?: Partial<SchoolConfig> | null;
   face?: 'front' | 'back' | 'both';
   className?: string;
+  cardConfig?: Partial<CardCustomization>;
+  style?: React.CSSProperties;
 }
 
 export const RDCEleveCardTemplate: React.FC<RDCEleveCardProps> = ({
@@ -18,13 +21,16 @@ export const RDCEleveCardTemplate: React.FC<RDCEleveCardProps> = ({
   schoolConfig,
   face = 'both',
   className = '',
+  cardConfig,
+  style,
 }) => {
   const schoolName = schoolConfig?.schoolName || 'COMPLEXE SCOLAIRE LUMUMBA (CS LUMUMBA)';
   const schoolAddress = schoolConfig?.address || 'N° 1234, AV. DE LA RÉVOLUTION, GOMBE, KINSHASA';
-  const activeYear = schoolConfig?.activeSchoolYear || '2025–2026';
-  const cardCustom = schoolConfig?.cardCustomization;
-  const cardBgColor = cardCustom?.cardBgColor || '#F0F4F8';
-  const filigreeOpacity = cardCustom?.filigreeOpacity ?? 0.08;
+  const cardCustom = resolveCardConfig(schoolConfig, cardConfig, getStudentCardCycle(student));
+  const activeYear = cardCustom.validityPeriod || schoolConfig?.activeSchoolYear || '';
+  const cardBgColor = cardCustom.cardBgColor || '#F0F4F8';
+  const filigreeOpacity = cardCustom.showFiligree ? cardCustom.filigreeOpacity ?? 0.08 : 0;
+  const appearance = { ...style, ...cardAppearance(cardCustom), backgroundColor: cardBgColor };
 
   const qrPayload = JSON.stringify({
     app: 'ECOLISA_EPST',
@@ -40,9 +46,9 @@ export const RDCEleveCardTemplate: React.FC<RDCEleveCardProps> = ({
       style={{
         width: '324px',
         height: '204px', // Ratio carte de crédit 85.6mm x 54mm
-        backgroundColor: cardBgColor,
         boxSizing: 'border-box',
-        fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+        ...appearance,
+        backgroundColor: cardBgColor,
       }}
     >
       {/* MOTIF DE FOND GUILLOCHE / FILIGRANE ONDULÉ AVEC OPACITÉ CONFIGURABLE */}
@@ -55,7 +61,7 @@ export const RDCEleveCardTemplate: React.FC<RDCEleveCardProps> = ({
       </svg>
 
       {/* LOGO DE L'ÉCOLE EN FILIGRANE EN FOND (UN PEU FLOU ET TRANSLUCIDE) */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden">
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden" style={{ display: cardCustom.showMiniLogos ? undefined : 'none' }}>
         {schoolConfig?.logoUrl ? (
           <img
             src={schoolConfig.logoUrl}
@@ -71,37 +77,33 @@ export const RDCEleveCardTemplate: React.FC<RDCEleveCardProps> = ({
 
       {/* BANDEAU HAUT EN-TÊTE HARMONISÉ : LOGO EPST À GAUCHE, TEXTE AU CENTRE, LOGO ÉCOLE À DROITE */}
       <div className="relative z-10 space-y-1">
-        <div className="flex items-center justify-between gap-1 border-b pb-1 border-slate-300/60">
-          {/* LOGO GAUCHE : SCEAU OFFICIEL EPST RDC (input_file_1.png) */}
-          <div className="w-7 h-7 rounded-full bg-white p-0.5 border border-slate-300 shrink-0 shadow-2xs flex items-center justify-center">
-            <img src={LOGO_EPST_RDC_BASE64} alt="EPST Logo" className="w-full h-full object-contain" />
+        <div className="flex items-center justify-between gap-1 border-b pb-1 border-slate-300/60" style={{ background: cardCustom.headerBgColor }}>
+          {/* LOGO GAUCHE : DRAPEAU RDC */}
+          <div className="w-7 h-7 rounded-full bg-white p-0.5 border border-slate-300 shrink-0 shadow-2xs flex items-center justify-center" style={{ display: cardCustom.showCountryFlag ? undefined : 'none' }}>
+            <img src={FLAG_RDC_BASE64} alt="Drapeau RDC" className="w-full h-full object-contain" />
           </div>
 
           {/* CENTRE : TITRES HARMONISÉS CENTRÉS */}
-          <div className="flex-1 text-center min-w-0 leading-tight">
+          <div className="flex-1 min-w-0 leading-tight" style={{ textAlign: cardCustom.headerAlign }}>
             <p className="text-[7.5px] font-black uppercase text-slate-900 tracking-tight truncate">
-              RÉPUBLIQUE DÉMOCRATIQUE DU CONGO
+              {cardCustom.headerTitle}
             </p>
             <p className="text-[5.5px] font-bold uppercase text-slate-600 tracking-tight truncate">
-              MINISTÈRE DE L'ENSEIGNEMENT PRIMAIRE, SECONDAIRE ET TECHNIQUE (EPST)
+              {cardCustom.headerSubtitle}
             </p>
             <h3 className="text-[8.5px] font-black uppercase text-indigo-950 tracking-tight truncate mt-0.5">
               {schoolName}
             </h3>
           </div>
 
-          {/* LOGO DROITE : LOGO DE L'ÉCOLE */}
-          <div className="w-7 h-7 rounded-md bg-white p-0.5 border border-slate-300 shrink-0 shadow-2xs flex items-center justify-center">
-            {schoolConfig?.logoUrl ? (
-              <img src={schoolConfig.logoUrl} alt="School Logo" className="w-full h-full object-contain rounded" />
-            ) : (
-              <School className="w-4 h-4 text-indigo-700" />
-            )}
+          {/* LOGO DROITE : SCEAU OFFICIEL EPST RDC */}
+          <div className="w-7 h-7 rounded-full bg-white p-0.5 border border-slate-300 shrink-0 shadow-2xs flex items-center justify-center" style={{ display: cardCustom.showCoatOfArms && cardCustom.showOfficialEpstLogo !== false ? undefined : 'none' }}>
+            <img src={LOGO_EPST_RDC_BASE64} alt="EPST Logo" className="w-full h-full object-contain" />
           </div>
         </div>
 
         {/* LIGNE TRICOLORE ACCENT */}
-        <div className="h-[2.5px] w-full flex rounded-full overflow-hidden">
+        <div className="h-[2.5px] w-full flex rounded-full overflow-hidden" style={{ visibility: cardCustom.showTricolor ? 'visible' : 'hidden' }}>
           <div className="flex-1 bg-[#007fff]" />
           <div className="flex-1 bg-[#ffcd00]" />
           <div className="flex-1 bg-[#ce1126]" />
@@ -116,10 +118,10 @@ export const RDCEleveCardTemplate: React.FC<RDCEleveCardProps> = ({
       </div>
 
       {/* BLOC PRINCIPAL DE CONTENU RECTO (PHOTO + FORMULAIRE STRUCTURÉ) */}
-      <div className="relative z-10 flex items-start gap-2 flex-1">
+      <div className="relative z-10 flex items-start gap-2 flex-1" style={{ flexDirection: cardCustom.photoPosition === 'right' ? 'row-reverse' : 'row', textAlign: cardCustom.textAlign }}>
         {/* PHOTO ÉLÈVE AVEC BADGE HOLOGRAMME EPST */}
         <div className="relative shrink-0 flex flex-col items-center">
-          <div className="w-[66px] h-[82px] rounded-lg border-2 border-slate-400 bg-white overflow-hidden shadow-sm relative">
+          <div className="w-[66px] h-[82px] rounded-lg border-2 border-slate-400 bg-white overflow-hidden shadow-sm relative" style={{ ...cardPhotoStyle(cardCustom), ...(cardCustom.photoShape === 'circle' ? { height: 66 } : {}) }}>
             {student.photoUrl ? (
               <img src={student.photoUrl} alt={student.prenom} className="w-full h-full object-cover" />
             ) : (
@@ -128,7 +130,7 @@ export const RDCEleveCardTemplate: React.FC<RDCEleveCardProps> = ({
               </div>
             )}
             {/* TAMPON HOLOGRAMME EPST */}
-            <div className="absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full bg-gradient-to-br from-yellow-300 via-amber-500 to-indigo-600 border border-white flex items-center justify-center text-[5px] font-black text-white shadow-xs">
+            <div className="absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full bg-gradient-to-br from-yellow-300 via-amber-500 to-indigo-600 border border-white flex items-center justify-center text-[5px] font-black text-white shadow-xs" style={{ display: cardCustom.showSchoolSeal ? undefined : 'none' }}>
               EPST
             </div>
           </div>
@@ -180,15 +182,16 @@ export const RDCEleveCardTemplate: React.FC<RDCEleveCardProps> = ({
         {/* BLOC DRAPEAU RDC & QR CODE RECTO */}
         <div className="flex items-center gap-1 shrink-0">
           {/* DRAPEAU OFFICIEL RDC (input_file_1.png) */}
-          <div className="w-6 h-4 rounded-xs overflow-hidden border border-slate-300 shadow-2xs shrink-0">
+          <div className="w-6 h-4 rounded-xs overflow-hidden border border-slate-300 shadow-2xs shrink-0" style={{ display: cardCustom.showCountryFlag ? undefined : 'none' }}>
             <img src={FLAG_RDC_BASE64} alt="Drapeau RDC" className="w-full h-full object-cover" />
           </div>
           {/* QR CODE */}
-          <div className="bg-white p-0.5 rounded border border-slate-300 shadow-2xs shrink-0">
+          <div className="bg-white p-0.5 rounded border border-slate-300 shadow-2xs shrink-0" style={{ display: cardCustom.showQR ? undefined : 'none' }}>
             <QRCode value={qrPayload} size={34} level="M" />
           </div>
         </div>
       </div>
+      {cardCustom.footerText && <p className="relative z-10 text-[5.5px] text-center text-slate-600 leading-tight truncate">{cardCustom.footerText}</p>}
     </div>
   );
 
@@ -198,19 +201,19 @@ export const RDCEleveCardTemplate: React.FC<RDCEleveCardProps> = ({
       style={{
         width: '324px',
         height: '204px', // Ratio carte de crédit 85.6mm x 54mm
-        backgroundColor: '#F0F4F8',
         boxSizing: 'border-box',
-        fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+        ...appearance,
+        backgroundColor: cardBgColor,
       }}
     >
       {/* MOTIF DE FOND GUILLOCHE VERSO */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.06]" viewBox="0 0 324 204" fill="none">
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ opacity: filigreeOpacity }} viewBox="0 0 324 204" fill="none">
         <path d="M-20 160 Q80 80 180 160 T380 160" stroke="#0056b3" strokeWidth="3" fill="none" />
         <circle cx="162" cy="102" r="75" stroke="#0056b3" strokeWidth="1" fill="none" />
       </svg>
 
       {/* LOGO DE L'ÉCOLE EN FILIGRANE EN FOND VERSO */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden">
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden" style={{ display: cardCustom.showMiniLogos ? undefined : 'none' }}>
         {schoolConfig?.logoUrl ? (
           <img
             src={schoolConfig.logoUrl}
@@ -230,11 +233,11 @@ export const RDCEleveCardTemplate: React.FC<RDCEleveCardProps> = ({
           INFORMATIONS COMPLÉMENTAIRES
         </div>
         <div className="text-[6.5px] font-bold uppercase text-slate-600 tracking-tight leading-none text-center">
-          MINISTÈRE DE L'ENSEIGNEMENT PRIMAIRE, SECONDAIRE ET TECHNIQUE (EPST)
+          {cardCustom.headerSubtitle}
         </div>
 
         {/* LIGNE TRICOLORE ACCENT */}
-        <div className="h-[2.5px] w-full flex rounded-full overflow-hidden mt-0.5">
+        <div className="h-[2.5px] w-full flex rounded-full overflow-hidden mt-0.5" style={{ visibility: cardCustom.showTricolor ? 'visible' : 'hidden' }}>
           <div className="flex-1 bg-[#007fff]" />
           <div className="flex-1 bg-[#ffcd00]" />
           <div className="flex-1 bg-[#ce1126]" />
@@ -289,6 +292,7 @@ export const RDCEleveCardTemplate: React.FC<RDCEleveCardProps> = ({
         IDRDC{student.nom.toUpperCase()}&lt;&lt;&lt;&lt;{student.prenom.toUpperCase()}&lt;&lt;&lt;&lt;{student.registrationNumber.replace(/-/g, '')}&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;<br />
         EKINSHASIDE&lt;&lt;&lt;&lt;&lt;&lt;C0&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
       </div>
+      {cardCustom.footerText && <p className="relative z-10 text-[5.5px] text-center text-slate-600 leading-tight truncate">{cardCustom.footerText}</p>}
     </div>
   );
 

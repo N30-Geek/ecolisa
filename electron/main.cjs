@@ -29,6 +29,237 @@ function verifyPassword(password, storedHash) {
 
 let mainWindow;
 let db = null;
+let currentDbPath = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  MIGRATION MATERNELLE OFFICIELLE EPST (IGE/PS.001)
+// ─────────────────────────────────────────────────────────────────────────────
+const OFFICIAL_MATERNELLE_ACTIVITIES = [
+  { code: 'MAT-ACT-01', nom: 'Activités sensorielles', categorie: 'EVEIL_ART', volumeHoraire: 3, ordre: 1, groupeMaternelle: 'GROUPE_I' },
+  { code: 'MAT-ACT-02', nom: 'Activités musicales', categorie: 'EVEIL_ART', volumeHoraire: 2, ordre: 2, groupeMaternelle: 'GROUPE_I' },
+  { code: 'MAT-ACT-03', nom: 'Activités psychomotrices', categorie: 'EVEIL_ART', volumeHoraire: 3, ordre: 3, groupeMaternelle: 'GROUPE_II' },
+  { code: 'MAT-ACT-04', nom: 'Activités physiques', categorie: 'EVEIL_ART', volumeHoraire: 4, ordre: 4, groupeMaternelle: 'GROUPE_II' },
+  { code: 'MAT-ACT-05', nom: "Activités d'arts plastiques", categorie: 'EVEIL_ART', volumeHoraire: 3, ordre: 5, groupeMaternelle: 'GROUPE_II' },
+  { code: 'MAT-ACT-06', nom: 'Activités de comportement', categorie: 'SCIENCES_HUMAINES', volumeHoraire: 2, ordre: 6, groupeMaternelle: 'GROUPE_III' },
+  { code: 'MAT-ACT-07', nom: 'Activités de vie pratique', categorie: 'PRATIQUE', volumeHoraire: 3, ordre: 7, groupeMaternelle: 'GROUPE_III' },
+  { code: 'MAT-ACT-08', nom: 'Activités de promotion de la santé', categorie: 'SCIENCES_HUMAINES', volumeHoraire: 2, ordre: 8, groupeMaternelle: 'GROUPE_III' },
+  { code: 'MAT-ACT-09', nom: 'Activités exploratoires', categorie: 'SCIENCES_EXACTES', volumeHoraire: 4, ordre: 9, groupeMaternelle: 'GROUPE_IV' },
+  { code: 'MAT-ACT-10', nom: 'Activités de langage', categorie: 'LANGUES', volumeHoraire: 5, ordre: 10, groupeMaternelle: 'GROUPE_IV' },
+  { code: 'MAT-ACT-11', nom: 'Activités mathématiques', categorie: 'SCIENCES_EXACTES', volumeHoraire: 4, ordre: 11, groupeMaternelle: 'GROUPE_IV' },
+  { code: 'MAT-ACT-12', nom: 'Activités libres', categorie: 'EVEIL_ART', volumeHoraire: 3, ordre: 12, groupeMaternelle: 'GROUPE_IV' },
+];
+
+function migrateMaternelleSubjects(database) {
+  if (!database) return;
+  const officialByCode = new Map(OFFICIAL_MATERNELLE_ACTIVITIES.map(a => [a.code, a]));
+  const officialByName = new Map(OFFICIAL_MATERNELLE_ACTIVITIES.map(a => [a.nom.toLowerCase().trim(), a]));
+  const stableId = (code) => `epst-${code.toLowerCase()}`;
+
+  const tx = database.transaction(() => {
+    // 1. Identifier les matières Maternelle existantes (cycle_code ou codes hérités MAT-ACT-)
+    const existing = database.prepare(`
+      SELECT id, code, nom, enseignant_id, enseignant_nom FROM subjects
+      WHERE (cycle_code IS NOT NULL AND UPPER(cycle_code) = 'MATERNELLE')
+         OR (code IS NOT NULL AND (INSTR(UPPER(code), 'MAT-ACT-') > 0 OR INSTR(UPPER(code), 'MAT_ACT_') > 0))
+    `).all();
+
+    const idsToDelete = new Set();
+    const teacherByCode = new Map(); // Conserve l'enseignant associé à une activité officielle
+    const updateCoteStmt = database.prepare('UPDATE cotes SET matiere_id=? WHERE matiere_id=?');
+    const deleteCotesStmt = database.prepare('DELETE FROM cotes WHERE matiere_id=?');
+    const deleteSubjectStmt = database.prepare('DELETE FROM subjects WHERE id=?');
+
+    for (const { id, code, nom, enseignant_id, enseignant_nom } of existing) {
+      const upperCode = (code || '').toUpperCase().trim();
+      const lowerName = (nom || '').toLowerCase().trim();
+      const official = officialByCode.get(upperCode) || officialByName.get(lowerName);
+
+      if (official) {
+        const newId = stableId(official.code);
+        if (id !== newId) {
+          updateCoteStmt.run(newId, id);
+        }
+        // Conserve l'enseignant le cas échéant (priorité au premier non vide)
+        if (!teacherByCode.has(official.code) && enseignant_id) {
+          teacherByCode.set(official.code, { enseignantId: enseignant_id, enseignantNom: enseignant_nom });
+        }
+        // Si le code correspond exactement, INSERT OR REPLACE remplacera la ligne.
+        // Si seul le nom correspond, le code est différent : suppression manuelle requise.
+        if (upperCode !== official.code) {
+          idsToDelete.add(id);
+        }
+      } else {
+        // Activité obsolète : supprimer les cotes associées puis la matière.
+        deleteCotesStmt.run(id);
+        idsToDelete.add(id);
+      }
+    }
+
+    for (const id of idsToDelete) {
+      deleteSubjectStmt.run(id);
+    }
+
+    // 2. Insérer / mettre à jour les 12 activités officielles avec les bons maxima
+    const insertStmt = database.prepare(`
+      INSERT OR REPLACE INTO subjects
+      (id, code, nom, coefficient, max_score, categorie, max_examen, max_semestre, max_annuel, cycle_code, option_code, volume_horaire, groupe_maternelle, enseignant_id, enseignant_nom, data_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const a of OFFICIAL_MATERNELLE_ACTIVITIES) {
+      const id = stableId(a.code);
+      const teacher = teacherByCode.get(a.code) || {};
+      const dataJson = JSON.stringify({
+        id,
+        code: a.code,
+        nom: a.nom,
+        coefficient: 1,
+        maxScore: 4,
+        maxExamen: 0,
+        maxSemestre: 8,
+        maxAnnuel: 12,
+        categorie: a.categorie,
+        cycleCode: 'MATERNELLE',
+        optionCode: 'TRONC_COMMUN',
+        volumeHoraire: a.volumeHoraire,
+        groupeMaternelle: a.groupeMaternelle,
+        ordre: a.ordre,
+      });
+      insertStmt.run(
+        id,
+        a.code,
+        a.nom,
+        1,            // coefficient
+        4,            // max_score
+        a.categorie,
+        0,            // max_examen
+        8,            // max_semestre
+        12,           // max_annuel
+        'MATERNELLE',
+        'TRONC_COMMUN',
+        a.volumeHoraire,
+        a.groupeMaternelle,
+        teacher.enseignantId || null,
+        teacher.enseignantNom || null,
+        dataJson
+      );
+    }
+
+    // 3. Nettoyer les éventuelles cotes devenues orphelines
+    database.prepare(`
+      DELETE FROM cotes
+      WHERE matiere_id IS NOT NULL
+        AND matiere_id NOT IN (SELECT id FROM subjects)
+    `).run();
+  });
+
+  tx();
+  console.log('[ECOLISA Migration] Matières Maternelle normalisées : 12 activités officielles en place.');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  MIGRATION DES CYCLES / OPTIONS DES MATIÈRES (inférence persistante)
+// ─────────────────────────────────────────────────────────────────────────────
+function migrateSubjectContext(database) {
+  if (!database) return;
+  const safeJson = (v) => { try { return JSON.parse(v || '{}'); } catch { return {}; } };
+
+  const tx = database.transaction(() => {
+    const rows = database.prepare(`
+      SELECT id, code, nom, cycle_code, option_code, groupe_maternelle, max_score, data_json
+      FROM subjects
+      WHERE cycle_code IS NULL OR TRIM(cycle_code) = ''
+         OR option_code IS NULL OR TRIM(option_code) = ''
+    `).all();
+
+    const update = database.prepare('UPDATE subjects SET cycle_code=?, option_code=?, data_json=? WHERE id=?');
+
+    for (const s of rows) {
+      const data = safeJson(s.data_json);
+      const code = (s.code || '').toUpperCase().trim();
+      const nom = (s.nom || '').toLowerCase();
+
+      let cycle = (data.cycleCode || s.cycle_code || '').toUpperCase().trim();
+      let option = data.optionCode || s.option_code || '';
+
+      // Normalise les anciens alias de cycle
+      if (cycle === 'CTEB' || cycle === 'SECONDAIRE' || cycle === 'SECONDAIRE_CTEB') cycle = 'SECONDAIRE_CTEB';
+      else if (cycle === 'HUMANITE' || cycle === 'HUMANITES' || cycle === 'HUMANITES_S') cycle = 'HUMANITES';
+      else if (cycle === 'PRIMAIRE') cycle = 'PRIMAIRE';
+      else if (cycle === 'MATERNELLE') cycle = 'MATERNELLE';
+
+      // Infère le cycle quand il est manquant
+      if (!cycle) {
+        if (s.groupe_maternelle) {
+          cycle = 'MATERNELLE';
+        } else if (code.startsWith('MAT-') || code.startsWith('MAT_')) {
+          cycle = 'MATERNELLE';
+        } else if (code.startsWith('PRIM-') || code.startsWith('PRIM_')) {
+          cycle = 'PRIMAIRE';
+        } else if (code.startsWith('CTEB-') || code.startsWith('CTEB_')) {
+          cycle = 'SECONDAIRE_CTEB';
+        } else if (code.startsWith('HUM-') || code.startsWith('HUM_')) {
+          cycle = 'HUMANITES';
+        } else if (nom.includes('maternelle')) {
+          cycle = 'MATERNELLE';
+        } else if (nom.includes('activité') || nom.includes('activite')) {
+          cycle = 'MATERNELLE';
+        } else if (nom.includes('primaire')) {
+          cycle = 'PRIMAIRE';
+        } else if (nom.includes('cteb') || nom.includes('éducation de base') || nom.includes('education de base')) {
+          cycle = 'SECONDAIRE_CTEB';
+        } else if (nom.includes('humanité') || nom.includes('humanite') || nom.includes('latin') || nom.includes('commerciale') || nom.includes('gestion') || nom.includes('sténographie') || nom.includes('sténgraphie')) {
+          cycle = 'HUMANITES';
+        }
+      }
+
+      // Infère l'option quand elle est manquante
+      if (!option && cycle) {
+        if (cycle !== 'HUMANITES') {
+          option = 'TRONC_COMMUN';
+        } else {
+          option = 'TRONC_COMMUN';
+          const optionAliases = [
+            { key: 'secretariat', code: 'SECRETARIAT' },
+            { key: 'commerciale', code: 'COMMERCIALE' },
+            { key: 'gestion', code: 'COMMERCIALE' },
+            { key: 'comptabilité', code: 'COMMERCIALE' },
+            { key: 'latin', code: 'LATIN_PHILO' },
+            { key: 'philo', code: 'LATIN_PHILO' },
+            { key: 'scientifique', code: 'SCIENTIFIQUE' },
+            { key: 'mathématique', code: 'SCIENTIFIQUE' },
+            { key: 'physique', code: 'SCIENTIFIQUE' },
+            { key: 'chimie', code: 'SCIENTIFIQUE' },
+            { key: 'biologie', code: 'SCIENTIFIQUE' },
+            { key: 'pédagogie', code: 'PEDAGOGIE' },
+            { key: 'sociale', code: 'TECHNIQUES_SOCIALES' },
+            { key: 'accueil', code: 'HOTESSE_ACCUEIL' },
+            { key: 'tourisme', code: 'HOTESSE_ACCUEIL' },
+            { key: 'hôtellerie', code: 'HOTELLERIE_RESTAURATION' },
+            { key: 'restauration', code: 'HOTELLERIE_RESTAURATION' },
+            { key: 'bâtiment', code: 'CONSTRUCTION' },
+            { key: 'construction', code: 'CONSTRUCTION' },
+            { key: 'électricité', code: 'ELECTRICITE' },
+            { key: 'mécanique', code: 'MECANIQUE' },
+            { key: 'agriculture', code: 'AGRICULTURE' },
+          ];
+          for (const { key, code: codeOpt } of optionAliases) {
+            if (nom.includes(key)) { option = codeOpt; break; }
+          }
+        }
+      }
+
+      if (cycle) {
+        const newData = { ...data, cycleCode: cycle, optionCode: option };
+        update.run(cycle, option, JSON.stringify(newData), s.id);
+      }
+    }
+  });
+
+  tx();
+  const remaining = database.prepare("SELECT COUNT(*) as c FROM subjects WHERE cycle_code IS NULL OR TRIM(cycle_code) = ''").get().c;
+  console.log(`[ECOLISA Migration] Cycles/options des matières inférés. Matières sans cycle restantes : ${remaining}`);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  INITIALISATION BASE SQLITE RELATIONNELLE AVEC MIGRATIONS AUTOMATIQUES
@@ -36,6 +267,7 @@ let db = null;
 const initDatabase = () => {
   const userDataPath = app.getPath('userData');
   const dbPath = path.join(userDataPath, 'ecolisa_database.db');
+  currentDbPath = dbPath;
   try {
     const Database = require('better-sqlite3');
     db = new Database(dbPath);
@@ -279,14 +511,31 @@ const initDatabase = () => {
       CREATE INDEX IF NOT EXISTS idx_cotes_eleve ON cotes(eleve_id);
       CREATE INDEX IF NOT EXISTS idx_cotes_classe ON cotes(classe_id);
 
+      CREATE TABLE IF NOT EXISTS epreuves (
+        id             TEXT PRIMARY KEY,
+        classe_id      TEXT NOT NULL,
+        matiere_id     TEXT NOT NULL,
+        professeur_id  TEXT,
+        periode        TEXT NOT NULL,
+        statut         TEXT DEFAULT 'PROGRAMMEE',
+        date_epreuve   TEXT,
+        data_json      TEXT DEFAULT '{}'
+      );
+      CREATE INDEX IF NOT EXISTS idx_epreuves_contexte ON epreuves(classe_id, matiere_id, periode);
+      CREATE INDEX IF NOT EXISTS idx_epreuves_professeur ON epreuves(professeur_id);
+
       CREATE TABLE IF NOT EXISTS presences (
-        id         TEXT PRIMARY KEY,
-        eleve_id   TEXT NOT NULL,
-        classe_id  TEXT,
-        date_jour  TEXT NOT NULL,
-        statut     TEXT DEFAULT 'PRESENT',
-        motif      TEXT,
-        data_json  TEXT DEFAULT '{}'
+        id                TEXT PRIMARY KEY,
+        eleve_id          TEXT NOT NULL,
+        annee_scolaire_id TEXT,
+        classe_id         TEXT,
+        date_jour         TEXT NOT NULL,
+        session           TEXT DEFAULT 'JOURNEE',
+        heure_arrivee     TEXT,
+        statut            TEXT DEFAULT 'PRESENT',
+        motif             TEXT,
+        pointe_par        TEXT,
+        data_json         TEXT DEFAULT '{}'
       );
       CREATE INDEX IF NOT EXISTS idx_presences_eleve ON presences(eleve_id);
       CREATE INDEX IF NOT EXISTS idx_presences_jour ON presences(date_jour);
@@ -303,6 +552,41 @@ const initDatabase = () => {
         data_json   TEXT DEFAULT '{}'
       );
       CREATE INDEX IF NOT EXISTS idx_school_events_debut ON school_events(date_debut);
+
+      -- Configuration des tranches horaires (matin, après-midi, etc.)
+      CREATE TABLE IF NOT EXISTS schedule_time_slots (
+        id              TEXT PRIMARY KEY,
+        school_year_id  TEXT,
+        vacation        TEXT DEFAULT 'MATIN',
+        debut           TEXT NOT NULL,
+        fin             TEXT NOT NULL,
+        label           TEXT NOT NULL,
+        is_break        INTEGER DEFAULT 0,
+        break_type      TEXT,
+        ordre           INTEGER DEFAULT 0,
+        data_json       TEXT DEFAULT '{}'
+      );
+      CREATE INDEX IF NOT EXISTS idx_schedule_time_slots_year ON schedule_time_slots(school_year_id);
+      CREATE INDEX IF NOT EXISTS idx_schedule_time_slots_vacation ON schedule_time_slots(vacation);
+
+      -- Emploi du temps hebdomadaire
+      CREATE TABLE IF NOT EXISTS schedules (
+        id              TEXT PRIMARY KEY,
+        school_year_id  TEXT,
+        class_id        TEXT,
+        matiere_id      TEXT,
+        teacher_id      TEXT,
+        jour            TEXT NOT NULL,
+        heure_debut     TEXT NOT NULL,
+        heure_fin       TEXT NOT NULL,
+        salle           TEXT,
+        vacation        TEXT DEFAULT 'MATIN',
+        data_json       TEXT DEFAULT '{}'
+      );
+      CREATE INDEX IF NOT EXISTS idx_schedules_year ON schedules(school_year_id);
+      CREATE INDEX IF NOT EXISTS idx_schedules_class ON schedules(class_id);
+      CREATE INDEX IF NOT EXISTS idx_schedules_teacher ON schedules(teacher_id);
+      CREATE INDEX IF NOT EXISTS idx_schedules_jour ON schedules(jour);
 
       -- Types de frais scolaires
       CREATE TABLE IF NOT EXISTS fee_types (
@@ -505,23 +789,18 @@ const initDatabase = () => {
       ensureColumn('staff', 'devise', 'TEXT DEFAULT \'USD\'');
     } catch (e) {}
 
-    // 3. Seed des comptes de test par defaut (scrypt hashé)
-    const insUser = db.prepare(`INSERT OR IGNORE INTO users (id,email,nom,prenom,role,pin_code,password_hash,statut,telephone) VALUES (?,?,?,?,?,?,?,?,?)`);
-    const defaultAccounts = [
-      ['usr_admin',      'admin@ecolisa.cd',      'KABANGE',   'Jean-Baptiste','PROMOTEUR_ADMIN',    '992001', hashPassword('admin123'),     'ACTIF', '+243 81 555 0192'],
-      ['usr_prefet',     'prefet@ecolisa.cd',     'MUKENDI',   'Alphonse',     'PREFET_DIRECTEUR',   '112233', hashPassword('prefet123'),    'ACTIF', '+243 99 444 0123'],
-      ['usr_comptable',  'comptable@ecolisa.cd',  'BAJIKA',    'Christian',    'COMPTABLE',          '123456', hashPassword('comptable123'), 'ACTIF', '+243 85 777 6655'],
-    ];
-
-    const seedTx = db.transaction(() => {
-      defaultAccounts.forEach(u => insUser.run(...u));
-    });
-    seedTx();
-
-    // Mettre à jour tout compte de test existant s'il n'avait pas de mot de passe haché
-    db.prepare(`UPDATE users SET password_hash = ? WHERE email = 'admin@ecolisa.cd' AND (password_hash IS NULL OR password_hash = '')`).run(hashPassword('admin123'));
-
-    console.log('[ECOLISA] Comptes de test prets : admin@ecolisa.cd (mdp: admin123, pin: 992001)');
+    // 3. Aucun compte de test automatique n'est généré en production.
+    // Nettoyage des anciens comptes de test générés automatiquement par les versions précédentes.
+    try {
+      const deleted = db.prepare(`
+        DELETE FROM users
+        WHERE id IN ('usr_admin', 'usr_prefet', 'usr_comptable')
+          AND email IN ('admin@ecolisa.cd', 'prefet@ecolisa.cd', 'comptable@ecolisa.cd')
+      `).run();
+      if (deleted.changes > 0) {
+        console.log(`[ECOLISA Migration] ${deleted.changes} compte(s) de test automatique(s) supprimé(s).`);
+      }
+    } catch (e) {}
 
     // Migration : supprimer l'année scolaire de démonstration auto-injectée par les anciennes versions
     try {
@@ -568,6 +847,10 @@ const initDatabase = () => {
       { table: 'subjects',    column: 'enseignant_id',       def: 'TEXT' },
       { table: 'subjects',    column: 'enseignant_nom',      def: 'TEXT' },
       { table: 'subjects',    column: 'data_json',           def: "TEXT DEFAULT '{}'" },
+      { table: 'presences',   column: 'annee_scolaire_id',   def: 'TEXT' },
+      { table: 'presences',   column: 'session',             def: "TEXT DEFAULT 'JOURNEE'" },
+      { table: 'presences',   column: 'heure_arrivee',       def: 'TEXT' },
+      { table: 'presences',   column: 'pointe_par',          def: 'TEXT' },
     ];
     for (const { table, column, def } of columnMigrations) {
       try {
@@ -579,6 +862,16 @@ const initDatabase = () => {
       } catch (e) {
         console.warn(`[ECOLISA Migration] Impossible d'ajouter '${column}' a '${table}':`, e.message);
       }
+    }
+
+    // Indexes presences — créés APRÈS les migrations de colonnes
+    try {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_presences_classe_jour ON presences(classe_id, date_jour);
+        CREATE INDEX IF NOT EXISTS idx_presences_annee ON presences(annee_scolaire_id);
+      `);
+    } catch (e) {
+      console.warn('[ECOLISA Migration] Index presences:', e.message);
     }
 
     // Indexes fee_types — créés APRÈS les migrations de colonnes (class_id/salle_id)
@@ -651,6 +944,43 @@ const initDatabase = () => {
         console.warn('[ECOLISA Migration] Nettoyage des factures en double :', e.message);
       }
 
+      // Nettoyage des factures fantômes générées automatiquement avec le frais
+      // par défaut de 180 $ lorsqu'aucun frais obligatoire n'était configuré.
+      try {
+        const removed = cleanupDefaultInvoices();
+        if (removed > 0) console.log(`[ECOLISA Migration] ${removed} facture(s) fantôme(s) "minerval par défaut" supprimée(s).`);
+      } catch (e) {
+        console.warn('[ECOLISA Migration] Nettoyage des factures fantômes :', e.message);
+      }
+
+      // Normalisation des périodes de cotes : les anciens libellés français
+      // ("1ère Période", "Examen 1er Semestre", ...) sont convertis en codes
+      // stables (P1, P2, EX1, P3, P4, EX2) utilisés par la grille de cotation
+      // et la fiche de cotation imprimable.
+      try {
+        const periodLabelToCode = {
+          '1ère Période': 'P1', '1ere Periode': 'P1', '1ère période': 'P1',
+          '2ème Période': 'P2', '2eme Periode': 'P2', '2ème période': 'P2',
+          'Examen 1er Semestre': 'EX1', 'Examen 1er semestre': 'EX1',
+          '3ème Période': 'P3', '3eme Periode': 'P3', '3ème période': 'P3',
+          '4ème Période': 'P4', '4eme Periode': 'P4', '4ème période': 'P4',
+          'Examen 2ème Semestre': 'EX2', 'Examen 2eme Semestre': 'EX2', 'Examen 2ème semestre': 'EX2',
+        };
+        let normalized = 0;
+        const updatePeriodStmt = db.prepare('UPDATE cotes SET periode=? WHERE id=?');
+        const rows = db.prepare('SELECT id, periode FROM cotes').all();
+        rows.forEach(r => {
+          const code = periodLabelToCode[r.periode];
+          if (code && code !== r.periode) {
+            updatePeriodStmt.run(code, r.id);
+            normalized++;
+          }
+        });
+        if (normalized > 0) console.log(`[ECOLISA Migration] ${normalized} cote(s) normalisée(s) vers les codes de période (P1/P2/EX1/P3/P4/EX2).`);
+      } catch (e) {
+        console.warn('[ECOLISA Migration] Normalisation des périodes de cotes :', e.message);
+      }
+
       // Réparation des types de frais dont l'identifiant est vide/corrompu
       // (ancien bug : un nouveau frais non encore enregistré pouvait être
       // inséré avec un id vide, ce qui risquait d'être écrasé par le prochain
@@ -697,6 +1027,22 @@ const initDatabase = () => {
       } catch (e) {
         console.warn('[ECOLISA Migration] Nettoyage des frais en double :', e.message);
       }
+
+      // Inférence et correction persistante des cycle_code/option_code des matières
+      // Doit précéder la migration Maternelle pour que les anciennes activités
+      // sans cycle_code soient identifiées et nettoyées correctement.
+      try {
+        migrateSubjectContext(db);
+      } catch (e) {
+        console.warn('[ECOLISA Migration] Inférence cycles/options des matières :', e.message);
+      }
+
+      // Migration vers les 12 activités officielles EPST Maternelle (IGE/PS.001)
+      try {
+        migrateMaternelleSubjects(db);
+      } catch (e) {
+        console.warn('[ECOLISA Migration] Migration Maternelle EPST :', e.message);
+      }
     } catch (err) {
       console.warn('[ECOLISA Seeder] Remarque vérification DB :', err);
     }
@@ -727,9 +1073,11 @@ function mapStaffExpenseNote(r) { const b={id:r.id,staffId:r.staff_id,staffName:
 function mapInvoiceSendingHistory(r) { const b={id:r.id,invoiceId:r.invoice_id,methode:r.methode,destinataire:r.destinataire,contact:r.contact,statut:r.statut||'SIMULE',dateEnvoi:r.date_envoi,message:r.message}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
 function mapStaff(r) { if (!r) return null; const b={id:r.id,nom:r.nom,prenom:r.prenom,role:r.role,telephone:r.telephone,email:r.email,salaireBase:r.salaire_base,devise:r.devise,statut:r.statut}; try{return{...b,...JSON.parse(r.data_json||'{}')};}catch{return b;} }
 function mapFichePaie(r) { const b={id:r.id,staffId:r.staff_id,staffName:r.staff_name,staffMatricule:r.staff_matricule,staffRole:r.staff_role,staffFunction:r.staff_function,staffBankAccount:r.staff_bank_account,staffMobileMoney:r.staff_mobile_money,staffPaymentMode:r.staff_payment_mode,periode:r.periode,schoolYearId:r.school_year_id,anneeScolaire:r.annee_scolaire,salaireBase:r.salaire_base,devise:r.devise||'USD',heuresPrestees:r.heures_prestees,salaireBrut:r.salaire_brut,totalPrimes:r.total_primes,totalDeductions:r.total_deductions,totalAvances:r.total_avances,salaireNet:r.salaire_net,modePaiement:r.mode_paiement||'CASH',reference:r.reference,datePaiement:r.date_paiement,caissier:r.caissier,statut:r.statut||'BROUILLON',numeroFiche:r.numero_fiche,notes:r.notes,origineExpenseId:r.origine_expense_id}; try{return{...b,...JSON.parse(r.data_json||'{}')};}catch{return b;} }
-function mapCote(r) { const b={id:r.id,eleveId:r.eleve_id,matiereId:r.matiere_id,classeId:r.classe_id,periode:r.periode,type:r.type,score:r.score,maxScore:r.max_score,dateCote:r.date_cote}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
-function mapPresence(r) { const b={id:r.id,eleveId:r.eleve_id,classeId:r.classe_id,dateJour:r.date_jour,statut:r.statut,motif:r.motif}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
+function mapCote(r) { const b={id:r.id,eleveId:r.eleve_id,matiereId:r.matiere_id,classeId:r.classe_id,periode:r.periode,type:r.type,score:r.score,maxScore:r.max_score,dateCote:r.date_cote,statut:'BROUILLON'}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
+function mapPresence(r) { const b={id:r.id,eleveId:r.eleve_id,anneeScolaireId:r.annee_scolaire_id,classeId:r.classe_id,dateJour:r.date_jour,session:r.session||'JOURNEE',heureArrivee:r.heure_arrivee,statut:r.statut,motif:r.motif,pointePar:r.pointe_par}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
 function mapSchoolEvent(r) { const b={id:r.id,titre:r.titre,subtitre:r.subtitre,dateDebut:r.date_debut,dateFin:r.date_fin,categorie:r.categorie,publicCible:r.public_cible,highlight:!!r.highlight}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
+function mapTimeSlot(r) { const b={id:r.id,schoolYearId:r.school_year_id,vacation:r.vacation,debut:r.debut,fin:r.fin,label:r.label,isBreak:!!r.is_break,breakType:r.break_type,ordre:r.ordre||0}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
+function mapSchedule(r) { const b={id:r.id,schoolYearId:r.school_year_id,classeId:r.class_id,matiereId:r.matiere_id,professeurId:r.teacher_id,jour:r.jour,heureDebut:r.heure_debut,heureFin:r.heure_fin,salle:r.salle,vacation:r.vacation}; try{const data={...JSON.parse(r.data_json||'{}'),...b}; return data;}catch{return b;} }
 function mapSubject(r) {
   if (!r) return null;
   const b = {
@@ -763,6 +1111,47 @@ function mapJournal(r) { return {id:r.id,code:r.code,nom:r.nom,type:r.type,actif
 function mapEcriture(r) { const b={id:r.id,ecritureId:r.ecriture_id,journalId:r.journal_id,date:r.date_ecriture,reference:r.reference,libelle:r.libelle,compteId:r.compte_id,debit:r.debit,credit:r.credit,devise:r.devise||'USD',piece:r.piece}; try{return{...JSON.parse(r.data_json||'{}'),...b};}catch{return b;} }
 
 /**
+ * Supprime les factures générées automatiquement avec le frais par défaut
+ * "frais_minerval_default" de 180 $, lorsqu'elles n'ont aucun paiement.
+ * Ces factures sont des factures fantômes créées par l'ancienne synchronisation
+ * automatique lorsqu'aucun frais obligatoire n'était configuré.
+ */
+function cleanupDefaultInvoices() {
+  if (!db) return 0;
+  const allInvoices = db.prepare('SELECT * FROM invoices').all().map(mapInvoice);
+  const toDelete = [];
+
+  allInvoices.forEach(inv => {
+    const lignes = inv.lignes || [];
+    const hasDefaultOnly = lignes.length === 1 && lignes[0]?.feeTypeId === 'frais_minerval_default';
+    if (!hasDefaultOnly) return;
+
+    const paymentCount = db.prepare('SELECT COUNT(*) as cnt FROM payments WHERE invoice_id=?').get(inv.id).cnt;
+    const paymentsTotal = db.prepare('SELECT COALESCE(SUM(montant), 0) as total FROM payments WHERE invoice_id=?').get(inv.id).total || 0;
+    const montantPaye = inv.montantPaye || 0;
+
+    if (paymentCount === 0 && paymentsTotal < 0.001 && montantPaye < 0.001) {
+      toDelete.push(inv.id);
+    }
+  });
+
+  if (toDelete.length === 0) return 0;
+
+  const tx = db.transaction(() => {
+    toDelete.forEach(id => {
+      // On ne supprime pas d'écritures comptables supplémentaires ici car les
+      // factures fantômes non payées n'ont normalement pas généré d'écritures.
+      db.prepare('DELETE FROM payments WHERE invoice_id=?').run(id);
+      db.prepare('DELETE FROM invoice_sending_history WHERE invoice_id=?').run(id);
+      db.prepare('DELETE FROM invoices WHERE id=?').run(id);
+    });
+  });
+  tx();
+  console.log(`[ECOLISA Cleanup] ${toDelete.length} facture(s) fantôme(s) "minerval par défaut" supprimée(s).`);
+  return toDelete.length;
+}
+
+/**
  * Supprime les factures en double pour le même élève/année/frais.
  * Garde la facture payée si elle existe, sinon la plus récente.
  * Supprime en cascade les paiements, opérations de caisse et écritures liés aux doublons.
@@ -783,7 +1172,7 @@ function cleanupDuplicateInvoices() {
     groups.get(key).push(inv);
   });
 
-  const toDelete = new Set();
+  const toDelete = new Map(); // invoiceId -> keeperId
   groups.forEach(group => {
     if (group.length < 2) return;
 
@@ -811,23 +1200,25 @@ function cleanupDuplicateInvoices() {
     }
 
     group.forEach(inv => {
-      if (inv.id !== keeper.id) toDelete.add(inv.id);
+      if (inv.id !== keeper.id) toDelete.set(inv.id, keeper.id);
     });
   });
 
   if (toDelete.size === 0) return 0;
 
   const tx = db.transaction(() => {
-    toDelete.forEach(id => {
+    toDelete.forEach((keeperId, id) => {
       const payments = db.prepare('SELECT id, recu_numero FROM payments WHERE invoice_id=?').all(id);
       const paymentIds = payments.map(p => p.id);
-      const refs = new Set([...paymentIds, ...payments.map(p => p.recu_numero).filter(Boolean)]);
 
-      for (const ref of refs) db.prepare('DELETE FROM ecritures WHERE reference=?').run(ref);
-      for (const pid of paymentIds) db.prepare("DELETE FROM cash_operations WHERE origine='PAYMENT' AND origine_id=?").run(pid);
+      if (paymentIds.length > 0) {
+        // Réattribuer les paiements à la facture conservée, sans supprimer l'historique
+        db.prepare('UPDATE payments SET invoice_id=? WHERE invoice_id=?').run(keeperId, id);
+      }
 
-      db.prepare('DELETE FROM payments WHERE invoice_id=?').run(id);
       db.prepare('DELETE FROM invoices WHERE id=?').run(id);
+      // Supprimer l'écriture de vente liée à la facture supprimée
+      db.prepare("DELETE FROM ecritures WHERE reference=? AND journal_id=(SELECT id FROM journaux WHERE code='JV')").run(id);
     });
   });
   tx();
@@ -1249,6 +1640,86 @@ function listFilesRecursive(dir, base = dir) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  SAUVEGARDES LOCALES SQLITE (backups)
+// ─────────────────────────────────────────────────────────────────────────────
+const BACKUP_NAME_RE = /^ecolisa_backup_(MANUAL|AUTO|ON_EXIT)_(.+)\.db(\.gz)?$/;
+
+function getDbPath() {
+  return currentDbPath || path.join(app.getPath('userData'), 'ecolisa_database.db');
+}
+
+function getBackupsDir() {
+  const dir = path.join(app.getPath('userData'), 'backups');
+  try { fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
+  return dir;
+}
+
+function backupEntryFromFile(fileName) {
+  const dir = getBackupsDir();
+  const fullPath = path.join(dir, fileName);
+  let stat = null;
+  try { stat = fs.statSync(fullPath); } catch (e) { return null; }
+  const m = fileName.match(BACKUP_NAME_RE);
+  return {
+    id: fileName,
+    name: fileName,
+    path: fullPath,
+    size: stat.size,
+    createdAt: stat.mtime.toISOString(),
+    type: m ? m[1] : 'MANUAL',
+    compressed: fileName.endsWith('.gz'),
+  };
+}
+
+function listBackupEntries() {
+  const dir = getBackupsDir();
+  let files = [];
+  try {
+    files = fs.readdirSync(dir).filter(f => f.startsWith('ecolisa_backup_') && (f.endsWith('.db') || f.endsWith('.db.gz')));
+  } catch (e) { return []; }
+  const entries = files.map(backupEntryFromFile).filter(Boolean);
+  entries.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  return entries;
+}
+
+function getMaxBackups() {
+  try {
+    if (db) {
+      const r = db.prepare("SELECT value FROM app_config WHERE key='backupConfig'").get();
+      if (r) {
+        const cfg = JSON.parse(r.value);
+        const n = parseInt(cfg && cfg.maxBackups, 10);
+        if (Number.isFinite(n) && n > 0) return n;
+      }
+    }
+  } catch (e) {}
+  return 10;
+}
+
+// Limite le nombre de sauvegardes : supprime les plus anciennes,
+// en priorité les AUTO, puis les MANUAL, puis les autres (ex: ON_EXIT).
+function enforceBackupRetention() {
+  const max = getMaxBackups();
+  const entries = listBackupEntries();
+  let excess = entries.length - max;
+  if (excess <= 0) return;
+  const byAgeAsc = (arr) => [...arr].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+  const queues = [
+    byAgeAsc(entries.filter(e => e.type === 'AUTO')),
+    byAgeAsc(entries.filter(e => e.type === 'MANUAL')),
+    byAgeAsc(entries.filter(e => e.type !== 'AUTO' && e.type !== 'MANUAL')),
+  ];
+  const deleted = new Set();
+  for (const q of queues) {
+    for (const entry of q) {
+      if (excess <= 0) return;
+      if (deleted.has(entry.id)) continue;
+      try { fs.unlinkSync(entry.path); deleted.add(entry.id); excess--; } catch (e) {}
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  ENREGISTREMENT DES HANDLERS IPC (TOUJOURS AVANT CREATEWINDOW)
 // ─────────────────────────────────────────────────────────────────────────────
 function registerIpcHandlers() {
@@ -1264,6 +1735,96 @@ function registerIpcHandlers() {
   ipcMain.handle('db-set-config', (_, key, value) => { if (!db) return false; db.prepare('INSERT OR REPLACE INTO app_config (key,value) VALUES (?,?)').run(key, JSON.stringify(value)); return true; });
   ipcMain.handle('db-delete-config', (_, key) => { if (!db) return false; db.prepare('DELETE FROM app_config WHERE key=?').run(key); return true; });
   ipcMain.handle('db-get-all-config', () => { if (!db) return {}; const rows=db.prepare('SELECT key,value FROM app_config').all(); const out={}; rows.forEach(r=>{ try{out[r.key]=JSON.parse(r.value);}catch{out[r.key]=r.value;} }); return out; });
+
+  // ── Sauvegardes locales SQLite ──────────────────────────────────────────
+  ipcMain.handle('db-get-db-path', () => getDbPath());
+
+  ipcMain.handle('db-list-backups', () => {
+    try { return listBackupEntries(); }
+    catch (e) { console.error('[ECOLISA Backup] Erreur db-list-backups :', e); return []; }
+  });
+
+  ipcMain.handle('db-create-backup', async (_, type, compressed) => {
+    if (!db) return null;
+    const safeType = ['MANUAL', 'AUTO', 'ON_EXIT'].includes(type) ? type : 'MANUAL';
+    const compress = compressed === true;
+    const dir = getBackupsDir();
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const baseName = `ecolisa_backup_${safeType}_${ts}.db`;
+    const finalName = compress ? `${baseName}.gz` : baseName;
+    const finalPath = path.join(dir, finalName);
+    const rawTarget = compress ? path.join(dir, `${baseName}.${Date.now()}.tmp`) : finalPath;
+    try {
+      // Copie sécurisée : API native better-sqlite3 si disponible,
+      // sinon checkpoint WAL puis copie du fichier principal.
+      if (typeof db.backup === 'function') {
+        await db.backup(rawTarget);
+      } else {
+        try { db.pragma('wal_checkpoint(FULL)'); } catch (e) {}
+        fs.copyFileSync(getDbPath(), rawTarget);
+      }
+      if (compress) {
+        const raw = fs.readFileSync(rawTarget);
+        fs.writeFileSync(finalPath, zlib.gzipSync(raw));
+        try { fs.unlinkSync(rawTarget); } catch (e) {}
+      }
+      enforceBackupRetention();
+      return backupEntryFromFile(finalName);
+    } catch (e) {
+      console.error('[ECOLISA Backup] Erreur db-create-backup :', e);
+      try { if (compress && fs.existsSync(rawTarget)) fs.unlinkSync(rawTarget); } catch {}
+      try { if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath); } catch {}
+      return null;
+    }
+  });
+
+  ipcMain.handle('db-restore-backup', async (_, backupId) => {
+    if (!backupId) return false;
+    const dir = getBackupsDir();
+    const fileName = path.basename(String(backupId)); // anti path-traversal
+    const backupPath = path.join(dir, fileName);
+    if (!fs.existsSync(backupPath)) return false;
+    let tempPath = null;
+    try {
+      let sourcePath = backupPath;
+      if (fileName.endsWith('.gz')) {
+        tempPath = path.join(dir, `restore_tmp_${Date.now()}.db`);
+        fs.writeFileSync(tempPath, zlib.gunzipSync(fs.readFileSync(backupPath)));
+        sourcePath = tempPath;
+      }
+      if (db) { try { db.close(); } catch (e) {} db = null; }
+      // Supprime les journaux WAL/SHM résiduels avant remplacement
+      for (const suffix of ['-wal', '-shm']) {
+        try { const p = getDbPath() + suffix; if (fs.existsSync(p)) fs.unlinkSync(p); } catch (e) {}
+      }
+      fs.copyFileSync(sourcePath, getDbPath());
+      if (tempPath) { try { fs.unlinkSync(tempPath); } catch (e) {} tempPath = null; }
+      initDatabase(); // réouvre la base (migrations idempotentes)
+      return !!db;
+    } catch (e) {
+      console.error('[ECOLISA Backup] Erreur db-restore-backup :', e);
+      if (tempPath) { try { fs.unlinkSync(tempPath); } catch {} }
+      try { if (!db) initDatabase(); } catch {}
+      return false;
+    }
+  });
+
+  ipcMain.handle('db-delete-backup', (_, backupId) => {
+    if (!backupId) return false;
+    const dir = getBackupsDir();
+    const fileName = path.basename(String(backupId)); // anti path-traversal
+    const target = path.join(dir, fileName);
+    try {
+      if (!fs.existsSync(target)) return false;
+      fs.unlinkSync(target);
+      return true;
+    } catch (e) {
+      console.error('[ECOLISA Backup] Erreur db-delete-backup :', e);
+      return false;
+    }
+  });
 
   // Session
   ipcMain.handle('db-get-current-session', () => { if (!db) return null; const r=db.prepare('SELECT user_json FROM current_session WHERE id=1').get(); if(!r||!r.user_json) return null; try{return JSON.parse(r.user_json);}catch{return null;} });
@@ -1519,6 +2080,18 @@ function registerIpcHandlers() {
     if (upd.statut !== undefined) { f.push('statut=?'); v.push(upd.statut); }
     if (upd.montantTotal !== undefined) { f.push('montant_total=?'); v.push(upd.montantTotal); }
 
+    // Toujours synchroniser data_json si le statut ou le montant payé changent,
+    // afin d'éviter les incohérences entre les colonnes SQL et le JSON stocké.
+    if (upd.montantPaye !== undefined || upd.statut !== undefined) {
+      const dataJson = JSON.stringify({
+        ...existing,
+        ...merged,
+        montantPaye: upd.montantPaye ?? existing.montantPaye ?? 0,
+        statut: upd.statut ?? existing.statut ?? 'NON_PAYE',
+      });
+      db.prepare(`UPDATE invoices SET data_json=? WHERE id=?`).run(dataJson, id);
+    }
+
     // Si des lignes sont fournies, reconstruire data_json avec les nouvelles lignes et le total
     if (upd.lignes) {
       const lignes = Array.isArray(upd.lignes) ? upd.lignes : existing.lignes || [];
@@ -1556,6 +2129,8 @@ function registerIpcHandlers() {
 
       db.prepare('DELETE FROM payments WHERE invoice_id=?').run(id);
       db.prepare('DELETE FROM invoices WHERE id=?').run(id);
+      // Supprimer l'écriture de vente liée à la facture supprimée
+      db.prepare("DELETE FROM ecritures WHERE reference=? AND journal_id=(SELECT id FROM journaux WHERE code='JV')").run(id);
       return true;
     });
     try { return tx(); } catch (e) { console.error('[db-delete-invoice] Erreur cascade:', e); return false; }
@@ -1564,10 +2139,49 @@ function registerIpcHandlers() {
     if (!db) return 0;
     try { return cleanupDuplicateInvoices(); } catch (e) { console.error('[db-cleanup-duplicate-invoices] Erreur:', e); return 0; }
   });
+  ipcMain.handle('db-cleanup-default-invoices', () => {
+    if (!db) return 0;
+    try { return cleanupDefaultInvoices(); } catch (e) { console.error('[db-cleanup-default-invoices] Erreur:', e); return 0; }
+  });
   ipcMain.handle('db-cleanup-duplicate-fee-types', () => {
     if (!db) return 0;
     try { return cleanupDuplicateFeeTypes(); } catch (e) { console.error('[db-cleanup-duplicate-fee-types] Erreur:', e); return 0; }
   });
+  ipcMain.handle('db-reset-financial-data', (_, scope = { invoices: true, payments: true, cash: true, accounting: true, expenses: true, payroll: false }) => {
+    if (!db) return { ok: false, error: 'Base non initialisée' };
+    try {
+      const tx = db.transaction(() => {
+        if (scope.invoices !== false) {
+          db.prepare('DELETE FROM invoice_sending_history').run();
+          db.prepare('DELETE FROM payments').run();
+          db.prepare('DELETE FROM invoices').run();
+        }
+        if (scope.payments !== false) {
+          db.prepare('DELETE FROM payments').run();
+        }
+        if (scope.cash !== false) {
+          db.prepare('DELETE FROM cash_operations').run();
+        }
+        if (scope.accounting !== false) {
+          db.prepare('DELETE FROM ecritures').run();
+        }
+        if (scope.expenses !== false) {
+          db.prepare('DELETE FROM depenses').run();
+        }
+        if (scope.payroll === true) {
+          db.prepare('DELETE FROM fiche_paie').run();
+          db.prepare('DELETE FROM staff_expense_notes').run();
+        }
+      });
+      tx();
+      console.log('[ECOLISA] Réinitialisation des données financières effectuée.');
+      return { ok: true };
+    } catch (e) {
+      console.error('[db-reset-financial-data] Erreur:', e);
+      return { ok: false, error: e.message };
+    }
+  });
+
   ipcMain.handle('db-get-payments', (_, invoiceId) => { if (!db) return []; if(invoiceId) return db.prepare('SELECT * FROM payments WHERE invoice_id=? ORDER BY date_paiement DESC').all(invoiceId).map(mapPayment); return db.prepare('SELECT * FROM payments ORDER BY date_paiement DESC').all().map(mapPayment); });
 
   function compteProduitForCategorie(categorie) {
@@ -1841,6 +2455,35 @@ function registerIpcHandlers() {
   });
   ipcMain.handle('db-clear-audit-log', () => { if (!db) return false; db.prepare('DELETE FROM audit_log WHERE created_at < datetime(\'now\', \'-90 days\')').run(); return true; });
 
+  ipcMain.handle('db-get-epreuves', (_, filters) => {
+    if (!db) return [];
+    let q = 'SELECT * FROM epreuves', p = [], cond = [];
+    if (filters?.classeId) { cond.push('classe_id=?'); p.push(filters.classeId); }
+    if (filters?.matiereId) { cond.push('matiere_id=?'); p.push(filters.matiereId); }
+    if (filters?.professeurId) { cond.push('professeur_id=?'); p.push(filters.professeurId); }
+    if (filters?.periode) { cond.push('periode=?'); p.push(filters.periode); }
+    if (filters?.statut) { cond.push('statut=?'); p.push(filters.statut); }
+    if (filters?.schoolYearId) { cond.push('json_extract(data_json, "$.schoolYearId")=?'); p.push(filters.schoolYearId); }
+    if (cond.length) q += ' WHERE ' + cond.join(' AND ');
+    q += ' ORDER BY date_epreuve DESC';
+    return db.prepare(q).all(...p).map(r => { try { return { ...JSON.parse(r.data_json || '{}'), id: r.id }; } catch { return { id: r.id }; } });
+  });
+  ipcMain.handle('db-add-epreuve', (_, ep) => {
+    if (!db) return null;
+    db.prepare('INSERT OR REPLACE INTO epreuves (id,classe_id,matiere_id,professeur_id,periode,statut,date_epreuve,data_json) VALUES (?,?,?,?,?,?,?,?)').run(ep.id, ep.classeId, ep.matiereId, ep.professeurId || null, ep.periode, ep.statut || 'PROGRAMMEE', ep.dateEpreuve || null, JSON.stringify(ep));
+    return ep;
+  });
+  ipcMain.handle('db-update-epreuve', (_, id, upd) => {
+    if (!db) return null;
+    const row = db.prepare('SELECT data_json FROM epreuves WHERE id=?').get(id);
+    if (!row) return null;
+    let current = {}; try { current = JSON.parse(row.data_json || '{}'); } catch {}
+    const ep = { ...current, ...upd, id };
+    db.prepare('UPDATE epreuves SET classe_id=?,matiere_id=?,professeur_id=?,periode=?,statut=?,date_epreuve=?,data_json=? WHERE id=?').run(ep.classeId, ep.matiereId, ep.professeurId || null, ep.periode, ep.statut || 'PROGRAMMEE', ep.dateEpreuve || null, JSON.stringify(ep), id);
+    return ep;
+  });
+  ipcMain.handle('db-delete-epreuve', (_, id) => { if (!db) return false; db.prepare('DELETE FROM epreuves WHERE id=?').run(id); return true; });
+
   // Cotes
   ipcMain.handle('db-get-cotes', (_, filters) => {
     if (!db) return [];
@@ -1850,6 +2493,7 @@ function registerIpcHandlers() {
     if(filters?.matiereId){ cond.push('matiere_id=?'); p.push(filters.matiereId); }
     if(filters?.periode){ cond.push('periode=?'); p.push(filters.periode); }
     if(filters?.type){ cond.push('type=?'); p.push(filters.type); }
+    if(filters?.statut){ cond.push('json_extract(data_json, "$.statut")=?'); p.push(filters.statut); }
     if(filters?.evaluationId){ cond.push('json_extract(data_json, "$.evaluationId")=?'); p.push(filters.evaluationId); }
     if(cond.length){ q+=' WHERE '+cond.join(' AND '); }
     q+=' ORDER BY date_cote DESC';
@@ -1860,14 +2504,100 @@ function registerIpcHandlers() {
   ipcMain.handle('db-delete-cote', (_, id) => { if (!db) return false; db.prepare('DELETE FROM cotes WHERE id=?').run(id); return true; });
 
   // Presences
-  ipcMain.handle('db-get-presences', (_, filters) => { if (!db) return []; let q='SELECT * FROM presences',p=[]; if(filters?.eleveId){q+=' WHERE eleve_id=?';p.push(filters.eleveId);} else if(filters?.classeId){q+=' WHERE classe_id=?';p.push(filters.classeId);} else if(filters?.dateJour){q+=' WHERE date_jour=?';p.push(filters.dateJour);} q+=' ORDER BY date_jour DESC'; return db.prepare(q).all(...p).map(mapPresence); });
-  ipcMain.handle('db-add-presence', (_, p) => { if (!db) return null; db.prepare('INSERT OR REPLACE INTO presences (id,eleve_id,classe_id,date_jour,statut,motif,data_json) VALUES (?,?,?,?,?,?,?)').run(p.id,p.eleveId,p.classeId||null,p.dateJour,p.statut||'PRESENT',p.motif||null,JSON.stringify(p)); return mapPresence(db.prepare('SELECT * FROM presences WHERE id=?').get(p.id)); });
+  ipcMain.handle('db-get-presences', (_, filters) => {
+    if (!db) return [];
+    let q = 'SELECT * FROM presences';
+    const cond = [];
+    const p = [];
+    if (filters?.eleveId) { cond.push('eleve_id=?'); p.push(filters.eleveId); }
+    if (filters?.classeId) { cond.push('classe_id=?'); p.push(filters.classeId); }
+    if (filters?.anneeScolaireId) { cond.push('annee_scolaire_id=?'); p.push(filters.anneeScolaireId); }
+    if (filters?.dateJour) { cond.push('date_jour=?'); p.push(filters.dateJour); }
+    if (filters?.dateDebut && filters?.dateFin) {
+      cond.push('date_jour BETWEEN ? AND ?');
+      p.push(filters.dateDebut, filters.dateFin);
+    } else if (filters?.dateDebut) {
+      cond.push('date_jour >= ?'); p.push(filters.dateDebut);
+    } else if (filters?.dateFin) {
+      cond.push('date_jour <= ?'); p.push(filters.dateFin);
+    }
+    if (filters?.session) { cond.push('session=?'); p.push(filters.session); }
+    if (filters?.statut) { cond.push('statut=?'); p.push(filters.statut); }
+    if (cond.length) q += ' WHERE ' + cond.join(' AND ');
+    q += ' ORDER BY date_jour DESC, eleve_id';
+    return db.prepare(q).all(...p).map(mapPresence);
+  });
+  ipcMain.handle('db-add-presence', (_, p) => {
+    if (!db) return null;
+    db.prepare('INSERT OR REPLACE INTO presences (id,eleve_id,annee_scolaire_id,classe_id,date_jour,session,heure_arrivee,statut,motif,pointe_par,data_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(
+      p.id, p.eleveId, p.anneeScolaireId || null, p.classeId || null, p.dateJour,
+      p.session || 'JOURNEE', p.heureArrivee || null, p.statut || 'PRESENT',
+      p.motif || null, p.pointePar || null, JSON.stringify(p)
+    );
+    return mapPresence(db.prepare('SELECT * FROM presences WHERE id=?').get(p.id));
+  });
   ipcMain.handle('db-delete-presence', (_, id) => { if (!db) return false; db.prepare('DELETE FROM presences WHERE id=?').run(id); return true; });
 
   // School Events
   ipcMain.handle('db-get-school-events', (_, filters) => { if (!db) return []; let q='SELECT * FROM school_events',p=[]; if(filters?.categorie){q+=' WHERE categorie=?';p.push(filters.categorie);} q+=' ORDER BY date_debut'; return db.prepare(q).all(...p).map(mapSchoolEvent); });
   ipcMain.handle('db-add-school-event', (_, ev) => { if (!db) return null; db.prepare('INSERT OR REPLACE INTO school_events (id,titre,subtitre,date_debut,date_fin,categorie,public_cible,highlight,data_json) VALUES (?,?,?,?,?,?,?,?,?)').run(ev.id,ev.titre,ev.subtitre||null,ev.dateDebut,ev.dateFin||null,ev.categorie||'AUTRE',ev.publicCible||'TOUS',ev.highlight?1:0,JSON.stringify(ev)); return mapSchoolEvent(db.prepare('SELECT * FROM school_events WHERE id=?').get(ev.id)); });
   ipcMain.handle('db-delete-school-event', (_, id) => { if (!db) return false; db.prepare('DELETE FROM school_events WHERE id=?').run(id); return true; });
+
+  // Schedule / Emploi du temps
+  ipcMain.handle('db-get-schedule-time-slots', (_, filters) => {
+    if (!db) return [];
+    let q = 'SELECT * FROM schedule_time_slots';
+    const cond = [];
+    const p = [];
+    if (filters?.schoolYearId) { cond.push('school_year_id=?'); p.push(filters.schoolYearId); }
+    if (filters?.vacation) { cond.push('vacation=?'); p.push(filters.vacation); }
+    if (cond.length) q += ' WHERE ' + cond.join(' AND ');
+    q += ' ORDER BY ordre, debut';
+    return db.prepare(q).all(...p).map(mapTimeSlot);
+  });
+  ipcMain.handle('db-add-schedule-time-slot', (_, ts) => {
+    if (!db) return null;
+    db.prepare('INSERT OR REPLACE INTO schedule_time_slots (id,school_year_id,vacation,debut,fin,label,is_break,break_type,ordre,data_json) VALUES (?,?,?,?,?,?,?,?,?,?)').run(
+      ts.id, ts.schoolYearId||null, ts.vacation||'MATIN', ts.debut, ts.fin, ts.label,
+      ts.isBreak?1:0, ts.breakType||null, ts.ordre||0, JSON.stringify(ts)
+    );
+    return mapTimeSlot(db.prepare('SELECT * FROM schedule_time_slots WHERE id=?').get(ts.id));
+  });
+  ipcMain.handle('db-delete-schedule-time-slot', (_, id) => { if (!db) return false; db.prepare('DELETE FROM schedule_time_slots WHERE id=?').run(id); return true; });
+
+  ipcMain.handle('db-get-schedules', (_, filters) => {
+    if (!db) return [];
+    let q = 'SELECT * FROM schedules';
+    const cond = [];
+    const p = [];
+    if (filters?.schoolYearId) { cond.push('school_year_id=?'); p.push(filters.schoolYearId); }
+    if (filters?.classId) { cond.push('class_id=?'); p.push(filters.classId); }
+    if (filters?.teacherId) { cond.push('teacher_id=?'); p.push(filters.teacherId); }
+    if (filters?.vacation) { cond.push('vacation=?'); p.push(filters.vacation); }
+    if (cond.length) q += ' WHERE ' + cond.join(' AND ');
+    q += ' ORDER BY jour, heure_debut';
+    return db.prepare(q).all(...p).map(mapSchedule);
+  });
+  ipcMain.handle('db-add-schedule', (_, s) => {
+    if (!db) return null;
+    db.prepare('INSERT OR REPLACE INTO schedules (id,school_year_id,class_id,matiere_id,teacher_id,jour,heure_debut,heure_fin,salle,vacation,data_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(
+      s.id, s.schoolYearId||null, s.classeId, s.matiereId||null, s.professeurId||null,
+      s.jour, s.heureDebut, s.heureFin, s.salle||null, s.vacation||'MATIN', JSON.stringify(s)
+    );
+    return mapSchedule(db.prepare('SELECT * FROM schedules WHERE id=?').get(s.id));
+  });
+  ipcMain.handle('db-update-schedule', (_, id, upd) => {
+    if (!db) return null;
+    const r = db.prepare('SELECT * FROM schedules WHERE id=?').get(id);
+    if (!r) return null;
+    const m = {...mapSchedule(r), ...upd};
+    db.prepare('UPDATE schedules SET school_year_id=?,class_id=?,matiere_id=?,teacher_id=?,jour=?,heure_debut=?,heure_fin=?,salle=?,vacation=?,data_json=? WHERE id=?').run(
+      m.schoolYearId||null, m.classeId, m.matiereId||null, m.professeurId||null,
+      m.jour, m.heureDebut, m.heureFin, m.salle||null, m.vacation||'MATIN', JSON.stringify(m), id
+    );
+    return mapSchedule(db.prepare('SELECT * FROM schedules WHERE id=?').get(id));
+  });
+  ipcMain.handle('db-delete-schedule', (_, id) => { if (!db) return false; db.prepare('DELETE FROM schedules WHERE id=?').run(id); return true; });
 
   // Documents scolaires (insertion, compression, ouverture)
   ipcMain.handle('documents-get-by-student', (_, studentId) => {
@@ -2097,6 +2827,116 @@ function registerIpcHandlers() {
 
   // ── IMPRIMANTES & IMPRESSION SILENCIEUSE ─────────────────────────
   // ── IMPRIMANTES & IMPRESSION SILENCIEUSE ─────────────────────────
+
+  function classifyPrinterName(name = '') {
+    const n = name.toLowerCase();
+    const thermalKeywords = ['thermal', 'thermique', '80mm', '58mm', 'pos', 'pos-80', 'xp-80', 'xprinter', 'tm-t', 'receipt', 'ticket', 'label', 'escp', 'mini'];
+    const isThermal = thermalKeywords.some(k => n.includes(k));
+    return { isThermal, isA4: !isThermal };
+  }
+
+  function wrapHtmlForPrint(html, format = 'thermal') {
+    const isThermal = format === 'thermal';
+    const bodyCss = isThermal
+      ? 'html, body { margin: 0 !important; padding: 0 !important; width: 80mm; font-family: Arial, "Helvetica Neue", Helvetica, sans-serif; color: #000; background: #fff; }'
+      : 'html, body { margin: 0 !important; padding: 0 !important; width: 210mm; font-family: Arial, "Helvetica Neue", Helvetica, sans-serif; color: #000; background: #fff; }';
+    const pageCss = isThermal
+      ? '@page { margin: 0mm !important; size: 80mm auto; }'
+      : '@page { margin: 10mm; size: A4 portrait; }';
+    return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ${bodyCss}
+  ${pageCss}
+</style></head><body>${html}</body></html>`;
+  }
+
+  async function printHtmlToPrinter(html, { deviceName = '', silent = true, format = 'thermal' } = {}) {
+    if (!html || typeof html !== 'string') {
+      return { success: false, error: 'Aucun contenu HTML à imprimer' };
+    }
+
+    const targetDevice = (deviceName && typeof deviceName === 'string') ? deviceName.trim() : '';
+    const isSilent = silent !== false;
+    console.log(`[ECOLISA IPC] Demande d'impression ${format} -> Imprimante: "${targetDevice || 'Par défaut OS'}", Mode silencieux: ${isSilent}`);
+
+    const { BrowserWindow: BW } = require('electron');
+    const printWin = new BW({
+      show: false,
+      parent: mainWindow || undefined,
+      width: format === 'thermal' ? 400 : 850,
+      height: format === 'thermal' ? 800 : 1100,
+      webPreferences: { nodeIntegration: false, contextIsolation: true },
+    });
+
+    const fullHtml = wrapHtmlForPrint(html, format);
+
+    try {
+      // Attendre le chargement complet avec timeout pour éviter tout blocage
+      const loadPromise = new Promise((resolve, reject) => {
+        printWin.webContents.once('did-finish-load', resolve);
+        printWin.webContents.once('did-fail-load', (event, errorCode, errorDescription) => {
+          reject(new Error(`Échec chargement page: ${errorDescription} (${errorCode})`));
+        });
+      });
+      const loadTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout chargement page d'impression")), 8000));
+
+      await printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(fullHtml));
+      await Promise.race([loadPromise, loadTimeout]);
+
+      // Petit délai supplémentaire pour laisser les images / polices se rendre
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    } catch (loadErr) {
+      try { printWin.destroy(); } catch {}
+      console.error('[ECOLISA IPC] Erreur chargement page impression :', loadErr);
+      return { success: false, error: loadErr.message || 'Impossible de charger le document à imprimer' };
+    }
+
+    return new Promise((resolve) => {
+      const printOptions = {
+        silent: isSilent,
+        printBackground: true,
+      };
+      if (targetDevice) {
+        printOptions.deviceName = targetDevice;
+      }
+      if (format === 'a4') {
+        printOptions.pageSize = 'A4';
+        printOptions.margins = { marginType: 'default' };
+      } else {
+        printOptions.margins = { marginType: 'none' };
+        try {
+          printOptions.pageSize = { width: 80000, height: 300000 }; // 80 mm x 300 mm en microns
+        } catch (e) {
+          // Ignorer si l'imprimante ne supporte pas les formats personnalisés
+        }
+      }
+
+      let resolved = false;
+      const timeoutId = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        try { printWin.destroy(); } catch {}
+        console.warn(`[ECOLISA IPC] Timeout impression ${format} (15 s).`);
+        resolve({ success: false, error: `Timeout : l'imprimante n'a pas répondu dans les 15 secondes.` });
+      }, 15000);
+
+      printWin.webContents.print(printOptions, (success, failureReason) => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeoutId);
+        try { printWin.destroy(); } catch {}
+        if (success) {
+          console.log(`[ECOLISA IPC] Impression ${format} réussie.`);
+          resolve({ success: true });
+        } else {
+          console.warn(`[ECOLISA IPC] Échec impression ${format}:`, failureReason);
+          resolve({ success: false, error: failureReason || `Échec de l'impression ${format}` });
+        }
+      });
+    });
+  }
+
   ipcMain.handle('get-printers', async (event) => {
     try {
       const sender = event?.sender || (mainWindow ? mainWindow.webContents : null);
@@ -2109,6 +2949,7 @@ function registerIpcHandlers() {
             displayName: p.displayName || p.name,
             isDefault: p.isDefault,
             status: p.status,
+            ...classifyPrinterName(p.name),
           }));
         }
       }
@@ -2129,6 +2970,7 @@ function registerIpcHandlers() {
             name: p.Name,
             displayName: p.Name,
             isDefault: !!p.Default,
+            ...classifyPrinterName(p.Name),
           }));
           if (list.length > 0) {
             console.log(`[ECOLISA IPC] ${list.length} imprimantes trouvées via fallback PowerShell.`);
@@ -2144,78 +2986,15 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('print:silent', async (event, { deviceName, silent, html } = {}) => {
-    try {
-      const isSilent = silent !== false;
-      const targetDevice = (deviceName && typeof deviceName === 'string') ? deviceName.trim() : '';
-      console.log(`[ECOLISA IPC] Demande d'impression -> Imprimante: "${targetDevice || 'Par défaut'}", Mode silencieux: ${isSilent}`);
+    return printHtmlToPrinter(html, { deviceName, silent, format: 'thermal' });
+  });
 
-      if (html && typeof html === 'string') {
-        const { BrowserWindow: BW } = require('electron');
-        const printWin = new BW({
-          show: false,
-          width: 450,
-          height: 750,
-          webPreferences: { nodeIntegration: false, contextIsolation: true },
-        });
+  ipcMain.handle('print:thermal', async (event, { deviceName, silent, html } = {}) => {
+    return printHtmlToPrinter(html, { deviceName, silent, format: 'thermal' });
+  });
 
-        const fullHtml = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { margin: 0 !important; padding: 0 !important; font-family: "Courier New", Courier, monospace, Arial, sans-serif; width: 80mm; color: #000; background: #fff; }
-  @page { margin: 0mm !important; size: 80mm auto; }
-</style></head><body>${html}</body></html>`;
-
-        await printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(fullHtml));
-
-        return new Promise((resolve) => {
-          const printOptions = {
-            silent: isSilent,
-            printBackground: true,
-          };
-          if (targetDevice) {
-            printOptions.deviceName = targetDevice;
-          }
-
-          printWin.webContents.print(printOptions, (success, failureReason) => {
-            try { printWin.close(); } catch {}
-            if (success) {
-              console.log('[ECOLISA IPC] Impression silencieuse réussie.');
-              resolve({ success: true });
-            } else {
-              console.warn('[ECOLISA IPC] Erreur webContents.print :', failureReason);
-              resolve({ success: false, error: failureReason || 'Échec de l\'impression silencieuse' });
-            }
-          });
-        });
-      }
-
-      // Si pas d'HTML fourni, impression directe de la fenêtre principale
-      return new Promise((resolve) => {
-        const printOptions = {
-          silent: isSilent,
-          printBackground: true,
-        };
-        if (targetDevice) {
-          printOptions.deviceName = targetDevice;
-        }
-
-        const targetContents = (event && event.sender) || (mainWindow ? mainWindow.webContents : null);
-        if (!targetContents) return resolve({ success: false, error: 'Fenêtre introuvable' });
-
-        targetContents.print(printOptions, (success, failureReason) => {
-          if (success) {
-            console.log('[ECOLISA IPC] Impression de la fenêtre réussie.');
-            resolve({ success: true });
-          } else {
-            console.warn('[ECOLISA IPC] Erreur impression fenêtre :', failureReason);
-            resolve({ success: false, error: failureReason || 'Échec de l\'impression' });
-          }
-        });
-      });
-    } catch (err) {
-      console.error('[ECOLISA IPC] Erreur print:silent :', err);
-      return { success: false, error: err.message };
-    }
+  ipcMain.handle('print:a4', async (event, { deviceName, silent, html } = {}) => {
+    return printHtmlToPrinter(html, { deviceName, silent, format: 'a4' });
   });
 
   // Nettoyage de la base de données (Suppression des données de test)
@@ -2248,6 +3027,25 @@ function registerIpcHandlers() {
   // Fallbacks pour retrocompatibilite IPC (ex: db-load, db-save)
   ipcMain.handle('db-load', () => null);
   ipcMain.handle('db-save', () => ({ success: true }));
+
+  // Sauvegarde de fichier via dialog natif (exports PDF, etc.)
+  ipcMain.handle('save-file', async (_, opts) => {
+    if (!mainWindow) return { success: false, error: 'Fenêtre principale non disponible' };
+    try {
+      const { fileName, dataBase64, filters } = opts || {};
+      const result = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: fileName || 'export.pdf',
+        filters: filters || [{ name: 'Tous les fichiers', extensions: ['*'] }],
+      });
+      if (result.canceled || !result.filePath) return { success: false, canceled: true };
+      const buf = Buffer.from(dataBase64, 'base64');
+      fs.writeFileSync(result.filePath, buf);
+      return { success: true, filePath: result.filePath };
+    } catch (err) {
+      console.error('[ECOLISA IPC] Erreur save-file :', err);
+      return { success: false, error: err.message };
+    }
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2274,6 +3072,16 @@ function createWindow() {
   mainWindow.maximize();
   mainWindow.once('ready-to-show', () => { mainWindow.show(); mainWindow.focus(); });
   const isDev = process.env.NODE_ENV !== 'production';
+  if (isDev) {
+    // Répercute les logs/erreurs du renderer (React) vers la console du
+    // processus principal pour faciliter le diagnostic des pages blanches.
+    mainWindow.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+      console.log(`[Renderer console] ${message} (${sourceId}:${line})`);
+    });
+    mainWindow.webContents.on('render-process-gone', (_e, details) => {
+      console.error('[Renderer crashed]', details);
+    });
+  }
   if (isDev || process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL||'http://localhost:3000');
   else mainWindow.loadFile(path.join(__dirname,'../dist/index.html'));
   mainWindow.on('closed', () => { mainWindow = null; });

@@ -8,6 +8,7 @@ import {
 import { RôleSystème, UserAccount } from '../../types';
 import { LocalDatabaseService, UserSession } from '../../services/localDatabase';
 import { SchoolConfig } from '../onboarding/OnboardingWizard';
+import { normalizeAccessCycle, canAccessMaternelleAndPrimaire, expandMaternellePrimaireScope } from '../../utils/permissions';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: UserSession) => void;
@@ -19,7 +20,8 @@ interface LoginScreenProps {
 
 const ROLE_LABELS: Record<RôleSystème, string> = {
   PROMOTEUR_ADMIN:      'Promoteur / Admin',
-  PREFET_DIRECTEUR:     'Préfet / Directeur',
+  PREFET_DIRECTEUR:     'Préfet des Études',
+  DIRECTEUR_ECOLE:      'Directeur d’école (P/M)',
   DIRECTEUR_ETUDES:     'Dir. des Études',
   DIRECTEUR_DISCIPLINE: 'Dir. de Discipline',
   COMPTABLE:            'Comptable Intendant',
@@ -34,6 +36,7 @@ const ROLE_LABELS: Record<RôleSystème, string> = {
 const ROLE_COLORS: Record<RôleSystème, string> = {
   PROMOTEUR_ADMIN:      'from-violet-600 to-purple-700 text-white',
   PREFET_DIRECTEUR:     'from-indigo-600 to-blue-700 text-white',
+  DIRECTEUR_ECOLE:      'from-blue-600 to-sky-700 text-white',
   DIRECTEUR_ETUDES:     'from-blue-600 to-cyan-700 text-white',
   DIRECTEUR_DISCIPLINE: 'from-amber-600 to-orange-700 text-white',
   COMPTABLE:            'from-emerald-600 to-teal-700 text-white',
@@ -46,6 +49,13 @@ const ROLE_COLORS: Record<RôleSystème, string> = {
 };
 
 type CategoryFilter = 'ALL' | 'DIRECTION' | 'PEDAGOGIE' | 'FINANCES' | 'PARENTS' | 'MANUAL';
+type LoginCycle = 'MATERNELLE' | 'PRIMAIRE' | 'SECONDAIRE';
+
+const LOGIN_CYCLES: { id: LoginCycle; label: string; description: string; icon: React.ElementType; color: string }[] = [
+  { id: 'MATERNELLE', label: 'Maternelle', description: 'Personnel administratif et pédagogique du cycle maternel', icon: UserCheck, color: 'from-pink-500 to-rose-500' },
+  { id: 'PRIMAIRE', label: 'Primaire', description: 'Direction, instituteurs, secrétariat et comptabilité du primaire', icon: GraduationCap, color: 'from-sky-500 to-blue-600' },
+  { id: 'SECONDAIRE', label: 'Secondaire', description: 'CTEB, Humanités, options et administration secondaire', icon: Building2, color: 'from-indigo-500 to-violet-600' },
+];
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
   onLoginSuccess,
@@ -63,6 +73,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const isLockScreen = !!lockedUser;
 
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>('ALL');
+  const [selectedCycle, setSelectedCycle] = useState<LoginCycle | null>(null);
   const [searchQuery, setSearchQuery]       = useState('');
 
   const [selectedUser, setSelectedUser] = useState<UserAccount | null>(null);
@@ -81,14 +92,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const GENERIC_AUTH_ERROR = 'Identifiants incorrects. Vérifiez votre identifiant et votre mot de passe.';
 
   useEffect(() => {
-    // Charger config école
-    const stored = localStorage.getItem('ecolisa_school_config');
-    if (stored) { try { setSchoolConfig(JSON.parse(stored)); } catch {} }
-    if ((window as any).electronAPI?.getConfig) {
-      (window as any).electronAPI.getConfig('school_config').then((cfg: any) => {
-        if (cfg) setSchoolConfig(cfg);
-      });
-    }
+    // Charger config école depuis SQLite (source de vérité)
+    LocalDatabaseService.getConfig('school_config').then((cfg: any) => {
+      if (cfg) setSchoolConfig(cfg);
+    });
 
     // Charger les comptes utilisateurs réels
     LocalDatabaseService.getUsers().then((users) => {
@@ -181,6 +188,29 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         return;
       }
 
+      if (isAdminMode && existingUser.role !== 'PROMOTEUR_ADMIN') {
+        setIsSubmitting(false);
+        setErrorMsg('Ce formulaire est réservé au Promoteur/Admin général.');
+        return;
+      }
+      const authenticatedProfile = selectedUser || standardProfiles.find(profile => profile.id === existingUser.id || profile.email?.toLowerCase() === existingUser.email?.toLowerCase()) || existingUser;
+      if (existingUser.role !== 'PROMOTEUR_ADMIN' && !isLockScreen) {
+        if (!selectedCycle) {
+          setIsSubmitting(false);
+          setErrorMsg('Sélectionnez d’abord votre cycle d’affectation.');
+          return;
+        }
+        let cycles: string[] = (authenticatedProfile.cyclesAssignes || []).map(normalizeAccessCycle).filter(Boolean);
+        if (canAccessMaternelleAndPrimaire(existingUser.role)) {
+          cycles = expandMaternellePrimaireScope(cycles);
+        }
+        if (cycles.length > 0 && !cycles.includes(selectedCycle)) {
+          setIsSubmitting(false);
+          setErrorMsg('Ce compte n’est pas affecté au cycle sélectionné. Contactez le Promoteur/Admin.');
+          return;
+        }
+      }
+
       // Consigner la connexion dans le journal d'audit
       await LocalDatabaseService.logAction('CONNEXION', 'SYSTEME', 'UserAccount', existingUser.id, {
         email: existingUser.email,
@@ -189,14 +219,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         timestamp: new Date().toISOString(),
       });
 
-      // Préparer la session utilisateur
+      // Préparer la session utilisateur avec le cycle de travail sélectionné
       const userSession: UserSession = {
         id:      existingUser.id,
         email:   existingUser.email,
         nom:     `${existingUser.prenom || ''} ${existingUser.nom}`.trim(),
         role:    existingUser.role,
-        token:   `token_${Math.random().toString(36).substring(2)}`,
+        token:   `token_${crypto.randomUUID()}`,
         pinCode: existingUser.pinCode || undefined,
+        telephone: existingUser.telephone,
+        cycle:   isLockScreen ? (lockedUser?.cycle || undefined) : (existingUser.role === 'PROMOTEUR_ADMIN' ? undefined : selectedCycle || undefined),
+        cyclesAssignes: authenticatedProfile.cyclesAssignes,
       };
 
       setIsSubmitting(false);
@@ -213,9 +246,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   // Filtrage des comptes
   const filteredProfiles = useMemo(() => {
     return standardProfiles.filter(profile => {
+      if (!selectedCycle) return false;
+      let cycles: string[] = (profile.cyclesAssignes || []).map(normalizeAccessCycle).filter(Boolean);
+      if (canAccessMaternelleAndPrimaire(profile.role)) {
+        cycles = expandMaternellePrimaireScope(cycles);
+      }
+      if (cycles.length > 0 && !cycles.includes(selectedCycle)) return false;
+
       // Filtre catégorie
       if (activeCategory === 'DIRECTION') {
-        if (!['PREFET_DIRECTEUR', 'DIRECTEUR_ETUDES', 'DIRECTEUR_DISCIPLINE', 'CENSEUR', 'SECRETAIRE'].includes(profile.role)) return false;
+        if (!['PREFET_DIRECTEUR', 'DIRECTEUR_ECOLE', 'DIRECTEUR_ETUDES', 'DIRECTEUR_DISCIPLINE', 'CENSEUR', 'SECRETAIRE'].includes(profile.role)) return false;
       } else if (activeCategory === 'PEDAGOGIE') {
         if (!['ENSEIGNANT', 'TITULAIRE', 'DIRECTEUR_ETUDES', 'CENSEUR'].includes(profile.role)) return false;
       } else if (activeCategory === 'FINANCES') {
@@ -236,7 +276,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
       return true;
     });
-  }, [standardProfiles, activeCategory, searchQuery]);
+  }, [standardProfiles, selectedCycle, activeCategory, searchQuery]);
 
   // Styles adaptatifs
   const bg        = isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900';
@@ -250,18 +290,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const divider   = isDarkMode ? 'border-slate-800' : 'border-slate-200';
   const badgePill = isDarkMode ? 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30' : 'bg-indigo-50 text-indigo-700 border-indigo-200';
   const badgeBox  = isDarkMode ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200';
-  const errorBox  = isDarkMode ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' : 'bg-rose-50 border-rose-200 text-rose-700';
+  const errorBox  = isDarkMode ? 'bg-rose-500/08 border-rose-500/25 text-rose-300' : 'bg-rose-50 border-rose-200 text-rose-700';
   const itemHover = isDarkMode ? 'hover:bg-slate-800/80 border-slate-800/80 hover:border-indigo-500/40' : 'hover:bg-indigo-50/50 border-slate-200 hover:border-indigo-300';
+  const inputBase = isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-400';
 
   return (
     <div className={`min-h-screen w-full flex items-center justify-center p-3 sm:p-6 select-none font-sans relative overflow-hidden transition-colors duration-200 ${bg}`}>
-      
+
       {/* BOUTON THÈME */}
       {toggleTheme && (
         <button
           type="button"
           onClick={toggleTheme}
-          className="fixed top-4 right-4 z-50 p-2.5 rounded-2xl border bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 backdrop-blur-md shadow-xs transition-all cursor-pointer"
+          className="fixed top-4 right-4 z-50 p-2 rounded-xl border bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 backdrop-blur-sm transition-all cursor-pointer"
+          style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
           title={isDarkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}
         >
           {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
@@ -269,16 +311,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       )}
 
       {/* FOND DÉCORATIF SUBTIL */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-30 dark:opacity-20">
-        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-indigo-500/20 blur-3xl" />
-        <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-violet-500/20 blur-3xl" />
+      <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-20">
+        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-indigo-500/15 blur-3xl" />
+        <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-violet-500/15 blur-3xl" />
       </div>
 
       {/* CONTENEUR PRINCIPAL */}
-      <div className={`w-full max-w-4xl rounded-3xl border shadow-2xl backdrop-blur-xl overflow-hidden grid grid-cols-1 lg:grid-cols-12 relative z-10 transition-all ${cardBg}`}>
+      <div
+        className={`w-full max-w-4xl rounded-2xl border overflow-hidden grid grid-cols-1 lg:grid-cols-12 relative z-10 transition-all ${cardBg}`}
+        style={{ boxShadow: '0 20px 50px -12px rgba(0,0,0,0.12), 0 8px 20px -8px rgba(0,0,0,0.06)' }}
+      >
         
         {/* COLONNE GAUCHE (5 COLS) : BRANDING & ÉTABLISSEMENT */}
-        <div className="lg:col-span-5 p-6 sm:p-8 bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-950 text-white flex flex-col justify-between relative overflow-hidden border-b lg:border-b-0 lg:border-r border-indigo-800/40">
+        <div
+          className="lg:col-span-5 p-6 sm:p-8 text-white flex flex-col justify-between relative overflow-hidden border-b lg:border-b-0 lg:border-r"
+          style={{ background: 'linear-gradient(145deg, #1e1b4b 0%, #312e81 60%, #1e293b 100%)', borderColor: 'rgba(99,102,241,0.25)' }}
+        >
           <div className="space-y-6 relative z-10">
             {/* LOGO ÉCOLE / ÉCOLISA */}
             <div className="flex items-center gap-3.5">
@@ -286,39 +334,39 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 <img
                   src={schoolConfig.logoUrl}
                   alt="Logo"
-                  className="w-12 h-12 rounded-2xl object-cover border-2 border-white/20 shadow-md bg-white/10"
+                  className="w-12 h-12 rounded-xl object-cover border border-white/20 shadow-sm bg-white/10"
                 />
               ) : (
-                <div className="w-12 h-12 rounded-2xl bg-indigo-600 border border-white/20 flex items-center justify-center shadow-md">
+                <div className="w-12 h-12 rounded-xl border border-white/20 flex items-center justify-center shadow-sm" style={{ background: 'rgba(99,102,241,0.85)' }}>
                   <School className="w-6 h-6 text-white" />
                 </div>
               )}
               <div>
-                <h1 className="text-base font-black tracking-tight uppercase leading-tight line-clamp-1">
+                <h1 className="text-base font-semibold tracking-tight leading-tight line-clamp-1">
                   {schoolConfig?.schoolName || 'ÉCOLISA ENTERPRISE'}
                 </h1>
-                <p className="text-[10px] font-bold text-indigo-300 tracking-wider uppercase">
+                <p className="text-[10px] text-indigo-200 tracking-wide uppercase">
                   {schoolConfig?.province ? `${schoolConfig.province} · RDC` : 'Système de Gestion Scolaire EPST'}
                 </p>
               </div>
             </div>
 
             <div className="space-y-3 pt-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-indigo-200 text-[10px] font-black border border-white/10">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-medium border" style={{ background: 'rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.12)' }}>
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Authentification Sécurisée par Mot de Passe</span>
+                <span>Authentification sécurisée par mot de passe</span>
               </span>
-              <p className="text-xs text-indigo-200/90 leading-relaxed font-medium">
+              <p className="text-xs text-indigo-200/90 leading-relaxed font-normal">
                 Accédez à votre espace pédagogique, administratif ou financier avec vos identifiants protégés.
               </p>
             </div>
           </div>
 
           <div className="pt-6 relative z-10">
-            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md space-y-1">
-              <p className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider">Sécurité des Données</p>
-              <p className="text-[11px] text-slate-300 font-medium">
-                Mots de passe hachés scrypt, contrôle d'accès strict par rôle et traçabilité complète.
+            <div className="p-3.5 rounded-xl border backdrop-blur-sm space-y-1" style={{ background: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.10)' }}>
+              <p className="text-[10px] text-indigo-200 uppercase tracking-wide font-medium">Sécurité des données</p>
+              <p className="text-[11px] text-slate-300 font-normal leading-relaxed">
+                Mots de passe hachés, contrôle d'accès strict par rôle et traçabilité complète.
               </p>
             </div>
           </div>
@@ -331,17 +379,50 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           {!showForm && (
             <div className="p-6 sm:p-8 flex flex-col justify-between flex-1 space-y-5 animate-fade-in">
               <div className="space-y-4">
+                {!selectedCycle ? (
+                  <>
+                    <div>
+                      <h2 className={`text-lg font-black tracking-tight ${textPri}`}>Choisir votre cycle</h2>
+                      <p className={`text-xs ${textSec}`}>Cette étape détermine les comptes et le périmètre de travail disponibles.</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {LOGIN_CYCLES.map(cycle => {
+                        const CycleIcon = cycle.icon;
+                        const count = standardProfiles.filter(profile => {
+                          const assigned = (profile.cyclesAssignes || []).map(normalizeAccessCycle).filter(Boolean);
+                          return assigned.length === 0 || assigned.includes(cycle.id);
+                        }).length;
+                        return (
+                          <button
+                            key={cycle.id}
+                            type="button"
+                            onClick={() => { setSelectedCycle(cycle.id); setActiveCategory('ALL'); setSearchQuery(''); }}
+                            className={`group p-3.5 rounded-xl border text-left transition-all hover:-translate-y-0.5 active:scale-[0.98] ${innerBg}`}
+                            style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
+                          >
+                            <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${cycle.color} text-white flex items-center justify-center mb-2.5 group-hover:scale-105 transition-transform`}><CycleIcon className="w-[18px] h-[18px]" /></div>
+                            <p className={`text-sm font-semibold ${textPri}`}>{cycle.label}</p>
+                            <p className={`text-[10px] mt-1 min-h-6 ${textMut}`}>{cycle.description}</p>
+                            <div className="flex items-center justify-between mt-2.5"><span className="text-[10px] font-medium text-indigo-500">{count} compte{count > 1 ? 's' : ''}</span><ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500" /></div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <>
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className={`text-lg font-black tracking-tight ${textPri}`}>Choisir votre Profil</h2>
-                    <p className={`text-xs ${textSec}`}>Cliquez sur votre compte pour saisir votre mot de passe</p>
+                    <button type="button" onClick={() => { setSelectedCycle(null); setActiveCategory('ALL'); setSearchQuery(''); }} className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 mb-1"><ArrowLeft className="w-3.5 h-3.5" /> Changer de cycle</button>
+                    <h2 className={`text-lg font-black tracking-tight ${textPri}`}>Comptes · {LOGIN_CYCLES.find(cycle => cycle.id === selectedCycle)?.label}</h2>
+                    <p className={`text-xs ${textSec}`}>Choisissez votre compte personnel pour vous authentifier.</p>
                   </div>
                   <button
                     type="button"
                     onClick={handleOpenManualLogin}
                     className="text-xs font-black text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
                   >
-                    <span>Saisie Libre</span>
+                    <span>Saisie d’identifiants</span>
                     <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -362,14 +443,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         key={cat.id}
                         type="button"
                         onClick={() => setActiveCategory(cat.id as CategoryFilter)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all shrink-0 cursor-pointer active:scale-[0.98] ${
                           isActive
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-500/10'
+                            ? 'bg-indigo-600 text-white'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-500/8 border border-transparent'
                         }`}
+                        style={isActive ? { boxShadow: '0 2px 6px rgba(99,102,241,0.25)' } : undefined}
                       >
                         <CatIcon className="w-3.5 h-3.5" />
-                        <span>{cat.label}</span>
+                        <span className="capitalize">{cat.label}</span>
                       </button>
                     );
                   })}
@@ -382,8 +464,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Filtrer par nom, rôle, e-mail ou téléphone..."
-                    className={`w-full pl-9 pr-3.5 py-2 rounded-xl border text-xs font-bold focus:outline-hidden focus:ring-2 focus:ring-indigo-500/40 transition-all ${inputBg}`}
+                    placeholder="Rechercher un compte..."
+                    className={`w-full pl-9 pr-3.5 py-2 rounded-lg border text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all ${inputBase}`}
                   />
                 </div>
 
@@ -394,48 +476,54 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     <span className="text-xs text-slate-400">Chargement des comptes...</span>
                   </div>
                 ) : filteredProfiles.length === 0 ? (
-                  <div className="p-8 text-center border rounded-2xl space-y-2" style={{ borderColor: 'var(--border)' }}>
+                  <div className="p-6 text-center border rounded-xl space-y-2" style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}>
                     <Users className="w-8 h-8 mx-auto text-slate-400" />
-                    <p className={`text-xs font-bold ${textPri}`}>Aucun profil trouvé</p>
+                    <p className={`text-xs font-medium ${textPri}`}>Aucun profil trouvé</p>
                     <p className="text-[11px] text-slate-400">
                       {searchQuery ? 'Essayez un autre mot-clé ou' : 'Connectez-vous via la saisie manuelle.'}
                     </p>
                     <button
                       onClick={handleOpenManualLogin}
-                      className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-black text-xs shadow-xs cursor-pointer inline-block mt-2"
+                      className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-[11px] cursor-pointer inline-block mt-2 transition-colors"
                     >
-                      Saisie Manuelle d'Identifiants
+                      Saisie manuelle
                     </button>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-64 overflow-y-auto pr-1 sidebar-scroll">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-64 overflow-y-auto pr-1 sidebar-scroll">
                     {filteredProfiles.map((profile) => {
                       const colorClass = ROLE_COLORS[profile.role] || 'from-slate-700 to-slate-800 text-white';
                       return (
                         <button
                           key={profile.id}
                           onClick={() => handleSelectStandardUser(profile)}
-                          className={`group flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all cursor-pointer ${itemHover}`}
+                          className={`group flex items-center gap-3 p-2.5 rounded-xl border transition-all cursor-pointer text-left hover:-translate-y-0.5 ${itemHover}`}
+                          style={{ background: 'var(--bg-surface)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
                         >
-                          <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${colorClass} flex items-center justify-center font-black text-base shadow-xs group-hover:scale-105 transition-transform overflow-hidden border border-white/10`}>
+                          <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${colorClass} flex items-center justify-center font-semibold text-sm shrink-0 overflow-hidden border border-white/10`}>
                             {profile.avatarUrl ? (
                               <img src={profile.avatarUrl} alt="" className="w-full h-full object-cover" />
                             ) : (
                               <span>{getInitials(profile)}</span>
                             )}
                           </div>
-                          <div className="text-center min-w-0 w-full">
-                            <p className={`text-xs font-black truncate ${textPri}`}>
+                          <div className="min-w-0 flex-1">
+                            <p className={`text-[11px] font-medium truncate ${textPri}`}>
                               {profile.prenom ? `${profile.prenom} ` : ''}{profile.nom}
                             </p>
-                            <p className="text-[9.5px] text-indigo-500 font-bold truncate">
+                            <p className="text-[10px] text-indigo-500 font-medium truncate">
                               {ROLE_LABELS[profile.role] || profile.role}
                             </p>
+                            {(profile.cyclesAssignes || []).map(normalizeAccessCycle).filter(Boolean).length === 0 && (
+                              <p className="text-[9px] text-amber-500 font-medium truncate">Cycle à configurer</p>
+                            )}
                           </div>
                         </button>
                       );
                     })}
                   </div>
+                )}
+                  </>
                 )}
               </div>
 
@@ -444,10 +532,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 <button
                   type="button"
                   onClick={handleOpenAdminLogin}
-                  className="w-full py-3 rounded-xl border text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer bg-gradient-to-r from-violet-600/20 to-purple-600/20 hover:from-violet-600/30 hover:to-purple-600/30 border-violet-500/40 text-violet-600 dark:text-violet-300"
+                  className="w-full py-2.5 rounded-lg border text-[11px] font-medium flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.98] text-violet-600 dark:text-violet-300"
+                  style={{ background: 'rgba(139,92,246,0.08)', borderColor: 'rgba(139,92,246,0.25)' }}
                 >
-                  <Crown className="w-4 h-4 text-amber-500" />
-                  <span>Accès Administrateur Général (Promoteur / Admin)</span>
+                  <Crown className="w-4 h-4" />
+                  <span className="capitalize">Accès administrateur général (Promoteur / Admin)</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -511,9 +600,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                   {errorMsg && (
-                    <div className={`p-3.5 rounded-xl border text-xs font-black flex items-center gap-2 animate-fade-in ${errorBox}`}>
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>{errorMsg}</span>
+                    <div className={`p-3 rounded-lg border text-xs font-medium flex items-start gap-2.5 animate-fade-in ${errorBox}`}>
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span className="leading-relaxed">{errorMsg}</span>
                     </div>
                   )}
 
@@ -531,7 +620,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         placeholder="Ex: jean.dupont@ecolisa.cd ou 0812345678"
                         required
                         autoFocus
-                        className={`w-full px-3.5 py-2.5 rounded-lg border font-bold text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500/40 transition-all ${inputBg}`}
+                        className={`w-full px-3.5 py-2.5 rounded-lg border font-medium text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all ${inputBase}`}
                       />
                     </div>
                   )}
@@ -576,10 +665,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                           placeholder="Saisissez votre mot de passe..."
                           required
                           autoFocus
-                          className={`w-full pl-3.5 pr-10 py-2.5 rounded-lg border font-bold text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500/40 transition-all ${inputBg}`}
+                          className={`w-full pl-3.5 pr-10 py-2.5 rounded-lg border font-medium text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all ${inputBase}`}
                         />
                         <button
                           type="button"
+                          tabIndex={-1}
+                          aria-label="Afficher ou masquer le mot de passe"
                           onClick={() => setShowPassword((v) => !v)}
                           className={`absolute right-3 top-1/2 -translate-y-1/2 transition-colors cursor-pointer ${textSec} hover:text-indigo-500`}
                         >
@@ -613,10 +704,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                           placeholder="Code PIN"
                           autoFocus
                           required
-                          className={`w-full pl-3.5 pr-10 py-2.5 rounded-lg border font-mono font-black text-center text-sm tracking-widest focus:outline-hidden focus:ring-2 focus:ring-indigo-500/40 ${inputBg}`}
+                          className={`w-full pl-3.5 pr-10 py-2.5 rounded-lg border font-mono font-medium text-center text-sm tracking-widest focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 ${inputBase}`}
                         />
                         <button
                           type="button"
+                          tabIndex={-1}
+                          aria-label="Afficher ou masquer le code PIN"
                           onClick={() => setShowPinCode((v) => !v)}
                           className={`absolute right-3 top-1/2 -translate-y-1/2 transition-colors cursor-pointer ${textSec} hover:text-indigo-500`}
                         >
@@ -630,7 +723,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full py-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60 shadow-xs mt-2"
+                    className="w-full py-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 active:scale-[0.98] text-white font-medium text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60 mt-2"
+                    style={{ boxShadow: '0 4px 10px -2px rgba(99,102,241,0.35)' }}
                   >
                     {isSubmitting ? (
                       <>
@@ -640,7 +734,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     ) : (
                       <>
                         <ShieldCheck className="w-4 h-4 text-amber-300" />
-                        <span>Ouvrir mon Espace {selectedUser ? ROLE_LABELS[selectedUser.role] : 'ECOLISA'}</span>
+                        <span className="capitalize">Ouvrir mon espace {selectedUser ? (ROLE_LABELS[selectedUser.role] || '').toLowerCase() : 'ECOLISA'}</span>
                         <ArrowRight className="w-4 h-4 ml-1" />
                       </>
                     )}

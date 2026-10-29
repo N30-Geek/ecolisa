@@ -59,6 +59,7 @@ import { SubjectsManager } from './SubjectsManager';
 import { ScheduleManager } from './ScheduleManager';
 import { GradesManager } from './GradesManager';
 import { EvaluationsExamsManager } from './EvaluationsExamsManager';
+import { DeliberationManager } from './DeliberationManager';
 import { StudentDetailPage } from './StudentDetailPage';
 import { TeacherManager } from '../administration/TeacherManager';
 
@@ -262,7 +263,8 @@ const StudentsTab: React.FC = () => {
 
   const handleRegisterNewStudent = async (newStudent: Eleve) => {
     await loadData();
-    setShowRegisterModal(false);
+    // La modale reste ouverte : StudentRegistrationModal affiche le popup
+    // de continuation / impression avant de fermer via onBack.
   };
 
   const handleUpdateStudent = async (updated: Eleve) => {
@@ -1887,6 +1889,7 @@ export const AcademicManager: React.FC<AcademicManagerProps> = ({ activeSubTab =
     { id: 'years',    label: 'Année Scolaire & Périodes',icon: Calendar      },
     { id: 'teachers', label: 'Enseignants & Personnel', icon: Users          },
     { id: 'examens',  label: 'Évaluations & Examens',   icon: Award          },
+    { id: 'deliberation', label: 'Délibérations',            icon: FileCheck      },
     { id: 'grades',   label: 'Cotes & Bulletins',       icon: ClipboardList  },
     { id: 'schedule', label: 'Emploi du Temps',          icon: Calendar      },
   ];
@@ -1905,6 +1908,7 @@ export const AcademicManager: React.FC<AcademicManagerProps> = ({ activeSubTab =
       case 'years':    return <SchoolYearsTab activeSchoolYear={activeSchoolYear} />;
       case 'teachers': return <TeacherManager activeSchoolYear={activeSchoolYear} />;
       case 'examens':  return <EvaluationsExamsManager />;
+      case 'deliberation': return <DeliberationManager activeSchoolYear={activeSchoolYear} />;
       case 'grades':   return <GradesManager activeSchoolYear={activeSchoolYear} />;
       case 'schedule': return <ScheduleManager activeSchoolYear={activeSchoolYear} />;
       default:         return <StudentsManager activeSchoolYear={activeSchoolYear} registrationRequest={registrationRequest} />;

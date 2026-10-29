@@ -32,10 +32,13 @@ import {
   FileCheck,
   ArrowUpDown,
   X,
-  Maximize2
+  Maximize2,
+  RefreshCw
 } from 'lucide-react';
 import { Eleve, ClasseScolaire } from '../../types';
+import { getStudentOption, getOptionLabel } from '../../utils/options';
 import { LocalDatabaseService } from '../../services/localDatabase';
+import { canEditPersonalInfo } from '../../utils/permissions';
 import { CustomSelect, SelectOption } from '../common/CustomSelect';
 import { SortableTh } from '../common/SortableTh';
 import { StudentRegistrationModal } from './StudentRegistrationModal';
@@ -44,9 +47,11 @@ import { StudentFullFileModal } from './StudentFullFileModal';
 import { StudentDocumentsModal } from './StudentDocumentsModal';
 import { BulkIdCardModal } from './BulkIdCardModal';
 import { StudentDetailPage } from './StudentDetailPage';
+import { ReinscriptionPage } from './ReinscriptionPage';
 import { PhotoLightboxModal } from '../common/PhotoLightboxModal';
 import { Pagination } from '../common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
+import { useSearchTarget } from '../../hooks/useSearchTarget';
 
 interface StudentsManagerProps {
   initialClassFilter?: string;
@@ -64,6 +69,7 @@ interface StudentActionMenuProps {
   onEdit: (student: Eleve) => void;
   onDelete: (id: string) => void;
   onZoomPhoto?: (student: Eleve) => void;
+  canEdit?: boolean;
 }
 
 const StudentActionMenu: React.FC<StudentActionMenuProps> = ({
@@ -74,6 +80,7 @@ const StudentActionMenu: React.FC<StudentActionMenuProps> = ({
   onEdit,
   onDelete,
   onZoomPhoto,
+  canEdit = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
@@ -177,13 +184,15 @@ const StudentActionMenu: React.FC<StudentActionMenuProps> = ({
             <span>Dossier & Pièces (Scans)</span>
           </button>
 
-          <button
-            onClick={() => { setIsOpen(false); onEdit(student); }}
-            className="w-full px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2.5 hover:bg-amber-500/10 text-amber-700 dark:text-amber-300 text-left transition-colors cursor-pointer"
-          >
-            <Edit3 className="w-4 h-4 text-amber-500" />
-            <span>Éditer les Informations</span>
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => { setIsOpen(false); onEdit(student); }}
+              className="w-full px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2.5 hover:bg-amber-500/10 text-amber-700 dark:text-amber-300 text-left transition-colors cursor-pointer"
+            >
+              <Edit3 className="w-4 h-4 text-amber-500" />
+              <span>Éditer les Informations</span>
+            </button>
+          )}
 
           <button
             onClick={() => { setIsOpen(false); onZoomPhoto?.(student); }}
@@ -193,15 +202,19 @@ const StudentActionMenu: React.FC<StudentActionMenuProps> = ({
             <span>Agrandir la Photo</span>
           </button>
 
-          <div className="my-1 border-t border-slate-100 dark:border-slate-800/40" />
+          {canEdit && (
+            <>
+              <div className="my-1 border-t border-slate-100 dark:border-slate-800/40" />
 
-          <button
-            onClick={() => { setIsOpen(false); onDelete(student.id); }}
-            className="w-full px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2.5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 text-left transition-colors cursor-pointer"
-          >
-            <Trash2 className="w-4 h-4 text-rose-500" />
-            <span>Supprimer du Registre</span>
-          </button>
+              <button
+                onClick={() => { setIsOpen(false); onDelete(student.id); }}
+                className="w-full px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2.5 hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 text-left transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4 text-rose-500" />
+                <span>Supprimer du Registre</span>
+              </button>
+            </>
+          )}
         </div>,
         document.body
       )}
@@ -218,6 +231,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
   // Filtres & Tri
   const [search, setSearch] = useState('');
   const [selectedClass, setSelectedClass] = useState(initialClassFilter);
+  const [selectedOption, setSelectedOption] = useState<string>('ALL');
   const [selectedCycle, setSelectedCycle] = useState('ALL');
   const [selectedStatut, setSelectedStatut] = useState('ALL');
   const [selectedSexe, setSelectedSexe] = useState('ALL');
@@ -244,20 +258,26 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
   const [showBulkIdCardModal, setShowBulkIdCardModal] = useState(false);
   const [deleteStudentId, setDeleteStudentId] = useState<string | null>(null);
   const [zoomStudent, setZoomStudent] = useState<Eleve | null>(null);
+  const [showReinscriptionPage, setShowReinscriptionPage] = useState(false);
+
+  const currentUser = LocalDatabaseService.getCurrentUser();
+  const canEditStudent = canEditPersonalInfo(currentUser?.role);
 
   const lastRegistrationRequest = useRef(0);
 
   // Ouvre le formulaire d'inscription lors d'une demande en provenance du dashboard
   useEffect(() => {
-    if (registrationRequest && registrationRequest !== lastRegistrationRequest.current) {
+    if (registrationRequest && registrationRequest !== lastRegistrationRequest.current && canEditStudent) {
       lastRegistrationRequest.current = registrationRequest;
       setSelectedStudent(null);
       setEditingStudent(null);
       setShowRegisterModal(true);
     }
-  }, [registrationRequest]);
+  }, [registrationRequest, canEditStudent]);
 
   const [assignedClasses, setAssignedClasses] = useState<string[] | null>(null);
+
+  const { apply } = useSearchTarget('students');
 
   // Chargement des données SQLite
   const loadData = async () => {
@@ -305,6 +325,13 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
     loadData();
   }, [activeSchoolYear]);
 
+  useEffect(() => {
+    const target = apply();
+    if (target?.name) {
+      setSearch(target.name);
+    }
+  }, [apply]);
+
   // Sync initial class filter
   useEffect(() => {
     if (initialClassFilter) setSelectedClass(initialClassFilter);
@@ -338,6 +365,16 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
     { value: 'F', label: 'Féminin (Filles)' },
   ];
 
+  const optionOptions = useMemo<SelectOption[]>(() => {
+    const values = new Set<string>(['ALL']);
+    students.forEach(s => values.add(getStudentOption(s, classes)));
+    const all = Array.from(values).filter(v => v !== 'ALL').sort();
+    return [
+      { value: 'ALL', label: 'Toutes les options' },
+      ...all.map(value => ({ value, label: getOptionLabel(value) })),
+    ];
+  }, [students, classes]);
+
   const sortOptions: SelectOption[] = [
     { value: 'NAME_ASC', label: 'Nom (A à Z)' },
     { value: 'NAME_DESC', label: 'Nom (Z à A)' },
@@ -347,20 +384,25 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
 
   // Élèves filtrés et triés
   const filteredStudents = useMemo(() => {
+    const classById = new Map(classes.map(c => [c.id, c]));
     let result = students.filter(s => {
       const q = search.toLowerCase().trim();
-      const matchesQuery = !q
-        || s.prenom.toLowerCase().includes(q)
-        || s.nom.toLowerCase().includes(q)
-        || (s.postnom && s.postnom.toLowerCase().includes(q))
-        || s.registrationNumber.toLowerCase().includes(q)
-        || (s.telephoneParent && s.telephoneParent.includes(q));
+      const cls = classById.get(s.classId);
+      const cycle = cls?.cycleCode || s.nomClasse?.split(' ')[0] || '';
+      const hay = [
+        s.prenom, s.nom, s.postnom, s.registrationNumber, (s as any).matricule,
+        s.nomClasse, cls?.salle, s.salle, s.optionCode, s.optionEPST,
+        s.nomParent, s.telephoneParent, s.nomTuteur, s.telephoneTuteur,
+        cycle
+      ].filter(Boolean).join(' ').toLowerCase();
+      const matchesQuery = !q || hay.includes(q);
 
       const matchesClass = !selectedClass || s.classId === selectedClass || s.nomClasse === classes.find(c => c.id === selectedClass)?.nom;
+      const matchesOption = selectedOption === 'ALL' || getStudentOption(s, classes) === selectedOption;
       const matchesStatut = selectedStatut === 'ALL' || s.statut === selectedStatut;
       const matchesSexe = selectedSexe === 'ALL' || s.sexe === selectedSexe;
 
-      return matchesQuery && matchesClass && matchesStatut && matchesSexe;
+      return matchesQuery && matchesClass && matchesOption && matchesStatut && matchesSexe;
     });
 
     // Tri
@@ -372,6 +414,9 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
           break;
         case 'classe':
           res = (a.nomClasse || '').localeCompare(b.nomClasse || '');
+          break;
+        case 'option':
+          res = (getStudentOption(a, classes) || '').localeCompare(getStudentOption(b, classes) || '');
           break;
         case 'sexe':
           res = (a.sexe || '').localeCompare(b.sexe || '');
@@ -391,7 +436,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
     });
 
     return result;
-  }, [students, search, selectedClass, selectedStatut, selectedSexe, tableSortField, tableSortOrder, classes]);
+  }, [students, search, selectedClass, selectedOption, selectedStatut, selectedSexe, tableSortField, tableSortOrder, classes]);
 
   const { paginated: paginatedStudents, ...studentsPagination } = usePagination(filteredStudents, { defaultPageSize: 10 });
 
@@ -408,6 +453,19 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
     }
   };
 
+  // VUE DÉDIÉE : PAGE DE RÉINSCRIPTION
+  if (showReinscriptionPage) {
+    return (
+      <ReinscriptionPage
+        onBack={() => setShowReinscriptionPage(false)}
+        onSuccess={async () => {
+          setShowReinscriptionPage(false);
+          await loadData();
+        }}
+      />
+    );
+  }
+
   // VUE DÉDIÉE : ASSISTANT D'INSCRIPTION / MODIFICATION ÉLÈVE
   if (showRegisterModal || editingStudent) {
     return (
@@ -419,7 +477,8 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
         }}
         onRegister={async (newStudent) => {
           await loadData();
-          setShowRegisterModal(false);
+          // La modale reste ouverte : StudentRegistrationModal affiche le popup
+          // de continuation / impression avant de fermer via onBack.
         }}
         onUpdate={async (updatedStudent) => {
           // Rafraîchit la liste ET redirige vers la fiche mise à jour
@@ -437,10 +496,10 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
       <StudentDetailPage
         student={selectedStudent}
         onBack={() => setSelectedStudent(null)}
-        onEdit={(st) => {
+        onEdit={canEditStudent ? (st) => {
           setSelectedStudent(null);
           setEditingStudent(st);
-        }}
+        } : undefined}
       />
     );
   }
@@ -494,16 +553,28 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
               <span>Cartes QR par Classe</span>
             </button>
 
-            <button
-              onClick={() => {
-                setEditingStudent(null);
-                setShowRegisterModal(true);
-              }}
-              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white text-xs font-bold shadow-md shadow-indigo-500/25 hover:shadow-lg flex items-center gap-2 transition-all duration-200 cursor-pointer"
-            >
-              <Plus className="w-4 h-4 text-white" />
-              <span>Nouveau Dossier Élève (Wizard)</span>
-            </button>
+            {canEditStudent && (
+              <>
+                <button
+                  onClick={() => {
+                    setEditingStudent(null);
+                    setShowRegisterModal(true);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.97] text-white text-xs font-bold shadow-md shadow-indigo-500/25 hover:shadow-lg flex items-center gap-2 transition-all duration-200 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4 text-white" />
+                  <span>Nouveau Dossier Élève (Wizard)</span>
+                </button>
+
+                <button
+                  onClick={() => setShowReinscriptionPage(true)}
+                  className="px-4 py-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-[0.97] text-emerald-700 dark:text-emerald-300 text-xs font-bold shadow-md shadow-emerald-500/10 hover:shadow-lg flex items-center gap-2 transition-all duration-200 cursor-pointer"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Réinscription</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -562,6 +633,18 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
             Humanités : {students.filter(s => { const c = classes.find(cl => cl.id === s.classId || cl.nom === s.nomClasse); return c?.cycleId === 'HUMANITES' || s.nomClasse?.toLowerCase().includes('hum'); }).length}
           </span>
         </div>
+
+        {/* RÉPARTITION PAR OPTIONS (visible dès qu'il y a des options variées) */}
+        {(students.length > 0 && students.some(s => getStudentOption(s, classes) !== 'TRONC_COMMUN')) && (
+          <div className="mt-3 pt-3 border-t flex items-center gap-2 flex-wrap text-xs" style={{ borderColor: 'var(--border)' }}>
+            <span className="font-bold text-slate-400 text-[11px] uppercase tracking-wider">Répartition par Option :</span>
+            {Array.from(new Set(students.map(s => getStudentOption(s, classes)))).sort().map(opt => (
+              <span key={opt} className="px-2.5 py-1 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-300 font-black text-[11px]">
+                {getOptionLabel(opt)} : {students.filter(s => getStudentOption(s, classes) === opt).length}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* CADRE UNIQUE GLOBAL : RECHERCHE + FILTRES + TABLEAU ÉLÈVES + PAGINATION */}
@@ -620,13 +703,20 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
             </div>
           </div>
 
-          {/* LIGNE 2 : LES 3 FILTRES DROPDOWNS DANS LE MÊME CADRE */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* LIGNE 2 : LES FILTRES DROPDOWNS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <CustomSelect
               options={classOptions}
               value={selectedClass}
               onChange={val => { setSelectedClass(val); studentsPagination.setPage(1); }}
               placeholder="Filtrer par Classe"
+            />
+
+            <CustomSelect
+              options={optionOptions}
+              value={selectedOption}
+              onChange={val => { setSelectedOption(val); studentsPagination.setPage(1); }}
+              placeholder="Filtrer par Option"
             />
 
             <CustomSelect
@@ -657,17 +747,19 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
               <GraduationCap className="w-12 h-12 text-slate-400 mx-auto" />
               <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Aucun élève ne correspond à votre recherche</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-                Vérifiez l'orthographe du nom ou modifiez les filtres de classe et de statut sélectionnés.
+                Vérifiez l'orthographe du nom ou modifiez les filtres de classe, option et statut sélectionnés.
               </p>
-              <button
-                onClick={() => {
-                  setEditingStudent(null);
-                  setShowRegisterModal(true);
-                }}
-                className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-md shadow-indigo-500/25 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" /> Inscrire un Élève
-              </button>
+              {canEditStudent && (
+                <button
+                  onClick={() => {
+                    setEditingStudent(null);
+                    setShowRegisterModal(true);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-md shadow-indigo-500/25 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> Inscrire un Élève
+                </button>
+              )}
             </div>
           ) : viewMode === 'grid' ? (
             /* VUE GRILLE D'ÉLÈVES DANS LE CADRE */
@@ -720,6 +812,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
                           onEdit={setEditingStudent}
                           onDelete={setDeleteStudentId}
                           onZoomPhoto={setZoomStudent}
+                          canEdit={canEditStudent}
                         />
                       </div>
                     </div>
@@ -731,6 +824,9 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
                       </span>
                       <span className="font-bold px-2.5 py-0.5 rounded-md border" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
                         {s.nomClasse}
+                      </span>
+                      <span className="font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[10.5px]">
+                        {getOptionLabel(getStudentOption(s, classes))}
                       </span>
                       <span className={`px-2 py-0.5 rounded text-[10.5px] font-bold ${s.sexe === 'M' ? 'bg-indigo-500/10 text-indigo-500' : 'bg-pink-500/10 text-pink-500'}`}>
                         {s.sexe === 'M' ? 'Garçon' : 'Fille'}
@@ -769,6 +865,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
                     <SortableTh label="Élève & Identité" field="name" currentSortField={tableSortField} currentSortOrder={tableSortOrder} onSort={handleTableSort} className="w-1/4" />
                     <SortableTh label="Matricule EPST" field="matricule" currentSortField={tableSortField} currentSortOrder={tableSortOrder} onSort={handleTableSort} />
                     <SortableTh label="Classe & Promotion" field="classe" currentSortField={tableSortField} currentSortOrder={tableSortOrder} onSort={handleTableSort} />
+                    <SortableTh label="Option / Section" field="option" currentSortField={tableSortField} currentSortOrder={tableSortOrder} onSort={handleTableSort} />
                     <SortableTh label="Sexe" field="sexe" currentSortField={tableSortField} currentSortOrder={tableSortOrder} onSort={handleTableSort} />
                     <SortableTh label="Statut Scolaire" field="statut" currentSortField={tableSortField} currentSortOrder={tableSortOrder} onSort={handleTableSort} />
                     <SortableTh label="Parent / Tuteur" field="parent" currentSortField={tableSortField} currentSortOrder={tableSortOrder} onSort={handleTableSort} />
@@ -813,6 +910,11 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
                       </td>
                       <td className="font-bold" style={{ color: 'var(--text-primary)' }}>{s.nomClasse}</td>
                       <td>
+                        <span className="chip-tonal chip-tonal-amber text-[11px]">
+                          {getOptionLabel(getStudentOption(s, classes))}
+                        </span>
+                      </td>
+                      <td>
                         <span className={`chip-tonal ${s.sexe === 'M' ? 'chip-tonal-indigo' : 'chip-tonal-rose'}`}>
                           {s.sexe === 'M' ? 'Masculin' : 'Féminin'}
                         </span>
@@ -843,6 +945,7 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
                             onViewDocs={setDocsModalStudent}
                             onEdit={setEditingStudent}
                             onDelete={setDeleteStudentId}
+                            canEdit={canEditStudent}
                             onZoomPhoto={setZoomStudent}
                           />
                         </div>
@@ -949,6 +1052,17 @@ export const StudentsManager: React.FC<StudentsManagerProps> = ({ initialClassFi
         subtitle={zoomStudent ? `Matricule : ${zoomStudent.registrationNumber} · Classe : ${zoomStudent.nomClasse}` : ''}
         badge={zoomStudent?.statut}
       />
+
+      {/* PAGE DE RÉINSCRIPTION */}
+      {showReinscriptionPage && canEditStudent && (
+        <ReinscriptionPage
+          onBack={() => setShowReinscriptionPage(false)}
+          onSuccess={async () => {
+            setShowReinscriptionPage(false);
+            await loadData();
+          }}
+        />
+      )}
     </div>
   );
 };

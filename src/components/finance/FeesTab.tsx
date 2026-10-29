@@ -1,17 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, Loader2, Filter, TrendingUp, AlertTriangle, TrendingDown, Wallet, PieChart, LayoutGrid, TreePine, Eye } from 'lucide-react';
+import { Plus, Trash2, Loader2, Filter, TrendingUp, AlertTriangle, TrendingDown, Wallet, PieChart, LayoutGrid, TreePine, Eye, MoreVertical, Copy, FilePlus, Pencil } from 'lucide-react';
 import { Pagination } from '../common/Pagination';
 import { usePagination } from '../../hooks/usePagination';
 import { CustomSelect } from '../common/CustomSelect';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { LocalDatabaseService } from '../../services/localDatabase';
 import { formatCurrency, convertCurrency } from '../../utils/currency';
+import { showToast } from '../common/ToastNotification';
 import { MODE_PAIEMENT_LABELS } from '../../utils/feeTranches';
-import type { TypeFraisScolaire, AnneeScolaireConfig, CategorieFrais, FactureEleve, TransactionPaiement, ClasseScolaire } from '../../types';
+import type { TypeFraisScolaire, AnneeScolaireConfig, CategorieFrais, FactureEleve, TransactionPaiement, ClasseScolaire, Eleve } from '../../types';
+import { isFeeTypeApplicable } from '../../utils/feeFilters';
+import { getStudentOption, getOptionLabel } from '../../utils/options';
 import { FeesByContextPanel } from './FeesByContextPanel';
 import { FeeTypeFormModal } from './FeeTypeFormModal';
 import { FeeTypeDetailModal } from './FeeTypeDetailModal';
 import { ReceiptModal } from './ReceiptModal';
+import { ActionMenu } from '../common/ActionMenu';
 
 const CATEGORIES: CategorieFrais[] = [
   'FRAIS_INSCRIPTION', 'FRAIS_REINSCRIPTION', 'FRAIS_MINERVAL', 'FRAIS_CONNEXES', 'FRAIS_KITS_EQUIPEMENTS',
@@ -20,6 +24,13 @@ const CATEGORIES: CategorieFrais[] = [
 
 const CYCLES = ['TOUS', 'MATERNELLE', 'PRIMAIRE', 'SECONDAIRE_CTEB', 'HUMANITES'] as const;
 const REGIMES = ['TOUS', 'EXTERNE', 'INTERNE', 'SEMI_INTERNE'] as const;
+
+const CYCLE_LABELS: Record<string, string> = {
+  MATERNELLE: 'Maternelle',
+  PRIMAIRE: 'Primaire',
+  SECONDAIRE_CTEB: 'Secondaire / CTEB',
+  HUMANITES: 'Humanités',
+};
 
 const uuid = () => {
   if (typeof window !== 'undefined' && (window as any).crypto?.randomUUID) {
@@ -43,6 +54,7 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
   const [feeTypes, setFeeTypes] = useState<TypeFraisScolaire[]>([]);
   const [years, setYears] = useState<AnneeScolaireConfig[]>([]);
   const [classes, setClasses] = useState<ClasseScolaire[]>([]);
+  const [students, setStudents] = useState<Eleve[]>([]);
   const [invoices, setInvoices] = useState<FactureEleve[]>([]);
   const [payments, setPayments] = useState<TransactionPaiement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,16 +69,18 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
 
   const load = async () => {
     setLoading(true);
-    const [ft, y, cls, inv, pmt] = await Promise.all([
+    const [ft, y, cls, eleves, inv, pmt] = await Promise.all([
       LocalDatabaseService.getFeeTypes(),
       LocalDatabaseService.getSchoolYears(),
       LocalDatabaseService.getClasses(),
+      LocalDatabaseService.getEleves(),
       LocalDatabaseService.getInvoices(),
       LocalDatabaseService.getPayments(),
     ]);
     setFeeTypes(ft);
     setYears(y);
     setClasses(cls);
+    setStudents(eleves);
     setInvoices(inv);
     setPayments(pmt);
     setLoading(false);
@@ -91,8 +105,8 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
 
   const optionOptions = useMemo(() => [
     { value: 'TOUS', label: 'Toutes les options' },
-    ...Array.from(new Set(classes.map(c => c.optionCode).filter((o): o is string => !!o))).map(o => ({ value: o, label: o })),
-  ], [classes]);
+    ...Array.from(new Set(students.map(s => getStudentOption(s, classes)).filter(Boolean))).sort().map(o => ({ value: o, label: getOptionLabel(o) })),
+  ], [students, classes]);
 
   const classOptions = useMemo(() => [
     { value: 'TOUS', label: 'Toutes les classes' },
@@ -124,13 +138,7 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
       return true;
     });
 
-    relevantInvoices.forEach(inv => {
-      inv.lignes?.forEach(l => {
-        const s = map.get(l.feeTypeId);
-        if (s) s.attendu += convertCurrency(l.montant, l.devise || inv.devise, currency, exchangeRate);
-      });
-    });
-
+    // Montants payés (source de vérité : allocations de paiement)
     payments.forEach(p => {
       if (activeYearId && p.anneeScolaireId !== activeYearId) return;
       p.allocations?.forEach(a => {
@@ -139,8 +147,43 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
       });
     });
 
+    // Montants attendus :
+    // - Pour les frais automatiques (obligatoires / payables à l'inscription),
+    //   on calcule montant × nombre d'élèves concernés.
+    // - Pour les frais optionnels non automatiques, on se base sur les factures existantes.
+    for (const ft of filteredFeeTypes) {
+      const s = map.get(ft.id)!;
+      const isAutoFee = (ft.obligatoire || ft.payeALInscription) && ft.actif !== false;
+
+      if (isAutoFee && students.length > 0) {
+        const applicableCount = students.filter(st => {
+          if (activeYearId && st.schoolYearId && st.schoolYearId !== activeYearId) return false;
+          if (classFilter !== 'TOUS' && st.nomClasse !== classFilter) return false;
+          const cls = classes.find(c => c.id === st.classId || c.nom === st.nomClasse);
+          const option = getStudentOption(st, classes);
+          return isFeeTypeApplicable(ft, {
+            schoolYearId: activeYearId || ft.schoolYearId,
+            classId: cls?.id || st.classId,
+            className: cls?.nom || st.nomClasse,
+            cycleId: cls?.cycleId,
+            option,
+            salleId: st.salleId,
+            regime: st.regime,
+          }, CYCLE_LABELS);
+        }).length;
+        s.attendu += convertCurrency(ft.montant * applicableCount, ft.devise, currency, exchangeRate);
+      } else {
+        relevantInvoices.forEach(inv => {
+          inv.lignes?.forEach(l => {
+            if (l.feeTypeId !== ft.id) return;
+            s.attendu += convertCurrency(l.montant, l.devise || inv.devise, currency, exchangeRate);
+          });
+        });
+      }
+    }
+
     return map;
-  }, [filteredFeeTypes, invoices, payments, activeYearId, classFilter, currency, exchangeRate]);
+  }, [filteredFeeTypes, students, classes, invoices, payments, activeYearId, classFilter, currency, exchangeRate]);
 
   const globalStats = useMemo(() => {
     let attendu = 0, paye = 0;
@@ -156,6 +199,29 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
     if (!window.confirm('Supprimer ce type de frais ?')) return;
     await LocalDatabaseService.deleteFeeType(id);
     load();
+  };
+
+  const handleDuplicate = (ft: TypeFraisScolaire) => {
+    setEditing({
+      ...ft,
+      id: '',
+      code: ft.code ? `${ft.code}-copie` : '',
+      nom: `${ft.nom} (copie)`,
+      actif: true,
+    });
+  };
+
+  const handleGenerateInvoices = async (ft: TypeFraisScolaire) => {
+    if (!window.confirm(`Générer les factures pour tous les élèves concernés par "${ft.nom}" ?`)) return;
+    setLoading(true);
+    const result = await LocalDatabaseService.generateInvoicesForFeeType(ft.id, activeYearId);
+    setLoading(false);
+    if (result.success) {
+      showToast('Factures générées', `${result.created} facture(s) créée(s), ${result.skipped} déjà existante(s) ou non applicable(s).`, 'success');
+      load();
+    } else {
+      showToast('Erreur de génération', result.error || 'Impossible de générer les factures.', 'error');
+    }
   };
 
   const handleSave = async (ft: TypeFraisScolaire) => {
@@ -183,6 +249,8 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
       modePaiement: 'UNIQUE',
       nombreTranches: 1,
       tranches: [{ id: uuid(), nom: 'Paiement unique', montant: 0, devise: (currency as string) || 'USD', ordre: 1 }],
+      acceptePartialite: true,
+      payeALInscription: false,
     });
   };
 
@@ -230,6 +298,7 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
               classes={classes}
               onClose={() => setSelectedFee(null)}
               onViewReceipt={setViewPayment}
+              onEdit={(ft) => { setSelectedFee(null); setEditing(ft); }}
             />
           ) : (
           <>
@@ -308,10 +377,33 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
                 <div className="min-w-0 flex-1">
                   <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">{ft.categorie.replace(/_/g, ' ')}</span>
                   <h3 className="text-sm font-bold mt-0.5 truncate" style={{ color: 'var(--text-primary)' }}>{ft.nom}</h3>
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {ft.obligatoire && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 border border-indigo-500/20">Obligatoire</span>
+                    )}
+                    {ft.payeALInscription && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20">Inscription</span>
+                    )}
+                    {ft.acceptePartialite === false && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-600 border border-rose-500/20">Paiement complet</span>
+                    )}
+                  </div>
                 </div>
-                <span className={`shrink-0 text-[9px] font-black px-2 py-0.5 rounded-full border ${ft.actif !== false ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/25' : 'bg-slate-500/10 text-slate-600 border-slate-500/25'}`}>
-                  {ft.actif !== false ? 'ACTIF' : 'INACTIF'}
-                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border ${ft.actif !== false ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/25' : 'bg-slate-500/10 text-slate-600 border-slate-500/25'}`}>
+                    {ft.actif !== false ? 'ACTIF' : 'INACTIF'}
+                  </span>
+                  <ActionMenu
+                    items={[
+                      { label: 'Voir le détail', icon: Eye, onClick: () => setSelectedFee(ft) },
+                      { label: 'Modifier', icon: Pencil, onClick: () => setEditing(ft) },
+                      { label: 'Dupliquer', icon: Copy, onClick: () => handleDuplicate(ft) },
+                      { label: 'Générer les factures', icon: FilePlus, onClick: () => handleGenerateInvoices(ft) },
+                      { label: 'Supprimer', icon: Trash2, danger: true, onClick: () => handleDelete(ft.id), separatorBefore: true },
+                    ]}
+                    title={`Actions pour ${ft.nom}`}
+                  />
+                </div>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                 <div className="p-2 rounded-lg bg-slate-500/5">
@@ -384,7 +476,7 @@ export const FeesTab: React.FC<FeesTabProps> = ({ activeSchoolYear, autoOpenFee,
                 <td className="text-[11px]">{MODE_PAIEMENT_LABELS[ft.modePaiement || 'UNIQUE']}</td>
                 <td>{ft.obligatoire ? <span className="text-emerald-600 font-bold text-[11px]">Oui</span> : <span className="text-slate-400 text-[11px]">Non</span>}</td>
                 <td className="text-[11px]">{ft.cycleId || 'TOUS'}</td>
-                <td className="text-[11px]">{ft.optionCode || 'TOUS'}</td>
+                <td className="text-[11px]">{getOptionLabel(ft.optionCode) || 'TOUS'}</td>
                 <td className="text-[11px]">{ft.regime || 'TOUS'}</td>
                 <td className="text-[11px]">{ft.portee || 'TOUS'}</td>
                 <td>

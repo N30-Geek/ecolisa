@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useMemo, Suspense, lazy } from 'react';
 import {
   Plus,
   Wallet,
@@ -12,8 +12,13 @@ import {
   AlertTriangle,
   Target,
   Receipt,
+  Circle,
 } from 'lucide-react';
-import { CustomSelect } from '../common/CustomSelect';
+import { CustomSelect, SelectOption } from '../common/CustomSelect';
+import { useSearchTarget } from '../../hooks/useSearchTarget';
+import { LocalDatabaseService } from '../../services/localDatabase';
+import { hasTabAccess } from '../../utils/permissions';
+import { RôleSystème } from '../../types';
 
 // ─── Dynamic Code-Splitting / Lazy-Loaded Tabs ──────────────────────────────
 const InvoiceTab = lazy(() => import('./InvoiceTab').then(m => ({ default: m.InvoiceTab })));
@@ -112,23 +117,144 @@ interface FinanceManagerProps {
   activeSchoolYear?: string;
 }
 
+const quickActions = [
+  { id: 'invoice' as const, label: 'Nouvelle Facture', icon: Plus, color: 'indigo', tab: 'invoices' },
+  { id: 'expense' as const, label: 'Nouvelle Dépense', icon: Wallet, color: 'amber', tab: 'cash' },
+  { id: 'fee' as const, label: 'Nouveau Frais', icon: PieChart, color: 'emerald', tab: 'fees' },
+  { id: 'payment' as const, label: 'Encaissement Frais', icon: CreditCard, color: 'slate', tab: null as string | null },
+];
+
+const subTabs = [
+  { id: 'invoices', label: 'Factures & Recouvrement', icon: CreditCard, group: 'FACTURATION' },
+  { id: 'fees', label: 'Frais Scolaires', icon: PieChart, group: 'FACTURATION' },
+  { id: 'arrears', label: 'Créances', icon: AlertTriangle, group: 'FACTURATION' },
+  { id: 'cash', label: 'Caisse & Dépenses', icon: Wallet, group: 'TRÉSORERIE' },
+  { id: 'payroll', label: 'Paie & Primes', icon: Plus, group: 'TRÉSORERIE' },
+  { id: 'expense-notes', label: 'Notes de frais', icon: Receipt, group: 'TRÉSORERIE' },
+  { id: 'accounting', label: 'Comptabilité OHADA', icon: Building2, group: 'COMPTABILITÉ' },
+  { id: 'budget', label: 'Budgets', icon: Target, group: 'COMPTABILITÉ' },
+  { id: 'reports', label: 'Rapports Financiers', icon: FileSpreadsheet, group: 'ANALYSE' },
+  { id: 'analytics', label: 'Analytique Financière', icon: BarChart3, group: 'ANALYSE' },
+];
+
+type FinanceSubTab = { id: string; label: string; icon: React.ElementType; group: string };
+
+const groupIcons: Record<string, React.ElementType> = {
+  FACTURATION: CreditCard,
+  TRÉSORERIE: Wallet,
+  COMPTABILITÉ: Building2,
+  ANALYSE: BarChart3,
+};
+
+const groupThemes: Record<string, { color: string; gradient: string }> = {
+  FACTURATION: { color: '#f43f5e', gradient: 'linear-gradient(135deg, #f43f5e, #fb7185)' },
+  TRÉSORERIE: { color: '#10b981', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
+  COMPTABILITÉ: { color: '#f59e0b', gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)' },
+  ANALYSE: { color: '#6366f1', gradient: 'linear-gradient(135deg, #6366f1, #818cf8)' },
+};
+
+const FinanceTabBar: React.FC<{
+  visibleSubTabs: FinanceSubTab[];
+  activeTab: string;
+  onTabChange: (tabId: string) => void;
+}> = ({ visibleSubTabs, activeTab, onTabChange }) => {
+  const currentGroup = visibleSubTabs.find(t => t.id === activeTab)?.group || visibleSubTabs[0]?.group || '';
+
+  const groupOptions = useMemo<SelectOption[]>(() => {
+    return Array.from(new Set(visibleSubTabs.map(t => t.group))).map(g => ({
+      value: g,
+      label: g,
+      icon: groupIcons[g] || Circle,
+    }));
+  }, [visibleSubTabs]);
+
+  const handleGroupChange = (group: string) => {
+    const first = visibleSubTabs.find(t => t.group === group);
+    if (first) onTabChange(first.id);
+  };
+
+  const groupTabs = useMemo(() => visibleSubTabs.filter(t => t.group === currentGroup), [visibleSubTabs, currentGroup]);
+
+  return (
+    <div
+      className="rounded-xl border p-2 transition-all"
+      style={{
+        background: 'var(--bg-surface)',
+        borderColor: 'var(--border)',
+        boxShadow: 'var(--elevation-1)',
+      }}
+    >
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+        <CustomSelect
+          options={groupOptions}
+          value={currentGroup}
+          onChange={handleGroupChange}
+          placeholder="Catégorie"
+          className="w-full sm:w-44"
+        />
+        <div
+          className="flex items-center p-1 rounded-lg overflow-x-auto sidebar-scroll w-full sm:w-auto"
+          style={{ background: 'var(--bg-sunken)' }}
+        >
+          {groupTabs.map(tab => {
+            const TabIcon = tab.icon;
+            const isActive = activeTab === tab.id;
+            const theme = groupThemes[tab.group] || groupThemes.ANALYSE;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onTabChange(tab.id)}
+                onMouseEnter={() => prefetchTab(tab.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer select-none ${
+                  isActive ? 'shadow-sm' : 'hover:bg-white/50 dark:hover:bg-white/5'
+                }`}
+                style={{
+                  background: isActive ? theme.gradient : 'transparent',
+                  color: isActive ? '#ffffff' : 'var(--text-primary)',
+                  boxShadow: isActive ? `0 2px 6px ${theme.color}40` : 'none',
+                }}
+              >
+                <TabIcon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const FinanceManager: React.FC<FinanceManagerProps> = ({ activeSubTab = 'invoices', activeSchoolYear }) => {
   const [localTab, setLocalTab] = useState(activeSubTab);
   const [quickAction, setQuickAction] = useState<'invoice' | 'expense' | 'fee' | 'payment' | null>(null);
   const [payFeesOpen, setPayFeesOpen] = useState(false);
+  const { target } = useSearchTarget();
+
+  // Rôle connecté pour filtrer les onglets et actions
+  const currentUser = LocalDatabaseService.getCurrentUser();
+  const userRole: RôleSystème = currentUser?.role || 'PROMOTEUR_ADMIN';
+
+  // Certains sous-onglets financiers ne sont pas des onglets top-level : on les mappe sur leur onglet parent
+  const subTabAccessMap: Record<string, string> = {
+    arrears: 'invoices',
+    'expense-notes': 'expenses',
+    budget: 'accounting',
+  };
+  const isFinanceTabAllowed = (tabId: string) => hasTabAccess(userRole, subTabAccessMap[tabId] || tabId);
+
+  useEffect(() => {
+    if (target?.tab && ['invoices', 'cash', 'fees', 'expenses', 'payroll'].includes(target.tab)) {
+      setLocalTab(target.tab);
+    }
+  }, [target]);
 
   useEffect(() => {
     setLocalTab(activeSubTab);
   }, [activeSubTab]);
 
   const actionConsumed = () => setQuickAction(null);
-
-  const quickActions = [
-    { id: 'invoice' as const, label: 'Nouvelle Facture', icon: Plus, color: 'indigo', tab: 'invoices' },
-    { id: 'expense' as const, label: 'Nouvelle Dépense', icon: Wallet, color: 'amber', tab: 'cash' },
-    { id: 'fee' as const, label: 'Nouveau Frais', icon: PieChart, color: 'emerald', tab: 'fees' },
-    { id: 'payment' as const, label: 'Encaissement Frais', icon: CreditCard, color: 'slate', tab: null },
-  ];
 
   const openQuick = (action: typeof quickActions[number]) => {
     if (action.id === 'payment') {
@@ -141,18 +267,19 @@ export const FinanceManager: React.FC<FinanceManagerProps> = ({ activeSubTab = '
     setQuickAction(action.id);
   };
 
-  const subTabs = [
-    { id: 'invoices', label: 'Factures & Recouvrement', icon: CreditCard },
-    { id: 'cash', label: 'Caisse & Dépenses', icon: Wallet },
-    { id: 'payroll', label: 'Paie & Primes', icon: Plus },
-    { id: 'fees', label: 'Frais Scolaires', icon: PieChart },
-    { id: 'arrears', label: 'Créances', icon: AlertTriangle },
-    { id: 'accounting', label: 'Comptabilité OHADA', icon: Building2 },
-    { id: 'budget', label: 'Budgets', icon: Target },
-    { id: 'expense-notes', label: 'Notes de frais', icon: Receipt },
-    { id: 'reports', label: 'Rapports Financiers', icon: FileSpreadsheet },
-    { id: 'analytics', label: 'Analytique Financière', icon: BarChart3 },
-  ];
+  const visibleSubTabs = useMemo(() => subTabs.filter(tab => isFinanceTabAllowed(tab.id)), [userRole]);
+
+  const visibleQuickActions = useMemo(() => quickActions.filter(a => {
+    if (a.id === 'payment') return hasTabAccess(userRole, 'invoices') || hasTabAccess(userRole, 'cash');
+    return a.tab ? isFinanceTabAllowed(a.tab) : false;
+  }), [userRole]);
+
+  // Repli sur le premier onglet autorisé si l'onglet courant n'est pas accessible
+  useEffect(() => {
+    if (visibleSubTabs.length > 0 && !visibleSubTabs.some(t => t.id === localTab)) {
+      setLocalTab(visibleSubTabs[0].id);
+    }
+  }, [visibleSubTabs, localTab]);
 
   const renderActiveTab = () => {
     switch (localTab) {
@@ -227,7 +354,7 @@ export const FinanceManager: React.FC<FinanceManagerProps> = ({ activeSubTab = '
 
         {/* Actions Rapides */}
         <div className="flex flex-wrap items-center gap-2">
-          {quickActions.map(a => {
+          {visibleQuickActions.map(a => {
             const Icon = a.icon;
             const colorMap: Record<string, { ring: string; icon: string; bg: string }> = {
               indigo: { ring: 'border-indigo-500/25 hover:border-indigo-500/50', icon: 'bg-indigo-600 text-white', bg: 'hover:bg-indigo-500/8' },
@@ -255,36 +382,12 @@ export const FinanceManager: React.FC<FinanceManagerProps> = ({ activeSubTab = '
         </div>
       </div>
 
-      {/* ═══ BARRE D'ONGLETS FINANCIÈRE (Material Design 3 Segmented Control) ═══ */}
-      <div
-        className="flex items-center gap-1.5 p-1.5 rounded-2xl overflow-x-auto sidebar-scroll border transition-all"
-        style={{
-          background: 'var(--bg-sunken)',
-          borderColor: 'var(--border)',
-          boxShadow: 'var(--elevation-1)',
-        }}
-      >
-        {subTabs.map((tab) => {
-          const TabIcon = tab.icon;
-          const isActive = localTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setLocalTab(tab.id)}
-              onMouseEnter={() => prefetchTab(tab.id)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap cursor-pointer select-none ${
-                isActive
-                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-600/30 border border-indigo-400/40'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10 border border-transparent'
-              }`}
-            >
-              <TabIcon className={`w-3.5 h-3.5 transition-transform ${isActive ? 'text-white scale-110' : 'text-indigo-500 dark:text-indigo-400'}`} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      {/* ═══ BARRE D'ONGLETS FINANCIÈRE COMPACTE PAR CATÉGORIE ═══ */}
+      <FinanceTabBar
+        visibleSubTabs={visibleSubTabs}
+        activeTab={localTab}
+        onTabChange={setLocalTab}
+      />
 
       {/* ═══ CONTENU DE L'ONGLET AVEC SUSPENSE & SKELETON ULTRA-RAPIDE ═══ */}
       <div className="w-full">

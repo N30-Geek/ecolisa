@@ -23,6 +23,7 @@ import { LocalDatabaseService } from '../../services/localDatabase';
 import { useSchoolConfig } from '../../hooks/useSchoolConfig';
 import { formatCurrency, convertCurrency } from '../../utils/currency';
 import { getInvoiceTotal, getPaymentAmount, getStudentTotalDue, round2 } from '../../utils/financeCalculations';
+import { getOptionLabel } from '../../utils/options';
 
 interface StudentFullFileModalProps {
   isOpen: boolean;
@@ -194,7 +195,7 @@ export const StudentFullFileModal: React.FC<StudentFullFileModalProps> = ({
         <h2>1. ÉTAT CIVIL & IDENTITÉ OFFICIELLE</h2>
         <table class="data-grid">
           <tr><th width="35%">Nom Complet de l'Élève</th><td><b>${student.nom} ${student.postnom || ''} ${student.prenom}</b></td></tr>
-          <tr><th>Classe Actuelle & Section</th><td><b>${student.nomClasse}${student.salle ? ' — Salle ' + student.salle : ''}</b></td></tr>
+          <tr><th>Classe Actuelle & Section</th><td><b>${student.nomClasse}${student.salle ? ' — Salle ' + student.salle : ''} — Option : ${getOptionLabel(student.optionCode || student.optionEPST)}</b></td></tr>
           <tr><th>Date & Lieu de Naissance</th><td>${student.dateNaissance || 'Non renseignée'} à ${student.lieuNaissance || 'Non renseigné'}</td></tr>
           <tr><th>Sexe / Genre</th><td>${student.sexe === 'M' ? 'Masculin' : 'Féminin'}</td></tr>
           <tr><th>Adresse Physique Domicile</th><td>${student.adressePhysique || 'Non renseignée'}</td></tr>
@@ -430,7 +431,7 @@ export const StudentFullFileModal: React.FC<StudentFullFileModalProps> = ({
               </div>
               <div className="flex border-b border-slate-200 py-1">
                 <span className="w-36 text-slate-500 font-bold">Classe Actuelle:</span>
-                <span className="font-black text-indigo-700">{student.nomClasse}{student.salle ? ` — Salle ${student.salle}` : ''}</span>
+                <span className="font-black text-indigo-700">{student.nomClasse}{student.salle ? ` — Salle ${student.salle}` : ''} — Option : <span className="text-amber-700">{getOptionLabel(student.optionCode || student.optionEPST)}</span></span>
               </div>
               <div className="flex border-b border-slate-200 py-1">
                 <span className="w-36 text-slate-500 font-bold">Date & Lieu de Naissance:</span>

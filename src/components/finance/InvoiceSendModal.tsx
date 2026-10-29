@@ -202,11 +202,11 @@ export const InvoiceSendModal: React.FC<InvoiceSendModalProps> = ({ invoice, stu
   };
 
   const buildMessage = () => {
-    return `Bonjour,\n\nVeuillez trouver ci-joint la facture N° ${invoice.numeroFacture} de ${invoice.nomEleve} (${invoice.nomClasse}).\n\nMontant total : ${format(invTotal, invoice.devise)}\nPayé : ${format(invPaid, currency)}\nReste à payer : ${format(remaining, currency)}\nÉchéance : ${invoice.dateEcheance?.split('T')[0] || '—'}\n\nMerci de votre confiance.\n\n${config?.schoolName || 'ÉCOLISA'}`;
+    return `Bonjour,\n\nVeuillez trouver ci-joint la facture N° ${invoice.numeroFacture} de ${invoice.nomEleve} (${invoice.nomClasse}).\n\nMontant total : ${format(invTotal, currency)}\nPayé : ${format(invPaid, currency)}\nReste à payer : ${format(remaining, currency)}\nÉchéance : ${invoice.dateEcheance?.split('T')[0] || '—'}\n\nMerci de votre confiance.\n\n${config?.schoolName || 'ÉCOLISA'}`;
   };
 
   const buildShortMessage = () => {
-    return `Facture ${invoice.numeroFacture} - ${invoice.nomEleve} - Total ${format(invTotal, invoice.devise)} - Reste ${format(remaining, currency)}. Échéance ${invoice.dateEcheance?.split('T')[0] || '—'}.`;
+    return `Facture ${invoice.numeroFacture} - ${invoice.nomEleve} - Total ${format(invTotal, currency)} - Reste ${format(remaining, currency)}. Échéance ${invoice.dateEcheance?.split('T')[0] || '—'}.`;
   };
 
   const statusIcon = (s?: string) => {
@@ -254,7 +254,7 @@ export const InvoiceSendModal: React.FC<InvoiceSendModalProps> = ({ invoice, stu
           <div className="p-4 rounded-2xl border" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
             <h4 className="text-xs font-black uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>Récapitulatif</h4>
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span style={{ color: 'var(--text-muted)' }}>Total</span><span className="font-black">{format(invTotal, invoice.devise)}</span></div>
+              <div className="flex justify-between"><span style={{ color: 'var(--text-muted)' }}>Total</span><span className="font-black">{format(invTotal, currency)}</span></div>
               <div className="flex justify-between"><span style={{ color: 'var(--text-muted)' }}>Payé</span><span className="font-black text-emerald-600">{format(invPaid, currency)}</span></div>
               <div className="flex justify-between"><span style={{ color: 'var(--text-muted)' }}>Reste</span><span className={`font-black ${remaining > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{format(remaining, currency)}</span></div>
               <div className="flex justify-between"><span style={{ color: 'var(--text-muted)' }}>Échéance</span><span className="font-bold">{invoice.dateEcheance?.split('T')[0] || '—'}</span></div>
@@ -363,7 +363,7 @@ export const InvoiceSendModal: React.FC<InvoiceSendModalProps> = ({ invoice, stu
 
             <div className="flex justify-end pt-2">
               <div className="w-72 space-y-1.5 text-[11px] p-3.5 rounded-xl bg-slate-50 border border-slate-300">
-                <div className="flex justify-between border-b border-slate-200 pb-1.5 font-bold text-slate-700"><span>TOTAL FACTURÉ :</span><span className="font-mono font-black text-slate-900">{format(invTotal, invoice.devise)}</span></div>
+                <div className="flex justify-between border-b border-slate-200 pb-1.5 font-bold text-slate-700"><span>TOTAL FACTURÉ :</span><span className="font-mono font-black text-slate-900">{format(invTotal, currency)}</span></div>
                 <div className="flex justify-between border-b border-slate-200 pb-1.5 font-bold text-emerald-700"><span>TOTAL ENCAISSÉ :</span><span className="font-mono font-black text-emerald-700">{format(invPaid, currency)}</span></div>
                 <div className="flex justify-between py-1 font-black text-xs" style={{ color: remaining > 0 ? '#b91c1c' : '#047857' }}><span>SOLDE RESTANT :</span><span className="font-mono text-sm">{format(remaining, currency)}</span></div>
               </div>

@@ -82,6 +82,55 @@ export const feeCibleLabel = (f: DraftFee) => {
   return f.cible === 'TRONC_COMMUN' ? `${cycleNom} (Tronc Commun)` : `${cycleNom} · ${f.cible}`;
 };
 
+const ORDINALS: Record<number, string> = {
+  1: '1ère', 2: '2ème', 3: '3ème', 4: '4ème',
+  5: '5ème', 6: '6ème', 7: '7ème', 8: '8ème',
+};
+
+// Détecte le niveau d'après un nom de classe en acceptant les variantes courantes
+// ex: "4e Humanités A", "4ème humanite", "1ere Primaire B" → { niveau: "4ème Humanités", label: "A" }
+const parseClassName = (nom: string, cycleCode: CodeCycleWizard): { niveau: string; label: string } | null => {
+  if (!nom) return null;
+  const normalized = nom
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/-/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const patterns: Record<CodeCycleWizard, { regex: RegExp; base: string }[]> = {
+    MATERNELLE: [{ regex: /\b(1|2|3)(?:ere|ème|eme|e)?\s*mater(nelle)?\b/, base: 'Maternelle' }],
+    PRIMAIRE: [{ regex: /\b(1|2|3|4|5|6)(?:ere|ème|eme|e)?\s*primaire\b/, base: 'Primaire' }],
+    SECONDAIRE_CTEB: [{ regex: /\b(7|8)(?:eme|ème|e)?\s*cteb\b/, base: 'CTEB' }],
+    HUMANITES: [{ regex: /\b(1|2|3|4)(?:ere|ème|eme|e)?\s*humanite(s)?\b/, base: 'Humanités' }],
+  };
+
+  const pats = patterns[cycleCode];
+  if (!pats) return null;
+
+  for (const p of pats) {
+    const m = normalized.match(p.regex);
+    if (m) {
+      const num = parseInt(m[1], 10);
+      const niveau = `${ORDINALS[num]} ${p.base}`;
+      const endIndex = normalized.indexOf(m[0]) + m[0].length;
+      const remainder = normalized.slice(endIndex).trim();
+      const label = remainder.toUpperCase().replace(/[^A-Z0-9]/g, ' ').trim().split(' ')[0] || 'A';
+      return { niveau, label };
+    }
+  }
+
+  // Fallback : correspondance exacte avec le référentiel
+  const niveau = NIVEAUX_PAR_CYCLE[cycleCode].find(n =>
+    normalized.startsWith(n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''))
+  );
+  if (!niveau) return null;
+  const remainder = normalized.slice(niveau.length).trim();
+  const label = remainder.toUpperCase().replace(/[^A-Z0-9]/g, ' ').trim().split(' ')[0] || 'A';
+  return { niveau, label };
+};
+
 export const parseClassesToDraft = (classes: ClasseScolaire[]) => {
   const selected: Record<string, boolean> = {};
   const sections: DraftSection[] = [];
@@ -90,16 +139,15 @@ export const parseClassesToDraft = (classes: ClasseScolaire[]) => {
     const cycleCode = (cls.cycleId || cls.cycleCode) as CodeCycleWizard;
     if (!cycleCode || !NIVEAUX_PAR_CYCLE[cycleCode]) continue;
 
-    const niveau = NIVEAUX_PAR_CYCLE[cycleCode].find(n => cls.nom?.startsWith(n));
-    if (!niveau) continue;
+    const parsed = parseClassName(cls.nom, cycleCode);
+    if (!parsed) continue;
 
-    selected[`${cycleCode}|${niveau}`] = true;
-    const label = cls.nom.slice(niveau.length).trim() || 'A';
+    selected[`${cycleCode}|${parsed.niveau}`] = true;
     sections.push({
       id: cls.id || uuid(),
       cycleCode,
-      niveau,
-      label,
+      niveau: parsed.niveau,
+      label: parsed.label,
       capacite: cls.capacite || 45,
     });
   }

@@ -54,7 +54,8 @@ export interface DashboardStats {
   averageScore: number;
   presenceRate: number;
   studentsByCycle: { name: string; code: string; value: number; color: string }[];
-  monthlyPerformance: { mois: string; moyenneCotes: number; tauxPresence: number }[];
+  monthlyPerformance: { mois: string; moyenneCotes: number; tauxPresence: number; tauxReussite: number }[];
+  dailyPerformance: { date: string; jour: string; moisIndex: number; moyenneCotes: number; tauxPresence: number; tauxReussite: number }[];
   quarterlyFinance: { trimestre: string; encaisse: number; objectif: number }[];
   recentActivity: {
     id: string;
@@ -132,6 +133,26 @@ const parseMonth = (d?: string) => {
   const parts = d.split(/[-/]/).filter(Boolean);
   if (parts.length >= 2) return Number(parts[1]) - 1;
   return -1;
+};
+
+const parseDateParts = (d?: string) => {
+  if (!d) return null;
+  const iso = d.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return { year: Number(iso[1]), month: Number(iso[2]) - 1, day: Number(iso[3]) };
+  const parts = d.split(/[T\s/:-]/).filter(Boolean).map(Number);
+  if (parts.length >= 3) {
+    const [first, second, third] = parts;
+    const year = first > 1900 ? first : third;
+    const month = first > 1900 ? second - 1 : second - 1;
+    const day = first > 1900 ? third : first;
+    if (year && month >= 0 && month <= 11 && day > 0 && day <= 31) return { year, month, day };
+  }
+  return null;
+};
+
+const dateKey = (d?: string) => {
+  const parsed = parseDateParts(d);
+  return parsed ? `${parsed.year}-${String(parsed.month + 1).padStart(2, '0')}-${String(parsed.day).padStart(2, '0')}` : '';
 };
 
 const periodFromMonth = (monthIndex: number) => {
@@ -256,9 +277,6 @@ export const computeDashboardStats = (
       ? Math.round((cotes.reduce((sum, c) => sum + (c.score / (c.maxScore || 100)) * 100, 0) / cotes.length) * 10) / 10
       : 0;
 
-  const presentCount = presences.filter((p) => p.statut === 'PRESENT' || p.statut === 'RETARD').length;
-  const presenceRate = presences.length > 0 ? Math.round((presentCount / presences.length) * 1000) / 10 : 0;
-
   // Répartition des élèves par cycle
   const studentsByCycleMap = new Map<string, number>();
   for (const s of activeStudentList) {
@@ -285,12 +303,49 @@ export const computeDashboardStats = (
       monthCotes.length > 0
         ? Math.round((monthCotes.reduce((sum, c) => sum + (c.score / (c.maxScore || 100)) * 100, 0) / monthCotes.length) * 10) / 10
         : 0;
-    const present = monthPresences.filter((p) => p.statut === 'PRESENT' || p.statut === 'RETARD').length;
+    const present = monthPresences.filter((p) => p.statut === 'PRESENT' || p.statut === 'RETARD' || p.statut === 'JUSTIFIE').length;
     const tauxPresence = monthPresences.length > 0
       ? Math.round((present / monthPresences.length) * 1000) / 10
       : 0;
-    return { mois, moyenneCotes, tauxPresence };
+    const reussites = monthCotes.filter((c) => (c.score / (c.maxScore || 100)) * 100 >= 50).length;
+    const tauxReussite = monthCotes.length > 0
+      ? Math.round((reussites / monthCotes.length) * 1000) / 10
+      : 0;
+    return { mois, moyenneCotes, tauxPresence, tauxReussite };
   });
+
+  // Performance quotidienne : utilisée par le tableau de bord pour afficher un seul mois.
+  const dailyMap = new Map<string, { year: number; month: number; day: number; cotes: number[]; presences: Presence[] }>();
+  cotes.forEach(c => {
+    const parts = parseDateParts(c.dateCote);
+    const key = dateKey(c.dateCote);
+    if (!parts || !key) return;
+    const entry = dailyMap.get(key) || { ...parts, cotes: [], presences: [] };
+    entry.cotes.push((c.score / (c.maxScore || 100)) * 100);
+    dailyMap.set(key, entry);
+  });
+  presences.forEach(p => {
+    const parts = parseDateParts(p.dateJour);
+    const key = dateKey(p.dateJour);
+    if (!parts || !key) return;
+    const entry = dailyMap.get(key) || { ...parts, cotes: [], presences: [] };
+    entry.presences.push(p);
+    dailyMap.set(key, entry);
+  });
+  const dailyPerformance = Array.from(dailyMap.entries())
+    .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+    .map(([date, entry]) => ({
+      date,
+      jour: String(entry.day).padStart(2, '0'),
+      moisIndex: entry.month,
+      moyenneCotes: entry.cotes.length > 0 ? Math.round((entry.cotes.reduce((sum, value) => sum + value, 0) / entry.cotes.length) * 10) / 10 : 0,
+      tauxPresence: entry.presences.length > 0
+        ? Math.round((entry.presences.filter(p => p.statut === 'PRESENT' || p.statut === 'RETARD' || p.statut === 'JUSTIFIE').length / entry.presences.length) * 1000) / 10
+        : 0,
+      tauxReussite: entry.cotes.length > 0
+        ? Math.round((entry.cotes.filter(value => value >= 50).length / entry.cotes.length) * 1000) / 10
+        : 0,
+    }));
 
   const yearStr = selectedYear?.debut ? new Date(selectedYear.debut).getFullYear().toString() : '2026';
 
@@ -327,7 +382,7 @@ export const computeDashboardStats = (
     avatarUrl: string;
   }[] = [];
 
-  for (const p of payments.slice(0, 4)) {
+  for (const p of payments.slice(0, 7)) {
     recentActivity.push({
       id: `pay-${p.id}`,
       nomAuteur: p.nomCaissier || 'Service Caisse',
@@ -338,7 +393,7 @@ export const computeDashboardStats = (
     });
   }
 
-  for (const s of students.slice(0, 3)) {
+  for (const s of students.slice(0, 5)) {
     const studentDate = (s as any).dateCreation || (s as any).registrationDate;
     recentActivity.push({
       id: `std-${s.id}`,
@@ -402,6 +457,10 @@ export const computeDashboardStats = (
   const todayPresences = presences.filter(p => p.dateJour === todayStr || (p.dateJour && p.dateJour.startsWith(todayStr)));
   const hasTodayPresences = todayPresences.length > 0;
 
+  // Taux de présence global : uniquement sur les pointages du jour, JUSTIFIE compté comme présent
+  const presentCount = todayPresences.filter((p) => p.statut === 'PRESENT' || p.statut === 'RETARD' || p.statut === 'JUSTIFIE').length;
+  const presenceRate = hasTodayPresences ? Math.round((presentCount / todayPresences.length) * 1000) / 10 : 0;
+
   const attendanceByCycle = ['MATERNELLE', 'PRIMAIRE', 'CTEB', 'HUMANITES'].map((cycle) => {
     const cycleStudents = activeStudentList.filter((s) => {
       const cls = classes.find((c) => c.id === s.classId);
@@ -420,9 +479,9 @@ export const computeDashboardStats = (
     let garconsPresents = 0;
 
     if (hasPointage) {
-      presentsTotal = cycleTodayPresences.filter(p => p.statut === 'PRESENT' || p.statut === 'RETARD').length;
+      presentsTotal = cycleTodayPresences.filter(p => p.statut === 'PRESENT' || p.statut === 'RETARD' || p.statut === 'JUSTIFIE').length;
       fillesPresents = cycleTodayPresences.filter(p => {
-        if (p.statut !== 'PRESENT' && p.statut !== 'RETARD') return false;
+        if (p.statut !== 'PRESENT' && p.statut !== 'RETARD' && p.statut !== 'JUSTIFIE') return false;
         const st = cycleStudents.find(s => s.id === p.eleveId);
         return st?.sexe === 'F';
       }).length;
@@ -463,6 +522,7 @@ export const computeDashboardStats = (
     presenceRate,
     studentsByCycle,
     monthlyPerformance,
+    dailyPerformance,
     quarterlyFinance,
     recentActivity,
     upcomingEvents,

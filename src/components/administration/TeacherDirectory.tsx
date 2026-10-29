@@ -15,6 +15,7 @@ interface TeacherDirectoryProps {
   onAdd: () => void;
   onView: (t: MembrePersonnel) => void;
   onEdit: (t: MembrePersonnel) => void;
+  canEdit?: boolean;
 }
 
 const avatarColor = (name: string): string => {
@@ -100,7 +101,8 @@ const TeacherRow: React.FC<{
   isEnseignant: boolean;
   onView: (t: MembrePersonnel) => void;
   onEdit: (t: MembrePersonnel) => void;
-}> = ({ teacher, isEnseignant, onView, onEdit }) => {
+  canEdit?: boolean;
+}> = ({ teacher, isEnseignant, onView, onEdit, canEdit }) => {
   const [hovered, setHovered] = useState(false);
   const color = avatarColor(`${teacher.prenom}${teacher.nom}`);
   const ini = initials(teacher);
@@ -199,7 +201,7 @@ const TeacherRow: React.FC<{
   );
 };
 
-const EmptyState: React.FC<{ isEnseignant: boolean; onAdd: () => void }> = ({ isEnseignant, onAdd }) => (
+const EmptyState: React.FC<{ isEnseignant: boolean; onAdd: () => void; canEdit?: boolean }> = ({ isEnseignant, onAdd, canEdit }) => (
   <div className="flex flex-col items-center justify-center py-20 text-center">
     <div
       className="w-16 h-16 rounded-3xl flex items-center justify-center mb-4 border shadow-xs"
@@ -219,14 +221,16 @@ const EmptyState: React.FC<{ isEnseignant: boolean; onAdd: () => void }> = ({ is
         ? 'Commencez par inscrire les enseignants et professeurs de votre établissement.'
         : 'Commencez par enregistrer les membres de la direction et du personnel administratif.'}
     </p>
-    <button
-      onClick={onAdd}
-      className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-md transition-all hover:bg-indigo-700 cursor-pointer"
-      style={{ background: '#6366f1' }}
-    >
-      <UserPlus className="w-4 h-4" />
-      {isEnseignant ? 'Inscrire un enseignant' : 'Ajouter un agent administratif'}
-    </button>
+    {canEdit && (
+      <button
+        onClick={onAdd}
+        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-md transition-all hover:bg-indigo-700 cursor-pointer"
+        style={{ background: '#6366f1' }}
+      >
+        <UserPlus className="w-4 h-4" />
+        {isEnseignant ? 'Inscrire un enseignant' : 'Ajouter un agent administratif'}
+      </button>
+    )}
   </div>
 );
 
@@ -237,6 +241,7 @@ export const TeacherDirectory: React.FC<TeacherDirectoryProps> = ({
   onAdd,
   onView,
   onEdit,
+  canEdit = false,
 }) => {
   const [search, setSearch] = useState('');
   const [filterStatut, setFilterStatut] = useState('');
@@ -441,14 +446,16 @@ export const TeacherDirectory: React.FC<TeacherDirectoryProps> = ({
         </button>
 
         {/* Bouton d'ajout */}
-        <button
-          onClick={onAdd}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white transition-all shrink-0 shadow-sm cursor-pointer hover:bg-indigo-700"
-          style={{ background: '#6366f1' }}
-        >
-          <Plus className="w-4 h-4" />
-          <span>{isEnseignant ? 'Inscrire Enseignant' : 'Ajouter Personnel'}</span>
-        </button>
+        {canEdit && (
+          <button
+            onClick={onAdd}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white transition-all shrink-0 shadow-sm cursor-pointer hover:bg-indigo-700"
+            style={{ background: '#6366f1' }}
+          >
+            <Plus className="w-4 h-4" />
+            <span>{isEnseignant ? 'Inscrire Enseignant' : 'Ajouter Personnel'}</span>
+          </button>
+        )}
       </div>
 
       {/* ── 3. TABLEAU & PAGINATION CONTENEURISÉE (BAS) ── */}
@@ -461,7 +468,7 @@ export const TeacherDirectory: React.FC<TeacherDirectoryProps> = ({
             <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState isEnseignant={isEnseignant} onAdd={onAdd} />
+          <EmptyState isEnseignant={isEnseignant} onAdd={onAdd} canEdit={canEdit} />
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -487,6 +494,7 @@ export const TeacherDirectory: React.FC<TeacherDirectoryProps> = ({
                       isEnseignant={isEnseignant}
                       onView={onView}
                       onEdit={onEdit}
+                      canEdit={canEdit}
                     />
                   ))}
                 </tbody>

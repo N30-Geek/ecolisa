@@ -117,18 +117,26 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
 
       // Active les cycles présents dans l'année, sinon tous par défaut
       const yearCycles = (editingYear.cycles || []).map(c => c.code as CodeCycleWizard).filter(Boolean);
-      setActiveCycles({
+      const baseActive = {
         MATERNELLE: yearCycles.includes('MATERNELLE'),
         PRIMAIRE: yearCycles.includes('PRIMAIRE'),
         SECONDAIRE_CTEB: yearCycles.includes('SECONDAIRE_CTEB'),
         HUMANITES: yearCycles.includes('HUMANITES'),
-      });
+      };
+      setActiveCycles(baseActive);
 
-      // Charge et parse les classes existantes
+      // Charge et parse les classes existantes, puis active aussi les cycles contenant des classes
       LocalDatabaseService.getClasses(editingYear.id).then(classes => {
         const { selected, sections } = parseClassesToDraft(classes);
         setSelectedNiveaux(selected);
         setSections(sections);
+        const cyclesFromClasses = new Set(Object.keys(selected).map(k => k.split('|')[0] as CodeCycleWizard));
+        setActiveCycles(prev => ({
+          MATERNELLE: baseActive.MATERNELLE || cyclesFromClasses.has('MATERNELLE'),
+          PRIMAIRE: baseActive.PRIMAIRE || cyclesFromClasses.has('PRIMAIRE'),
+          SECONDAIRE_CTEB: baseActive.SECONDAIRE_CTEB || cyclesFromClasses.has('SECONDAIRE_CTEB'),
+          HUMANITES: baseActive.HUMANITES || cyclesFromClasses.has('HUMANITES'),
+        }));
       });
 
       // Parse les frais annexes
@@ -178,11 +186,19 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
   const [sectionsModalNiveau, setSectionsModalNiveau] = useState<{ cycleCode: CodeCycleWizard; niveau: string } | null>(null);
 
   const selectedNiveauxList = useMemo(() => {
+    const cycleOrder: Record<CodeCycleWizard, number> = { MATERNELLE: 0, PRIMAIRE: 1, SECONDAIRE_CTEB: 2, HUMANITES: 3 };
     return Object.keys(selectedNiveaux)
       .filter(k => selectedNiveaux[k])
       .map(k => {
         const [cycleCode, niveau] = k.split('|');
         return { cycleCode: cycleCode as CodeCycleWizard, niveau };
+      })
+      .sort((a, b) => {
+        const cmp = cycleOrder[a.cycleCode] - cycleOrder[b.cycleCode];
+        if (cmp !== 0) return cmp;
+        const idxA = NIVEAUX_PAR_CYCLE[a.cycleCode].indexOf(a.niveau);
+        const idxB = NIVEAUX_PAR_CYCLE[b.cycleCode].indexOf(b.niveau);
+        return idxA - idxB;
       });
   }, [selectedNiveaux]);
 
@@ -457,38 +473,37 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in select-none" onClick={onClose}>
       <div
-        className="w-full max-w-5xl rounded-2xl shadow-2xl border overflow-hidden flex flex-col max-h-[92vh]"
+        className="w-full max-w-5xl rounded-3xl shadow-2xl border overflow-hidden flex flex-col max-h-[94vh]"
         style={{ background: 'var(--sidebar-popover-bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
         onClick={e => e.stopPropagation()}
       >
         {/* EN-TÊTE */}
-        <div className="p-5 border-b flex items-center justify-between shrink-0" style={{ background: 'var(--header-bg)', borderColor: 'var(--border)' }}>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
-              <Sparkles className="w-5 h-5 text-amber-500" />
+        <div className="px-6 py-5 border-b flex items-center justify-between shrink-0" style={{ background: 'var(--header-bg)', borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white shadow-lg shadow-indigo-500/25">
+              <Sparkles className="w-6 h-6 text-amber-300" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-extrabold text-base">{isEditMode ? 'Modifier — Année Scolaire' : 'Onboarding — Nouvelle Année Scolaire'}</h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
+              <div className="flex items-center gap-2.5">
+                <h3 className="font-black text-xl tracking-tight">{isEditMode ? 'Modifier — Année Scolaire' : 'Onboarding — Nouvelle Année Scolaire'}</h3>
+                <span className="px-3 py-1 rounded-full text-[11px] font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
                   Étape {step} sur 4
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-[13px] text-slate-500 dark:text-slate-400 mt-1">
                 Configuration complète liée à la base de données : cycles, classes, sections & frais scolaires
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-500/20 text-slate-400 hover:text-white cursor-pointer">
+          <button onClick={onClose} className="w-10 h-10 rounded-full hover:bg-slate-500/20 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* STEPPER */}
-        <div className="px-6 py-3 border-b overflow-x-auto sidebar-scroll shrink-0" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
-          <div className="flex items-center justify-between min-w-[560px] gap-2">
+        <div className="px-6 py-4 border-b overflow-x-auto sidebar-scroll shrink-0" style={{ background: 'var(--bg-sunken)', borderColor: 'var(--border)' }}>
+          <div className="flex items-center justify-between min-w-[600px] gap-3">
             {STEPS.map((s, idx) => {
-              const SIcon = s.icon;
               const isActive = step === s.step;
               const isDone = step > s.step;
               return (
@@ -496,14 +511,21 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                   <button
                     type="button"
                     onClick={() => { if (isEditMode || isDone) setStep(s.step); }}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${
-                      isActive ? 'bg-indigo-600 text-white shadow-xs' : (isDone || isEditMode) ? 'text-indigo-600 dark:text-indigo-400 cursor-pointer hover:bg-indigo-500/10' : 'text-slate-400'
+                    className={`flex items-center gap-2.5 px-4 py-2 rounded-full text-xs font-black transition-all shrink-0 ${
+                      isActive
+                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/25'
+                        : (isDone || isEditMode)
+                        ? 'text-indigo-600 dark:text-indigo-400 cursor-pointer hover:bg-indigo-500/10'
+                        : 'text-slate-400'
                     }`}
                   >
-                    {isDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : <SIcon className="w-3.5 h-3.5" />}
-                    <span>{s.step}. {s.label}</span>
+                    {isDone
+                      ? <CheckCircle2 className="w-4 h-4" />
+                      : <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${isActive ? 'bg-white/25' : 'bg-slate-500/15'}`}>{s.step}</span>
+                    }
+                    <span>{s.label}</span>
                   </button>
-                  {idx < STEPS.length - 1 && <div className="flex-1 h-px bg-slate-500/20 min-w-[16px]" />}
+                  {idx < STEPS.length - 1 && <div className="flex-1 h-px bg-slate-500/25 min-w-[24px]" />}
                 </React.Fragment>
               );
             })}
@@ -515,7 +537,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
           {step === 1 && (
             <div className="space-y-4 animate-fade-in max-w-2xl mx-auto">
               <div>
-                <label className="text-xs font-bold block mb-1.5">Intitulé de l'Année Scolaire *</label>
+                <label className="text-[11px] font-black uppercase tracking-wider block mb-2 text-slate-500 dark:text-slate-400">Intitulé de l'Année Scolaire *</label>
                 <input
                   type="text"
                   value={nom}
@@ -531,7 +553,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
               </div>
 
               <div>
-                <label className="text-xs font-bold block mb-1.5">Objectif Prévisionnel des Élèves</label>
+                <label className="text-[11px] font-black uppercase tracking-wider block mb-2 text-slate-500 dark:text-slate-400">Objectif Prévisionnel des Élèves</label>
                 <NumberInput
                   value={objectifEleves}
                   onChange={setObjectifEleves}
@@ -545,11 +567,11 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-bold block mb-1.5">Date de Rentrée *</label>
+                  <label className="text-[11px] font-black uppercase tracking-wider block mb-2 text-slate-500 dark:text-slate-400">Date de Rentrée *</label>
                   <CustomDatePicker value={debut} onChange={setDebut} />
                 </div>
                 <div>
-                  <label className="text-xs font-bold block mb-1.5">Date de Clôture *</label>
+                  <label className="text-[11px] font-black uppercase tracking-wider block mb-2 text-slate-500 dark:text-slate-400">Date de Clôture *</label>
                   <CustomDatePicker value={fin} onChange={setFin} />
                 </div>
               </div>
@@ -560,7 +582,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
               )}
 
               <div>
-                <label className="text-xs font-bold block mb-1.5">Statut Initial de l'Année</label>
+                <label className="text-[11px] font-black uppercase tracking-wider block mb-2 text-slate-500 dark:text-slate-400">Statut Initial de l'Année</label>
                 <CustomSelect options={statutOptions} value={statut} onChange={v => setStatut(v as StatutAnnéeScolaire)} />
               </div>
 
@@ -584,7 +606,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                   {CYCLES_REF.map(c => (
                     <label
                       key={c.code}
-                      className={`p-3.5 rounded-xl border flex items-center gap-3 cursor-pointer transition-all ${
+                      className={`p-4 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
                         activeCycles[c.code] ? 'border-indigo-500 bg-indigo-500/10' : 'hover:border-indigo-500/40'
                       }`}
                       style={{ borderColor: activeCycles[c.code] ? '#6366f1' : 'var(--border)', background: activeCycles[c.code] ? undefined : 'var(--bg-surface)' }}
@@ -611,7 +633,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                 <button
                   type="button"
                   onClick={() => setShowClassPicker(true)}
-                  className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="px-5 py-2.5 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm shadow-lg shadow-indigo-500/25 flex items-center gap-2 transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4" /> Sélectionner les Classes RDC
                 </button>
@@ -636,7 +658,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                           <button
                             type="button"
                             onClick={() => setSectionsModalNiveau({ cycleCode, niveau })}
-                            className="px-2.5 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                            className="px-3.5 py-1.5 rounded-full bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer"
                           >
                             <Plus className="w-3.5 h-3.5" /> Ajouter des Sections
                           </button>
@@ -648,7 +670,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                         ) : (
                           <div className="flex flex-wrap gap-2">
                             {secs.map(s => (
-                              <span key={s.id} className="px-2.5 py-1 rounded-lg bg-slate-500/10 border text-[11px] font-bold flex items-center gap-2" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
+                              <span key={s.id} className="px-3 py-1.5 rounded-full bg-slate-500/10 border text-xs font-bold flex items-center gap-2" style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
                                 {niveau} {s.label} · {s.capacite} places
                                 <button type="button" onClick={() => removeSection(s.id)} className="text-slate-400 hover:text-rose-500 cursor-pointer">
                                   <X className="w-3 h-3" />
@@ -676,7 +698,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                 <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">Ajouter un Frais Scolaire</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Cycle Concerné</label>
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block mb-1.5">Cycle Concerné</label>
                     <CustomSelect
                       value={feeCycle}
                       onChange={v => { setFeeCycle(v as any); setFeeCible('TRONC_COMMUN'); }}
@@ -687,7 +709,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Classe / Tronc Commun</label>
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block mb-1.5">Classe / Tronc Commun</label>
                     <CustomSelect
                       value={feeCible}
                       onChange={setFeeCible}
@@ -701,7 +723,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Type de Frais</label>
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block mb-1.5">Type de Frais</label>
                     <CustomSelect
                       value={feeCategorie}
                       onChange={v => setFeeCategorie(v as CategorieFrais)}
@@ -710,7 +732,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                   </div>
                   {feeCategorie === 'AUTRE' && (
                     <div>
-                      <label className="text-[11px] font-bold text-slate-500 block mb-1">Intitulé Personnalisé *</label>
+                      <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block mb-1.5">Intitulé Personnalisé *</label>
                       <input
                         type="text"
                         value={feeNomPerso}
@@ -725,7 +747,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Montant *</label>
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block mb-1.5">Montant *</label>
                     <NumberInput
                       value={feeMontant}
                       onChange={setFeeMontant}
@@ -736,11 +758,11 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Devise</label>
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block mb-1.5">Devise</label>
                     <CustomSelect value={feeDevise} onChange={v => setFeeDevise(v as any)} options={currencies.map(c => ({ value: c.code, label: `${c.code} (${c.symbol})` }))} />
                   </div>
                   <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Priorité</label>
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block mb-1.5">Priorité</label>
                     <CustomSelect
                       value={feePriorite}
                       onChange={v => setFeePriorite(v as any)}
@@ -748,7 +770,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Mode de paiement</label>
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block mb-1.5">Mode de paiement</label>
                     <CustomSelect
                       value={feeModePaiement}
                       onChange={v => setFeeModePaiement(v as ModePaiementFrais)}
@@ -763,7 +785,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                   </div>
                   {feeModePaiement === 'PERSONNALISE' && (
                     <div>
-                      <label className="text-[11px] font-bold text-slate-500 block mb-1">Nb. tranches</label>
+                      <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block mb-1.5">Nb. tranches</label>
                       <NumberInput
                         value={feeNombreTranches}
                         onChange={setFeeNombreTranches}
@@ -779,7 +801,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
                 <button
                   type="button"
                   onClick={handleAddFee}
-                  className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  className="w-full py-3 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4" /> Ajouter ce Frais à la Liste
                 </button>
@@ -892,7 +914,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
           <button
             type="button"
             onClick={() => (step === 1 ? onClose() : setStep(prev => prev - 1))}
-            className="px-4 py-2 rounded-lg border text-xs font-bold hover:bg-slate-500/10 transition-all cursor-pointer flex items-center gap-1"
+            className="px-5 py-2.5 rounded-full border text-sm font-black hover:bg-slate-500/10 transition-all cursor-pointer flex items-center gap-2"
             style={{ borderColor: 'var(--border)' }}
           >
             <ChevronLeft className="w-4 h-4" /> {step === 1 ? 'Annuler' : 'Précédent'}
@@ -903,7 +925,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
               type="button"
               onClick={() => setStep(prev => prev + 1)}
               disabled={!isEditMode && ((step === 1 && (!nom.trim() || nameConflict)) || (step === 2 && !canGoNextFromStep2))}
-              className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer"
+              className="px-6 py-2.5 rounded-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-sm flex items-center gap-2 shadow-lg shadow-indigo-500/25 transition-all cursor-pointer"
             >
               <span>Suivant</span>
               <ChevronRight className="w-4 h-4" />
@@ -913,7 +935,7 @@ export const SchoolYearOnboardingWizard: React.FC<SchoolYearOnboardingWizardProp
               type="button"
               onClick={handleFinalize}
               disabled={saving}
-              className="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-black text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+              className="px-7 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-black text-sm flex items-center gap-2 shadow-lg shadow-emerald-500/25 transition-all cursor-pointer"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-amber-300" />}
               <span>{saving ? (isEditMode ? 'Enregistrement…' : 'Création en cours…') : (isEditMode ? 'Appliquer les modifications' : "Créer l'Année Scolaire")}</span>

@@ -1,0 +1,6 @@
+Here is the list of some modifications that we have to make in the window of the student's details. We have to improve the official student's card with several pieces of information:
+- The size for the ID card
+- A bigger picture
+- Real-life QR codes that can be scanned or allow the presence of the card, either to authenticate the card or to stamp it
+This card should not be too narrow, except if the user personalizes it himself with the possibility of straight lines and vertical lines. In the head of the card, there is a logo of the establishment, and in the back of the card, there is a filigree that is a little less visible. There are miniskele logos and text everywhere that also display the name of the establishment. Yes, let it be for this part with straight lines. But also you must do the reframing of the pop-up which shows the official card of the student. The pop-up which shows the paper of the card must display a card that is a little more realistic but the user can customize all without the application parameters. Here it should also be integrated so here is the RDC. It is a card that is used in the RDC or main room of the RDC to try to do something professional and functional. 
+

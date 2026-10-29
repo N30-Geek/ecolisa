@@ -24,6 +24,8 @@ import { LocalDatabaseService } from '../../services/localDatabase';
 import { convertCurrency, formatCurrency } from '../../utils/currency';
 import { getInvoicePaid, getInvoiceTotal, getInvoiceStatus, getStudentTotalDue, getPaymentAmount } from '../../utils/financeCalculations';
 import { isFeeTypeApplicable } from '../../utils/feeFilters';
+import { getTranchesForFee } from '../../utils/feeTranches';
+import { getStudentOption } from '../../utils/options';
 import { CustomSelect } from '../common/CustomSelect';
 import { NumberInput } from '../common/NumberInput';
 import { ReceiptModal } from './ReceiptModal';
@@ -84,7 +86,7 @@ const uuid = () => {
 };
 
 export const PayFeesModal: React.FC<PayFeesModalProps> = ({ activeSchoolYear, initialStudentId, initialInvoiceId, onClose, onSaved }) => {
-  const { currency, exchangeRate } = useSchoolConfig();
+  const { currency, exchangeRate, referenceCurrency } = useSchoolConfig();
   const fmt = (n: number, src?: string) => formatCurrency(round2(n), currency, src || currency, exchangeRate);
 
   const [students, setStudents] = useState<Eleve[]>([]);
@@ -122,6 +124,7 @@ export const PayFeesModal: React.FC<PayFeesModalProps> = ({ activeSchoolYear, in
   const searchBoxRef = useRef<HTMLDivElement>(null);
   const initialHandledRef = useRef(false);
   const autoCartFilledRef = useRef(false);
+  const previousCurrencyRef = useRef<string>(currency);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -258,7 +261,7 @@ export const PayFeesModal: React.FC<PayFeesModalProps> = ({ activeSchoolYear, in
   }, [loading, students, initialStudentId, initialInvoiceId, invoices, classes]);
 
   const feeApplies = (ft: TypeFraisScolaire, cls?: ClasseScolaire) => {
-    const option = cls?.optionCode || selectedStudent?.optionEPST || 'TRONC_COMMUN';
+    const option = getStudentOption(selectedStudent as any, cls ? [cls] : []);
     return isFeeTypeApplicable(ft, {
       schoolYearId: yearId,
       classId: cls?.id || selectedStudent?.classId,
@@ -271,10 +274,23 @@ export const PayFeesModal: React.FC<PayFeesModalProps> = ({ activeSchoolYear, in
   };
 
   const getTranches = (ft: TypeFraisScolaire): FraisTranche[] => {
-    if (ft.modePaiement && ft.modePaiement !== 'UNIQUE' && ft.tranches && ft.tranches.length > 0) {
-      return ft.tranches;
-    }
-    return [{ id: ft.id, nom: 'Paiement unique', montant: ft.montant, devise: ft.devise, ordre: 1 }];
+    return getTranchesForFee(ft, activeYear?.debut, activeYear?.fin);
+  };
+
+  // Statut d'échéance d'une tranche (ex: tranche mensuelle) : "EN_RETARD" si le
+  // mois d'échéance est déjà passé, "ALERTE" si on est dans le mois d'échéance
+  // et qu'on a dépassé le 25 (rappel RDC : les frais du mois se paient en début
+  // de mois), sinon rien à signaler.
+  const getTrancheDueStatus = (dateEcheance?: string): 'EN_RETARD' | 'ALERTE' | null => {
+    if (!dateEcheance) return null;
+    const echeance = new Date(dateEcheance);
+    if (isNaN(echeance.getTime())) return null;
+    const now = new Date();
+    const echeanceMonthStart = new Date(echeance.getFullYear(), echeance.getMonth(), 1);
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    if (echeanceMonthStart < currentMonthStart) return 'EN_RETARD';
+    if (echeanceMonthStart.getTime() === currentMonthStart.getTime() && now.getDate() >= 25) return 'ALERTE';
+    return null;
   };
 
   // Détermine le solde réel d'une ligne de facture dans la devise d'affichage.
@@ -283,31 +299,34 @@ export const PayFeesModal: React.FC<PayFeesModalProps> = ({ activeSchoolYear, in
   const lineBalance = (inv: FactureEleve, l: LigneFacture) => {
     const invPayments = payments.filter(p => p.invoiceId === inv.id);
     const lineTotal = round2(convertCurrency(l.montant, l.devise || inv.devise, currency, exchangeRate));
-
-    // Paiement exact par allocations
-    const fromAllocations = invPayments.reduce((sum, p) => {
-      const alloc = p.allocations?.find(a =>
-        a.feeTypeId === l.feeTypeId &&
-        (l.trancheId ? a.trancheId === l.trancheId : !a.trancheId)
-      );
-      if (alloc) return sum + convertCurrency(alloc.montant, p.devise, currency, exchangeRate);
-      return sum;
-    }, 0);
-
-    if (fromAllocations > 0.001) {
-      return { expected: lineTotal, paid: round2(fromAllocations), remaining: round2(Math.max(0, lineTotal - fromAllocations)) };
-    }
-
-    // Fallback proportionnel basé sur le montant payé stocké sur la facture
     const invTotal = round2(
       (inv.lignes?.length ? inv.lignes : [])
         .reduce((sum, line) => sum + round2(convertCurrency(line.montant, line.devise || inv.devise, currency, exchangeRate)), 0)
     ) || round2(convertCurrency(inv.montantTotal, inv.devise, currency, exchangeRate));
-    const invPaid = round2(convertCurrency(inv.montantPaye, inv.devise, currency, exchangeRate));
+
     let paid = 0;
-    if (invTotal > 0.001 && invPaid > 0.001) {
-      paid = (invPaid * lineTotal) / invTotal;
+    for (const p of invPayments) {
+      const pAmount = convertCurrency(p.montantPaye, p.devise, currency, exchangeRate);
+      if (!p.allocations || p.allocations.length === 0) {
+        // Paiement global : prorata
+        if (invTotal > 0.001) paid += (pAmount * lineTotal) / invTotal;
+        continue;
+      }
+      const alloc = p.allocations.find(a =>
+        a.feeTypeId === l.feeTypeId &&
+        (l.trancheId ? a.trancheId === l.trancheId : !a.trancheId)
+      );
+      if (alloc) {
+        paid += convertCurrency(alloc.montant, p.devise, currency, exchangeRate);
+      } else {
+        // Partie non allouée de ce paiement, répartie au prorata
+        const allocatedToOtherLines = p.allocations.reduce((sum, a) =>
+          sum + convertCurrency(a.montant, p.devise, currency, exchangeRate), 0);
+        const unallocated = Math.max(0, pAmount - allocatedToOtherLines);
+        if (invTotal > 0.001) paid += (unallocated * lineTotal) / invTotal;
+      }
     }
+
     const remaining = round2(Math.max(0, lineTotal - paid));
     return { expected: lineTotal, paid: round2(paid), remaining };
   };
@@ -407,12 +426,21 @@ export const PayFeesModal: React.FC<PayFeesModalProps> = ({ activeSchoolYear, in
     }
 
     // 2. Frais applicables n'apparaissant pas encore dans une facture.
-    // On ne les ajoute automatiquement que s'ils sont OBLIGATOIRES : un frais
-    // optionnel (uniforme, transport, cantine, etc.) ne doit pas être présumé dû
-    // tant que l'élève n'a jamais été facturé pour ce frais (évite les fausses
-    // dettes quand un frais est configuré pour toute l'école mais optionnel).
-    for (const ft of feeTypes.filter(f => f.obligatoire && feeApplies(f, cls))) {
+    // On les ajoute automatiquement s'ils sont OBLIGATOIRES ou explicitement
+    // marqués comme "payables à l'inscription / réinscription". Les frais
+    // optionnels non marqués ne deviennent des impayés que s'ils sont facturés
+    // manuellement ou choisis au paiement (évite les fausses dettes).
+    // Pour un frais réparti par tranche (ex: Minerval mensuel), seules les
+    // tranches déjà échues (mois en cours ou passé) sont considérées comme
+    // dues : les mois futurs n'apparaissent pas encore comme impayés.
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    for (const ft of feeTypes.filter(f => (f.obligatoire || f.payeALInscription) && f.actif !== false && feeApplies(f, cls))) {
       for (const t of getTranches(ft)) {
+        if (t.dateEcheance) {
+          const echeance = new Date(t.dateEcheance);
+          if (!isNaN(echeance.getTime()) && echeance > today) continue;
+        }
         const key = t.id === ft.id ? ft.id : `${ft.id}#${t.id}`;
         if (existingKeys.has(key)) continue;
         const balance = trancheBalance(ft, t);
@@ -535,6 +563,25 @@ export const PayFeesModal: React.FC<PayFeesModalProps> = ({ activeSchoolYear, in
     }
   }, [studentId, unpaidTranches, initialStudentId, initialInvoiceId]);
 
+  // Si la devise d'affichage change, reconvertir les montants du panier pour
+  // éviter qu'un montant saisi en CDF soit interprété comme USD.
+  useEffect(() => {
+    if (previousCurrencyRef.current !== currency) {
+      const previousCurrency = previousCurrencyRef.current;
+      previousCurrencyRef.current = currency;
+      setChosenFeeItems(prev => {
+        if (prev.length === 0) return prev;
+        return prev.map(item => {
+          const u = unpaidTranches.find(u => u.key === item.key);
+          if (!u) return item;
+          const converted = round2(convertCurrency(item.amount, previousCurrency, currency, exchangeRate));
+          const max = round2(u.balance.remaining);
+          return { ...item, amount: round2(Math.max(0, Math.min(converted, max))) };
+        });
+      });
+    }
+  }, [currency, exchangeRate, unpaidTranches]);
+
   // Options du sélecteur "Ajouter un frais"
   const availableFeeOptions = useMemo(() => {
     const alreadyChosenKeys = new Set(chosenFeeItems.map(i => i.key));
@@ -574,7 +621,9 @@ export const PayFeesModal: React.FC<PayFeesModalProps> = ({ activeSchoolYear, in
   const handleSetAmount = (key: string, val: number) => {
     const target = unpaidTranches.find(t => t.key === key);
     const max = target ? round2(target.balance.remaining) : 0;
-    const clamped = round2(Math.max(0, Math.min(val, max)));
+    // Si le frais n'accepte pas les paiements partiels, on force le solde restant.
+    const wanted = target?.fee.acceptePartialite === false ? max : val;
+    const clamped = round2(Math.max(0, Math.min(wanted, max)));
     setChosenFeeItems(prev => prev.map(i => i.key === key ? { ...i, amount: clamped } : i));
   };
 
@@ -661,16 +710,38 @@ export const PayFeesModal: React.FC<PayFeesModalProps> = ({ activeSchoolYear, in
     }
 
     const cls = selectedClass || classes.find(c => c.id === selectedStudent.classId) || { nom: selectedStudent.nomClasse || 'Classe' };
+
+    // Vérifier que le total encaissé ne dépasse pas le solde impayé global.
+    if (totalToPay > globalUnpaid + 0.01) {
+      setError(`Le montant total à encaisser (${fmt(totalToPay)}) dépasse le solde impayé (${fmt(globalUnpaid)}). Vérifiez la devise de saisie.`);
+      setSubmitting(false);
+      return;
+    }
+
+    // Vérifier les frais qui n'acceptent pas les paiements partiels.
+    for (const item of validItems) {
+      const target = unpaidTranches.find(t => t.key === item.key);
+      if (target?.fee.acceptePartialite === false) {
+        const max = round2(target.balance.remaining);
+        if (Math.abs(item.amount - max) > 0.01) {
+          setError(`"${target.fee.nom}" nécessite un paiement complet (${fmt(max)}). Les paiements partiels ne sont pas autorisés pour ce frais.`);
+          setSubmitting(false);
+          return;
+        }
+      }
+    }
+
     setError(null);
     setSubmitting(true);
 
     try {
-      // Groupement par devise pour les items choisis (une nouvelle facture par encaissement)
+      // Groupement : si un item est déjà lié à une facture existante, on paie
+      // directement sur cette facture. Sinon on crée une nouvelle facture.
       const groups: Record<string, { items: typeof validItems; invoiceId?: string }> = {};
       for (const item of validItems) {
         const u = unpaidTranches.find(u => u.key === item.key)!;
-        const groupKey = u.fee.devise || currency || '__new__';
-        if (!groups[groupKey]) groups[groupKey] = { items: [], invoiceId: undefined };
+        const groupKey = u.invoiceId || '__new__';
+        if (!groups[groupKey]) groups[groupKey] = { items: [], invoiceId: u.invoiceId };
         groups[groupKey].items.push(item);
       }
 
@@ -678,68 +749,86 @@ export const PayFeesModal: React.FC<PayFeesModalProps> = ({ activeSchoolYear, in
       const createdInvoices: FactureEleve[] = [];
 
       for (const group of Object.values(groups)) {
-        const invoiceDevise = group.items[0] ? unpaidTranches.find(u => u.key === group.items[0].key)?.fee.devise || currency : currency;
+        // La facture est toujours dans la devise de référence pour éviter les conversions multi-devises parasites.
+        const invoiceDevise = group.invoiceId
+          ? (invoices.find(i => i.id === group.invoiceId)?.devise || referenceCurrency)
+          : referenceCurrency;
 
         const allocations: { feeTypeId: string; trancheId?: string; montant: number }[] = [];
-        const newLines: LigneFacture[] = [];
 
         for (const item of group.items) {
           const u = unpaidTranches.find(u => u.key === item.key)!;
-          const amountInInvoiceDevise = round2(convertCurrency(item.amount, currency, invoiceDevise, exchangeRate));
           allocations.push({
             feeTypeId: u.ligneId === 'synthetic' ? '' : u.fee.id,
             trancheId: u.ligneId === 'synthetic' ? undefined : (u.tranche.id !== u.fee.id ? u.tranche.id : undefined),
-            montant: amountInInvoiceDevise,
+            montant: round2(convertCurrency(item.amount, currency, invoiceDevise, exchangeRate)),
           });
-
-          if (u.ligneId === 'synthetic') {
-            const lineMontant = round2(convertCurrency(item.amount, currency, invoiceDevise, exchangeRate));
-            newLines.push({
-              id: uuid(),
-              invoiceId: '',
-              feeTypeId: '',
-              nom: u.fee.nom || 'Règlement solde',
-              categorie: 'FRAIS_CONNEXES',
-              montant: lineMontant,
-              devise: invoiceDevise,
-            });
-          } else if (u.ligneId !== 'synthetic') {
-            const lineMontant = round2(convertCurrency(u.tranche.montant, u.tranche.devise || u.fee.devise, invoiceDevise, exchangeRate));
-            newLines.push({
-              id: uuid(),
-              invoiceId: '',
-              feeTypeId: u.fee.id,
-              trancheId: u.tranche.id !== u.fee.id ? u.tranche.id : undefined,
-              nom: u.tranche.nom === 'Paiement unique' ? u.fee.nom : `${u.fee.nom} — ${u.tranche.nom}`,
-              categorie: u.fee.categorie,
-              montant: lineMontant,
-              devise: invoiceDevise,
-            });
-          }
         }
 
-        const totalLignes = round2(newLines.reduce((a, l) => a + l.montant, 0));
-        const invoice: FactureEleve = {
-          id: uuid(),
-          anneeScolaireId: yearId,
-          anneeScolaire: activeYear?.nom,
-          numeroFacture: `F-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          eleveId: selectedStudent.id,
-          studentId: selectedStudent.registrationNumber,
-          nomEleve: `${selectedStudent.prenom || ''} ${selectedStudent.nom}`.trim(),
-          nomClasse: cls.nom,
-          montantTotal: totalLignes,
-          montantPaye: 0,
-          devise: invoiceDevise,
-          statut: 'NON_PAYE',
-          dateEcheance: new Date().toISOString().split('T')[0],
-          lignes: newLines,
-        };
-        newLines.forEach(l => { l.invoiceId = invoice.id; });
+        let invId: string;
+        let targetInvoice: FactureEleve;
 
-        const savedInvoice = await LocalDatabaseService.addInvoice(invoice);
-        const invId = savedInvoice?.id || invoice.id;
-        const targetInvoice = savedInvoice || invoice;
+        if (group.invoiceId) {
+          // Paiement sur une facture existante : on ne crée pas de doublon.
+          invId = group.invoiceId;
+          targetInvoice = invoices.find(i => i.id === group.invoiceId)!;
+        } else {
+          // Nouveau frais : création de la facture correspondante.
+          const newLines: LigneFacture[] = [];
+          for (const item of group.items) {
+            const u = unpaidTranches.find(u => u.key === item.key)!;
+            if (u.ligneId === 'synthetic') {
+              const lineMontant = round2(convertCurrency(item.amount, currency, invoiceDevise, exchangeRate));
+              newLines.push({
+                id: uuid(),
+                invoiceId: '',
+                feeTypeId: '',
+                nom: u.fee.nom || 'Règlement solde',
+                categorie: 'FRAIS_CONNEXES',
+                montant: lineMontant,
+                devise: invoiceDevise,
+              });
+            } else {
+              const lineMontant = round2(convertCurrency(u.tranche.montant, u.tranche.devise || u.fee.devise, invoiceDevise, exchangeRate));
+              newLines.push({
+                id: uuid(),
+                invoiceId: '',
+                feeTypeId: u.fee.id,
+                trancheId: u.tranche.id !== u.fee.id ? u.tranche.id : undefined,
+                nom: u.tranche.nom === 'Paiement unique' ? u.fee.nom : `${u.fee.nom} — ${u.tranche.nom}`,
+                categorie: u.fee.categorie,
+                montant: lineMontant,
+                devise: invoiceDevise,
+              });
+            }
+          }
+
+          const totalLignes = round2(newLines.reduce((a, l) => a + l.montant, 0));
+          const invoice: FactureEleve = {
+            id: uuid(),
+            anneeScolaireId: yearId,
+            anneeScolaire: activeYear?.nom,
+            numeroFacture: `F-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            eleveId: selectedStudent.id,
+            studentId: selectedStudent.registrationNumber,
+            nomEleve: `${selectedStudent.prenom || ''} ${selectedStudent.nom}`.trim(),
+            nomClasse: cls.nom,
+            montantTotal: totalLignes,
+            montantPaye: 0,
+            devise: invoiceDevise,
+            statut: 'NON_PAYE',
+            dateEcheance: new Date().toISOString().split('T')[0],
+            lignes: newLines,
+          };
+          newLines.forEach(l => { l.invoiceId = invoice.id; });
+
+          const savedInvoice = await LocalDatabaseService.addInvoice(invoice);
+          if (!savedInvoice) {
+            throw new Error('La facture n\'a pas pu être enregistrée. Vérifiez la connexion à la base de données.');
+          }
+          invId = savedInvoice.id;
+          targetInvoice = savedInvoice;
+        }
 
         const paymentMontantPaye = round2(allocations.reduce((a, alloc) => a + alloc.montant, 0));
         const payment: TransactionPaiement = {
@@ -761,14 +850,17 @@ export const PayFeesModal: React.FC<PayFeesModalProps> = ({ activeSchoolYear, in
           allocations,
         };
 
-        await LocalDatabaseService.addPayment(payment);
-        createdPayments.push(payment);
+        const storedPayment = await LocalDatabaseService.addPayment(payment);
+        if (!storedPayment) {
+          throw new Error('Le paiement n\'a pas pu être enregistré. Vérifiez la connexion à la base de données.');
+        }
+        createdPayments.push(storedPayment);
         createdInvoices.push(targetInvoice);
       }
 
-      // Nettoyer les factures en double créées par ce nouvel encaissement
-      // et recharger les données pour que le panier ne double pas les montants.
-      try { await LocalDatabaseService.cleanupDuplicateInvoices(); } catch (e) { console.warn('[PayFeesModal] Cleanup submit:', e); }
+      // Recharger les données pour que le panier ne double pas les montants.
+      // Le cleanup des doublons est fait au démarrage, pas ici, pour ne pas effacer
+      // le paiement qui vient d'être enregistré.
       const [inv, pmt] = await Promise.all([
         LocalDatabaseService.getInvoices(),
         LocalDatabaseService.getPayments(),
@@ -1095,8 +1187,26 @@ export const PayFeesModal: React.FC<PayFeesModalProps> = ({ activeSchoolYear, in
                                 <ReceiptText className="w-4.5 h-4.5" />
                               </div>
                               <div className="min-w-0">
-                                <h5 className="font-black text-xs truncate" style={{ color: 'var(--text-primary)' }}>
+                                <h5 className="font-black text-xs truncate flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
                                   {t.label}
+                                  {(() => {
+                                    const dueStatus = getTrancheDueStatus(t.tranche.dateEcheance);
+                                    if (dueStatus === 'EN_RETARD') {
+                                      return (
+                                        <span className="shrink-0 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide bg-rose-500/15 text-rose-600 border border-rose-500/25">
+                                          En retard
+                                        </span>
+                                      );
+                                    }
+                                    if (dueStatus === 'ALERTE') {
+                                      return (
+                                        <span className="shrink-0 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide bg-amber-500/15 text-amber-600 border border-amber-500/25">
+                                          À régler
+                                        </span>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
                                 </h5>
                                 <div className="flex items-center gap-2 text-[10.5px] font-semibold text-slate-400 flex-wrap mt-0.5">
                                   <span>Total : <strong>{fmt(t.balance.expected)}</strong></span>
